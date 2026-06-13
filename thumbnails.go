@@ -112,13 +112,15 @@ func GenerateOrLoadThumb(src, cacheDir string, maxWidth int) ([]byte, error) {
 	return out, nil
 }
 
-// findSourceForThumb looks up the source file for a thumb request
-// given the basename (without extension). Returns the full source
-// path if found, empty string if not. The lookup tries each
-// image extension in turn.
-func findSourceForThumb(root, basename string) string {
+// findSourceForThumb looks up the source file for a thumb request.
+// subdir is the directory portion of the thumb URL (may be empty
+// for top-level thumbs), sourceRel is the thumb basename without
+// the .webp extension. Returns the full source path if found, empty
+// string if not. Tries each image extension in turn.
+func findSourceForThumb(root, subdir, sourceRel string) string {
+	dir := filepath.Join(root, subdir)
 	for ext := range imageExtsForThumb {
-		candidate := filepath.Join(root, basename+ext)
+		candidate := filepath.Join(dir, sourceRel+ext)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
 		}
@@ -130,35 +132,41 @@ func findSourceForThumb(root, basename string) string {
 // source, generates or loads the thumb, writes it as image/webp.
 // Returns true if the request was handled, false if it wasn't a
 // thumb request (caller should render the gallery).
-func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request) bool {
-	// r.URL.Path is the post-handle_path prefix-stripped path. For
-	// a request to /images/_thumbs/photo.webp with route
-	// "handle_path /images/* { ... }", Caddy strips /images/ so
-	// r.URL.Path is "_thumbs/photo.webp". Check for the prefix
-	// WITHOUT a leading slash.
+//
+// root is the gallery root, relPath is the request path relative to
+// the root (no leading slash). The thumb URL's pattern is:
+//
+//	relPath = "<subdir>/_thumbs/<basename>.webp"
+//
+// or just "_thumbs/<basename>.webp" for the top-level gallery. The
+// source file lives at (root/<subdir>/<basename>.<ext>).
+func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPath string) bool {
 	const prefix = "_thumbs/"
-	if !strings.HasPrefix(r.URL.Path, prefix) {
+	idx := strings.Index(relPath, prefix)
+	if idx < 0 {
 		return false
 	}
-	rest := strings.TrimPrefix(r.URL.Path, prefix)
-	// rest is "photo.webp" — strip the .webp suffix to get the
-	// basename. Be defensive: if it doesn't end in .webp, it's not
-	// a thumb request.
+	// everything before "_thumbs/" is the subdirectory portion.
+	subdir := relPath[:idx]
+	rest := relPath[idx+len(prefix):]
+	// rest is "photo.webp" (or "subdir/photo.webp" for nested
+	// thumbs). Strip the .webp suffix to get the source basename,
+	// keeping any nested subdir prefix.
 	if !strings.HasSuffix(rest, ".webp") {
 		http.NotFound(w, r)
 		return true
 	}
-	basename := strings.TrimSuffix(rest, ".webp")
-	// Reject path traversal attempts.
-	if strings.ContainsAny(basename, "/\\") || basename == "" || basename == "." || basename == ".." {
+	sourceRel := strings.TrimSuffix(rest, ".webp")
+	// Reject path traversal.
+	if strings.Contains(sourceRel, "..") {
 		http.NotFound(w, r)
 		return true
 	}
-	if g.Root == "" {
+	if root == "" {
 		http.Error(w, "image_gallery: no root configured", http.StatusInternalServerError)
 		return true
 	}
-	src := findSourceForThumb(g.Root, basename)
+	src := findSourceForThumb(root, subdir, sourceRel)
 	if src == "" {
 		http.NotFound(w, r)
 		return true

@@ -5,7 +5,9 @@ package gallery
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/caddyserver/caddy/v2"
@@ -63,28 +65,71 @@ func (g *Gallery) Provision(caddy.Context) error {
 func (*Gallery) Cleanup()        {}
 func (*Gallery) Validate() error { return nil }
 
-// ServeHTTP renders the gallery for the configured root directory.
+// ServeHTTP renders the gallery for the directory at the current
+// request path, or falls through to the next handler (typically
+// file_server) if the request is for a file.
+//
+// Path semantics after handle_path /images/* strips the prefix:
+//
+//	r.URL.Path = ""                    → render gallery for root
+//	r.URL.Path = "subdir"              → render gallery for subdir
+//	r.URL.Path = "subdir/"             → render gallery for subdir
+//	r.URL.Path = "photo.jpg"           → fall through to file_server
+//	r.URL.Path = "subdir/photo.jpg"    → fall through to file_server
+//	r.URL.Path = "_thumbs/photo.webp"  → serve as thumbnail
+//	r.URL.Path = "subdir/_thumbs/x.webp" → serve as thumbnail in subdir
+//
 // On transient errors (scan failures, template parse), it falls
 // through to the next handler rather than returning a 500.
 func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
-	// Thumb requests are handled inline before the root check.
-	// Caddy's handle_path strips the route prefix, so r.URL.Path is
-	// like "_thumbs/photo.webp" (no leading slash) for a request
-	// to /images/_thumbs/photo.webp on route "handle_path /images/* { ... }".
-	if g.serveThumb(w, r) {
+	root := g.Root
+	if root == "" {
+		if v, ok := caddyhttp.GetVar(r.Context(), "root").(string); ok && v != "" {
+			root = v
+		}
+	}
+	if root == "" {
+		http.Error(w, "image_gallery: no root configured (set Gallery.Root in JSON or use `root * /path` in the Caddyfile)", http.StatusInternalServerError)
 		return nil
 	}
-	if g.Root == "" {
-		http.Error(w, "image_gallery: no root configured", http.StatusInternalServerError)
+	// Normalise the path. r.URL.Path may or may not have a leading
+	// slash depending on Caddy's handle_path internals; we strip it
+	// so filepath.Join behaves correctly and the resulting path is
+	// relative to the gallery root.
+	relPath := strings.TrimPrefix(r.URL.Path, "/")
+	resolved := filepath.Join(root, relPath)
+
+	// Thumb requests get a special handler. It resolves the source
+	// file in (root + subdir) for the path BEFORE the _thumbs/
+	// segment, so /subdir/_thumbs/photo.webp looks up
+	// (root/subdir/photo.<ext>).
+	if g.serveThumb(w, r, root, relPath) {
 		return nil
 	}
-	files, err := g.Cache.Get(g.Root, g.Sort)
-	if err != nil {
-		// Fall through to the next handler on scan failure so the
-		// gallery doesn't 500 on transient I/O issues.
+
+	// If the resolved path exists and is a regular file, fall
+	// through to file_server (or whatever the next handler is).
+	if info, err := os.Stat(resolved); err == nil && !info.IsDir() {
 		return next.ServeHTTP(w, r)
 	}
-	title := filepath.Base(g.Root)
+	// If the path doesn't exist at all, fall through so file_server
+	// returns a real 404 (not a 200 with an empty-gallery page).
+	if _, err := os.Stat(resolved); err != nil {
+		return next.ServeHTTP(w, r)
+	}
+
+	// It's a directory. Scan it and render the gallery.
+	files, err := g.Cache.Get(resolved, g.Sort)
+	if err != nil {
+		// Scan failure (permission denied, etc.) — fall through.
+		return next.ServeHTTP(w, r)
+	}
+	// Title: basename of the resolved dir, falling back to the
+	// gallery root for the top-level case.
+	title := filepath.Base(resolved)
+	if title == "." || title == "" {
+		title = filepath.Base(root)
+	}
 	body, err := RenderPage(title, "./", "./_thumbs/", files)
 	if err != nil {
 		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
