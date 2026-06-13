@@ -5,6 +5,8 @@ package gallery
 
 import (
 	"net/http"
+	"path/filepath"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -14,21 +16,10 @@ import (
 
 func init() {
 	caddy.RegisterModule(Gallery{})
-	// Register the Caddyfile directive. RegisterHandlerDirective is the
-	// canonical way for http.handlers.* modules to expose themselves to the
-	// Caddyfile parser; it also wires up the optional matcher-token
-	// handling (e.g. `image_gallery @name { ... }`).
 	httpcaddyfile.RegisterHandlerDirective("image_gallery", parseCaddyfile)
-	// image_gallery is a terminal handler (writes a response and
-	// returns), so it should run alongside other terminal handlers
-	// like file_server. Register it in the directive order so Caddy
-	// can place it correctly when not nested in an explicit handle
-	// block.
 	httpcaddyfile.RegisterDirectiveOrder("image_gallery", httpcaddyfile.Before, "file_server")
 }
 
-// parseCaddyfile is the Caddyfile adapter entrypoint: it returns a new
-// Gallery and defers per-directive parsing to the type's UnmarshalCaddyfile.
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
 	g := new(Gallery)
 	err := g.UnmarshalCaddyfile(h.Dispenser)
@@ -38,10 +29,19 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 // Gallery is a Caddy HTTP handler that renders a directory as a
 // dark-themed image/video gallery. See the README for behaviour.
 type Gallery struct {
+	// Root is the on-disk directory to render. Set automatically by
+	// Caddy's `root` directive (via Provision), or can be set in JSON
+	// config.
+	Root string `json:"root,omitempty"`
+
 	// Sort is the field used to order the gallery. Valid values:
 	//   "mtime" (default) — newest first
 	//   "name"           — alphabetical
 	Sort string `json:"sort,omitempty"`
+
+	// Cache holds the in-memory scan cache. Initialised in Provision
+	// if nil. Excluded from JSON config (runtime state only).
+	Cache *ScanCache `json:"-"`
 }
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
@@ -51,19 +51,44 @@ func (Gallery) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-func (Gallery) Provision(caddy.Context) error { return nil }
-func (Gallery) Cleanup()                      {}
-func (Gallery) Validate() error               { return nil }
-
-func (g Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
-	_, _ = w.Write([]byte("image_gallery ok"))
+// Provision sets up the module. Creates a default scan cache if one
+// isn't already set.
+func (g *Gallery) Provision(caddy.Context) error {
+	if g.Cache == nil {
+		g.Cache = NewScanCache(time.Minute)
+	}
 	return nil
 }
 
-// UnmarshalCaddyfile implements caddyfile.Unmarshaler so the module
-// can be configured from the Caddyfile. Parses `image_gallery { ... }`
-// blocks. Currently supports only the optional `sort` subdirective
-// (values: "mtime" default, or "name").
+func (*Gallery) Cleanup()        {}
+func (*Gallery) Validate() error { return nil }
+
+// ServeHTTP renders the gallery for the configured root directory.
+// On transient errors (scan failures, template parse), it falls
+// through to the next handler rather than returning a 500.
+func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	if g.Root == "" {
+		http.Error(w, "image_gallery: no root configured", http.StatusInternalServerError)
+		return nil
+	}
+	files, err := g.Cache.Get(g.Root, g.Sort)
+	if err != nil {
+		// Fall through to the next handler on scan failure so the
+		// gallery doesn't 500 on transient I/O issues.
+		return next.ServeHTTP(w, r)
+	}
+	title := filepath.Base(g.Root)
+	body, err := RenderPage(title, "./", "./_thumbs/", files)
+	if err != nil {
+		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = w.Write([]byte(body))
+	return nil
+}
+
 func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	g.Sort = "mtime"
 	for d.Next() {
