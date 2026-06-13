@@ -11,7 +11,14 @@ func init() {
 	caddy.RegisterModule(Gallery{})
 }
 
-type Gallery struct{}
+// Gallery is a Caddy HTTP handler that renders a directory as a
+// dark-themed image/video gallery. See the README for behaviour.
+type Gallery struct {
+	// Sort is the field used to order the gallery. Valid values:
+	//   "mtime" (default) — newest first
+	//   "name"           — alphabetical
+	Sort string `json:"sort,omitempty"`
+}
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
