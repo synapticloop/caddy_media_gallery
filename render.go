@@ -71,6 +71,7 @@ const galleryTemplate = `<!DOCTYPE html>
   </details>
   {{end}}
 </main>
+<script>{{template "lightbox.js" .}}</script>
 </body>
 </html>
 `
@@ -209,6 +210,159 @@ main { max-width: 1200px; margin: 0 auto; }
   font-family: 'Courier New', Consolas, monospace;
 }
 .other-files a:hover { color: #5580ff; }
+
+/* ---- Lightbox overlay (created by lightbox.js) ---- */
+#gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 2, 6, 0.96);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: lb-fade-in 0.12s ease-out;
+}
+#gallery-lightbox.open { display: flex; }
+@keyframes lb-fade-in { from { opacity: 0; } to { opacity: 1; } }
+#gallery-lightbox img,
+#gallery-lightbox video {
+  max-width: 95vw;
+  max-height: 90vh;
+  object-fit: contain;
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+}
+#gallery-lightbox .lb-btn {
+  position: absolute;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 2.4rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  line-height: 1;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+#gallery-lightbox .lb-btn:hover { color: #5580ff; }
+#gallery-lightbox .lb-close { top: 1rem; right: 1.5rem; }
+#gallery-lightbox .lb-prev { left: 1.5rem; top: 50%; transform: translateY(-50%); }
+#gallery-lightbox .lb-next { right: 1.5rem; top: 50%; transform: translateY(-50%); }
+#gallery-lightbox .lb-caption {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-align: center;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#gallery-lightbox .lb-counter {
+  position: absolute;
+  top: 1.2rem;
+  left: 1.5rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+@media (max-width: 600px) {
+  #gallery-lightbox .lb-btn { font-size: 1.8rem; padding: 0.25rem 0.5rem; }
+  #gallery-lightbox .lb-close { top: 0.5rem; right: 0.5rem; }
+}
+`
+
+// lightboxJS is the vanilla-JS click-to-expand overlay. ~100 LOC, no
+// external dependencies. Hooks every .card anchor on the page; on
+// click, shows the full-size image in a dark backdrop overlay. Keys:
+//
+//	Esc       — close
+//	← / →     — prev / next
+//	click on backdrop — close
+//	click on image    — next
+//
+// The link's href is the full-size image, so the overlay reuses it
+// directly (no need to construct the URL again).
+const lightboxJS = `
+(function() {
+  var overlay = document.createElement('div');
+  overlay.id = 'gallery-lightbox';
+  overlay.innerHTML =
+    '<button class="lb-btn lb-close" aria-label="Close">×</button>' +
+    '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
+    '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
+    '<span class="lb-counter"></span>' +
+    '<span class="lb-caption"></span>';
+  document.body.appendChild(overlay);
+
+  var media = overlay.appendChild(document.createElement('div'));
+  media.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+  var currentEl = null;
+  var counter = overlay.querySelector('.lb-counter');
+  var caption = overlay.querySelector('.lb-caption');
+
+  // Collect all image cards (the lightbox only handles images; video
+  // cards keep their default link behavior so they open in a new tab).
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card:not(.video)'));
+  var idx = 0;
+
+  function clear() {
+    if (currentEl) {
+      currentEl.remove();
+      currentEl = null;
+    }
+  }
+
+  function show(i) {
+    if (cards.length === 0) return;
+    idx = ((i % cards.length) + cards.length) % cards.length;
+    var c = cards[idx];
+    var href = c.getAttribute('href') || '';
+    var name = (c.querySelector('.caption span') || {}).textContent || '';
+    clear();
+    var img = document.createElement('img');
+    img.src = href;
+    img.alt = name;
+    currentEl = img;
+    media.appendChild(img);
+    counter.textContent = (idx + 1) + ' / ' + cards.length;
+    caption.textContent = name;
+    overlay.classList.add('open');
+  }
+
+  function close() {
+    overlay.classList.remove('open');
+    clear();
+  }
+
+  cards.forEach(function(c, i) {
+    c.addEventListener('click', function(e) {
+      e.preventDefault();
+      show(i);
+    });
+  });
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) close();
+  });
+  overlay.querySelector('.lb-close').addEventListener('click', close);
+  overlay.querySelector('.lb-prev').addEventListener('click', function() { show(idx - 1); });
+  overlay.querySelector('.lb-next').addEventListener('click', function() { show(idx + 1); });
+  // Click on the image itself advances to the next (PowerPoint-style).
+  media.addEventListener('click', function(e) { e.stopPropagation(); show(idx + 1); });
+  document.addEventListener('keydown', function(e) {
+    if (!overlay.classList.contains('open')) return;
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowLeft') show(idx - 1);
+    else if (e.key === 'ArrowRight') show(idx + 1);
+  });
+})();
 `
 
 // funcs is the template.FuncMap used by RenderPage. Right now it just
@@ -289,8 +443,12 @@ func loadTemplate() (*template.Template, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Re-register style.css from the constant.
+		// Re-register style.css and lightbox.js from the constants.
 		t, err = t.New("style.css").Parse(styleCSS)
+		if err != nil {
+			return nil, err
+		}
+		t, err = t.New("lightbox.js").Parse(lightboxJS)
 		if err != nil {
 			return nil, err
 		}
@@ -299,6 +457,10 @@ func loadTemplate() (*template.Template, error) {
 	// Fall back to bundled templates.
 	t := template.New("gallery").Funcs(galleryFuncs)
 	t, err = t.New("style.css").Parse(styleCSS)
+	if err != nil {
+		return nil, err
+	}
+	t, err = t.New("lightbox.js").Parse(lightboxJS)
 	if err != nil {
 		return nil, err
 	}

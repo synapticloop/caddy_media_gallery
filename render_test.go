@@ -25,6 +25,9 @@ func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 		"loading=\"lazy\"",     // lazy loading per Phase 5 plan
 		"./_thumbs/alpha.webp", // thumb URL: basename + .webp
 		"./_thumbs/beta.webp",
+		"gallery-lightbox",               // lightbox overlay element id
+		"lb-prev", "lb-next", "lb-close", // lightbox controls
+		"ArrowLeft", "ArrowRight", "Escape", // lightbox keybindings
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered HTML missing %q", want)
