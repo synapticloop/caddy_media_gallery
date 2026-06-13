@@ -38,7 +38,7 @@ const galleryTemplate = `<!DOCTYPE html>
     {{range .Images}}
     <a class="card" href="{{$.PathPrefix}}{{.Name}}">
       <div class="thumb">
-        <img loading="lazy" src="{{$.ThumbPrefix}}{{.Name}}" alt="{{.Name}}">
+        <img loading="lazy" src="{{$.ThumbPrefix}}{{thumb .Name}}.webp" alt="{{.Name}}">
       </div>
       <div class="caption"><span>{{.Name}}</span></div>
     </a>
@@ -218,6 +218,12 @@ var galleryFuncs = template.FuncMap{
 	"ext": func(name string) string {
 		ext := filepath.Ext(name)
 		return strings.TrimPrefix(ext, ".")
+	},
+	// thumb strips the file extension. Used to build the thumb URL
+	// (e.g. "photo.jpg" → "photo"). The ".webp" suffix is appended
+	// by the template literal.
+	"thumb": func(name string) string {
+		return strings.TrimSuffix(name, filepath.Ext(name))
 	},
 }
 

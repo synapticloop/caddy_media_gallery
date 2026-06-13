@@ -20,9 +20,11 @@ func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 	for _, want := range []string{
 		"Test Gallery",
 		"alpha.jpg", "beta.png", "gamma.mp4", "readme.txt",
-		"Other files",      // "Other files" section header must appear
-		"<img",             // image tags must be emitted
-		"loading=\"lazy\"", // lazy loading per Phase 5 plan
+		"Other files",          // "Other files" section header must appear
+		"<img",                 // image tags must be emitted
+		"loading=\"lazy\"",     // lazy loading per Phase 5 plan
+		"./_thumbs/alpha.webp", // thumb URL: basename + .webp
+		"./_thumbs/beta.webp",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("rendered HTML missing %q", want)

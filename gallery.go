@@ -67,6 +67,13 @@ func (*Gallery) Validate() error { return nil }
 // On transient errors (scan failures, template parse), it falls
 // through to the next handler rather than returning a 500.
 func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyhttp.Handler) error {
+	// Thumb requests are handled inline before the root check.
+	// Caddy's handle_path strips the route prefix, so r.URL.Path is
+	// like "_thumbs/photo.webp" (no leading slash) for a request
+	// to /images/_thumbs/photo.webp on route "handle_path /images/* { ... }".
+	if g.serveThumb(w, r) {
+		return nil
+	}
 	if g.Root == "" {
 		http.Error(w, "image_gallery: no root configured", http.StatusInternalServerError)
 		return nil
