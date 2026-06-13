@@ -1,0 +1,5 @@
+/caddy
+/caddy-image-gallery
+*.test
+.idea/
+.vscode/
