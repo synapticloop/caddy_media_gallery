@@ -19,6 +19,12 @@ func init() {
 	// Caddyfile parser; it also wires up the optional matcher-token
 	// handling (e.g. `image_gallery @name { ... }`).
 	httpcaddyfile.RegisterHandlerDirective("image_gallery", parseCaddyfile)
+	// image_gallery is a terminal handler (writes a response and
+	// returns), so it should run alongside other terminal handlers
+	// like file_server. Register it in the directive order so Caddy
+	// can place it correctly when not nested in an explicit handle
+	// block.
+	httpcaddyfile.RegisterDirectiveOrder("image_gallery", httpcaddyfile.Before, "file_server")
 }
 
 // parseCaddyfile is the Caddyfile adapter entrypoint: it returns a new
