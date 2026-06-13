@@ -383,19 +383,28 @@ const galleryTemplate = `<!DOCTYPE html>
 <body>
 <main>
   <header>
-    <div class="header-main">
-      <h1>{{.Title}}</h1>
-      <div class="meta">
-        <span>{{.TotalImages}} images</span>
-        {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-        {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+    <div class="header-top">
+      <div class="header-main">
+        <h1>{{.Title}}</h1>
+        <div class="meta">
+          <span>{{.TotalImages}} images</span>
+          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
+          {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+        </div>
       </div>
+      {{if eq .Sort.Field "mtime"}}
+      <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
+      {{else}}
+      <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
+      {{end}}
     </div>
-    {{if eq .Sort.Field "mtime"}}
-    <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
-    {{else}}
-    <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
-    {{end}}
+    <div class="sort-bar">
+      <span class="sort-label">Sort by</span>
+      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?sort=name&order={{if and (eq .Sort.Field "name") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?sort=type&order={{if and (eq .Sort.Field "type") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "date"}} active{{end}}" href="?sort=date&order={{if and (eq .Sort.Field "date") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Date<span class="arrow">{{if eq .Sort.Field "date"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+    </div>
   </header>
 
   {{if .Directories}}
@@ -423,14 +432,6 @@ const galleryTemplate = `<!DOCTYPE html>
   {{if gt .TotalImages 0}}
   <section class="images-section">
     <h2 class="section-heading">Images</h2>
-    <div class="sort-bar">
-      <span class="sort-label">Sort by</span>
-      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?sort=name&order={{if and (eq .Sort.Field "name") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?sort=type&order={{if and (eq .Sort.Field "type") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "date"}} active{{end}}" href="?sort=date&order={{if and (eq .Sort.Field "date") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Date<span class="arrow">{{if eq .Sort.Field "date"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-    </div>
-
     <div class="image-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
@@ -503,10 +504,13 @@ main {
 header {
   padding: 1.25rem 2rem 1rem;
   border-bottom: 1px solid #e5e9ea;
+}
+.header-top {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
+  margin-bottom: 0.85rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
 h1 {
@@ -584,8 +588,9 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-  margin-bottom: 1rem;
   flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e9ea;
 }
 .sort-label { color: #888; margin-right: 0.25rem; }
 .sort-btn {
