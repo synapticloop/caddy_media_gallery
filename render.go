@@ -153,18 +153,17 @@ func thumbStripExt(name string) string {
 }
 
 // splitFiles partitions a []FileInfo into dirs / others / images.
-// "Others" includes BOTH videos and other files (per the user's
-// spec: "files which are not images" go in the middle strip).
+// Per the user's spec, VIDEOS go in the image grid (with a
+// play-button thumbnail), not in the "Other files" strip.
+// "Others" is therefore only non-media files (HTML, txt, etc.).
 func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 	for _, f := range files {
 		switch f.Kind {
 		case KindDir:
 			dirs = append(dirs, f)
-		case KindImage:
+		case KindImage, KindVideo:
 			images = append(images, f)
 		default:
-			// KindVideo + KindOther both go to the "Other files"
-			// strip.
 			others = append(others, f)
 		}
 	}
@@ -292,9 +291,14 @@ const pageSize = 50
 // and "./_thumbs/" — both relative so they work for any subdir
 // the gallery is mounted at.
 //
+// `relPath` is the path within the gallery (the request's
+// post-handle_path-stripped path, no leading slash). Empty for
+// the gallery root. When non-empty, an ".." entry is prepended to
+// the directories list so the user can navigate up.
+//
 // `query` is the request's URL query values; sort and page are
 // read from it.
-func RenderPage(title, pathPrefix, thumbPrefix string, files []FileInfo, query url.Values) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath string, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -308,11 +312,26 @@ func RenderPage(title, pathPrefix, thumbPrefix string, files []FileInfo, query u
 		totalPages = 1
 	}
 
+	// Prepend an "up" entry to the directories list when we're
+	// inside a subdirectory. "../" is the relative URL to the
+	// parent — the browser handles it correctly regardless of the
+	// current page's URL depth.
+	dirViews := buildFileViews(dirs, pathPrefix, thumbPrefix)
+	if relPath != "" {
+		up := FileView{
+			Name:  "..",
+			Href:  "../",
+			IsDir: true,
+			Type:  "UP",
+		}
+		dirViews = append([]FileView{up}, dirViews...)
+	}
+
 	data := PageData{
 		Title:       title,
 		PathPrefix:  pathPrefix,
 		ThumbPrefix: thumbPrefix,
-		Directories: buildFileViews(dirs, pathPrefix, thumbPrefix),
+		Directories: dirViews,
 		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix),
 		Images:      buildFileViews(paged, pathPrefix, thumbPrefix),
 		Page:        page,
@@ -364,12 +383,19 @@ const galleryTemplate = `<!DOCTYPE html>
 <body>
 <main>
   <header>
-    <h1>{{.Title}}</h1>
-    <div class="meta">
-      <span>{{.TotalImages}} images</span>
-      {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-      {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+    <div class="header-main">
+      <h1>{{.Title}}</h1>
+      <div class="meta">
+        <span>{{.TotalImages}} images</span>
+        {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
+        {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+      </div>
     </div>
+    {{if eq .Sort.Field "mtime"}}
+    <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
+    {{else}}
+    <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
+    {{end}}
   </header>
 
   {{if .Directories}}
@@ -407,9 +433,13 @@ const galleryTemplate = `<!DOCTYPE html>
 
     <div class="image-grid">
       {{range .Images}}
-      <a class="card" href="{{.Href}}">
-        <div class="thumb">
+      <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
+        <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
+          {{if .IsVideo}}
+          <div class="play-overlay">▶</div>
+          {{else}}
           <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
+          {{end}}
         </div>
         <div class="tile-name">{{.Name}}</div>
         <div class="tile-meta">
@@ -473,7 +503,12 @@ main {
 header {
   padding: 1.25rem 2rem 1rem;
   border-bottom: 1px solid #e5e9ea;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
+.header-main { flex: 1 1 auto; min-width: 0; }
 h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -488,6 +523,22 @@ h1 {
   flex-wrap: wrap;
 }
 .meta span { color: #888; }
+.sort-indicator {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  background: white;
+  border: 1px solid #e5e9ea;
+  border-radius: 4px;
+  color: #333;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006ed3; }
+.sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; }
 .section {
   padding: 1.25rem 2rem;
   border-bottom: 1px solid #e5e9ea;
@@ -589,6 +640,30 @@ h1 {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+.thumb-video {
+  background: linear-gradient(135deg, #1a1a26 0%, #2d2d40 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.play-overlay {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a26;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  padding-left: 0.35rem; /* optical centering for the ▶ glyph */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s, background 0.15s;
+}
+.card.video:hover .play-overlay {
+  transform: scale(1.1);
+  background: #fff;
 }
 .tile-name {
   font-size: 0.8rem;
@@ -803,10 +878,32 @@ const lightboxJS = `
 
 // galleryFuncs is the template.FuncMap used by RenderPage. It
 // has a small set of arithmetic helpers used by the pagination
-// links (page-1, page+1).
+// links (page-1, page+1) plus a sortLabel helper for the
+// header sort indicator.
 var galleryFuncs = template.FuncMap{
 	"minus1": func(n int) int { return n - 1 },
 	"plus1":  func(n int) int { return n + 1 },
+	// sortLabel returns the human-readable label for a sort field.
+	// Unknown fields fall back to the raw field name (capitalised).
+	"sortLabel": func(field string) string {
+		switch field {
+		case "name":
+			return "Name"
+		case "type":
+			return "Type"
+		case "date":
+			return "Date"
+		case "size":
+			return "Size"
+		case "mtime":
+			return "Modified"
+		default:
+			if field == "" {
+				return "Modified"
+			}
+			return strings.ToUpper(field[:1]) + field[1:]
+		}
+	},
 }
 
 // loadTemplate returns a *template.Template for rendering the
