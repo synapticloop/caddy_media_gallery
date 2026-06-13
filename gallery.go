@@ -118,6 +118,35 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		return next.ServeHTTP(w, r)
 	}
 
+	// Path is a directory. If the request URL doesn't end with a
+	// trailing slash, 301-redirect to the canonical form so the
+	// browser resolves relative URLs (./_thumbs/photo.webp) the
+	// same way it does for the trailing-slash version. This matches
+	// what file_server does for directory indexes; without it,
+	// visiting /images/foo resolves ./ against /images/ instead of
+	// /images/foo/, breaking the thumb URLs.
+	//
+	// We use a RELATIVE Location (no leading slash) because
+	// Caddy's handle_path rewrites both r.URL.Path AND
+	// r.RequestURI, so we can't reconstruct the full original
+	// URL from inside the handler. A relative reference is
+	// resolved by the browser against the current request URL
+	// per RFC 3986 §5.2 — "generated/" against base
+	// "/images/generated" yields "/images/generated/" via the
+	// merge algorithm, regardless of whether the browser
+	// treats the base as a file or a directory.
+	//
+	// We set the Location header manually instead of using
+	// http.Redirect() because the latter normalises the
+	// location to an absolute path (prepending "/"), which the
+	// browser would then resolve against the host root instead
+	// of the request URL.
+	if relPath != "" && !strings.HasSuffix(relPath, "/") {
+		w.Header().Set("Location", relPath+"/")
+		w.WriteHeader(http.StatusMovedPermanently)
+		return nil
+	}
+
 	// It's a directory. Scan it and render the gallery.
 	files, err := g.Cache.Get(resolved, g.Sort)
 	if err != nil {
