@@ -53,7 +53,8 @@ func TestScanner_ClassifiesAndSorts(t *testing.T) {
 		"c.mp4":     "x",
 		"notes.txt": "x",
 	})
-	// Create a subdir to verify the scanner skips directories.
+	// Create a subdir to verify the scanner includes directories
+	// with Kind = KindDir.
 	if err := os.Mkdir(filepath.Join(dir, "subdir"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -62,17 +63,17 @@ func TestScanner_ClassifiesAndSorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Should be 4 files (the subdir is skipped).
-	if len(got) != 4 {
-		t.Fatalf("expected 4 files, got %d: %+v", len(got), got)
+	// Should be 5 entries (4 files + 1 subdir).
+	if len(got) != 5 {
+		t.Fatalf("expected 5 entries, got %d: %+v", len(got), got)
 	}
 	// Counts by kind.
 	kinds := map[FileKind]int{}
 	for _, f := range got {
 		kinds[f.Kind]++
 	}
-	if kinds[KindImage] != 2 || kinds[KindVideo] != 1 || kinds[KindOther] != 1 {
-		t.Errorf("kind counts: got %v, want image=2 video=1 other=1", kinds)
+	if kinds[KindImage] != 2 || kinds[KindVideo] != 1 || kinds[KindOther] != 1 || kinds[KindDir] != 1 {
+		t.Errorf("kind counts: got %v, want image=2 video=1 other=1 dir=1", kinds)
 	}
 }
 
