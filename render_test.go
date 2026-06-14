@@ -307,6 +307,51 @@ func TestRenderPage_NoUpEntryAtRoot(t *testing.T) {
 	}
 }
 
+func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
+	// Each image/video tile should have an "open in new tab" button
+	// (a <span class="open-btn" role="button">) positioned in the
+	// thumb. The button's data-open-url should be the tile's href.
+	now := time.Date(2026, 6, 12, 14, 30, 0, 0, time.UTC)
+	files := []FileInfo{
+		{Name: "photo.jpg", ModTime: now.UnixNano(), Size: 100, Kind: KindImage},
+		{Name: "clip.mp4", ModTime: now.UnixNano(), Size: 9999, Kind: KindVideo},
+		{Name: "notes.txt", ModTime: now.UnixNano(), Size: 50, Kind: KindOther},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should have exactly 2 open-btns (one per image/video tile — NOT on the other-files chip).
+	if c := strings.Count(html, `class="open-btn"`); c != 2 {
+		t.Errorf("expected 2 open-btns (one per image/video tile), got %d", c)
+	}
+	// Each open-btn should have the right a11y attributes.
+	for _, want := range []string{
+		`role="button"`,
+		`tabindex="0"`,
+		`title="Open in new tab"`,
+		`aria-label="Open in new tab"`,
+		`data-open-url="./photo.jpg"`,
+		`data-open-url="./clip.mp4"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("open-btn missing %q", want)
+		}
+	}
+	// The open-btn should be inside the .thumb (not in the .other-files strip).
+	othersIdx := strings.Index(html, "Other files")
+	imagesIdx := strings.Index(html, ">Images<")
+	imagesSection := html[imagesIdx:]
+	if !strings.Contains(imagesSection, `class="open-btn"`) {
+		t.Error("expected open-btn to be in the image grid section")
+	}
+	// Other-files chips should NOT have an open-btn.
+	othersSection := html[othersIdx:imagesIdx]
+	if strings.Contains(othersSection, `class="open-btn"`) {
+		t.Error("open-btn should not be in the 'Other files' section (per user spec — only on image/video tiles)")
+	}
+}
+
 func TestRenderPage_SortIndicatorInHeader(t *testing.T) {
 	files := []FileInfo{
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},

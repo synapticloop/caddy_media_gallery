@@ -441,6 +441,7 @@ const galleryTemplate = `<!DOCTYPE html>
           {{else}}
           <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
           {{end}}
+          <span class="open-btn" data-open-url="{{.Href}}" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>
         </div>
         <div class="tile-name">{{.Name}}</div>
         <div class="tile-meta">
@@ -645,6 +646,42 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   height: 100%;
   object-fit: cover;
   display: block;
+}
+.open-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #333;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 1px 1px; /* optical centering for ↗ glyph */
+  opacity: 0.5;
+  transition: opacity 0.12s, background 0.12s, transform 0.12s;
+  z-index: 1;
+  font-family: inherit;
+  user-select: none;
+}
+.card:hover .open-btn,
+.open-btn:hover,
+.open-btn:focus,
+.open-btn:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.98);
+  outline: none;
+}
+.open-btn:hover,
+.open-btn:focus,
+.open-btn:focus-visible {
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 .thumb-video {
   background: linear-gradient(135deg, #1a1a26 0%, #2d2d40 100%);
@@ -860,8 +897,35 @@ const lightboxJS = `
 
   cards.forEach(function(c, i) {
     c.addEventListener('click', function(e) {
+      // The open-btn (and its descendants) opens the file in a new
+      // tab instead of the lightbox. Its own click handler calls
+      // stopPropagation, but be defensive in case it doesn't.
+      if (e.target.closest && e.target.closest('.open-btn')) return;
       e.preventDefault();
       show(i);
+    });
+  });
+
+  // "Open in new tab" button on each tile. Clicking it (or pressing
+  // Enter/Space when focused) opens the file URL in a new tab
+  // instead of the lightbox. We stop propagation so the card's own
+  // click handler (above) doesn't ALSO try to open the lightbox.
+  document.querySelectorAll('.open-btn').forEach(function(btn) {
+    var openUrl = function() {
+      var url = btn.getAttribute('data-open-url');
+      if (url) window.open(url, '_blank');
+    };
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openUrl();
+    });
+    btn.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        openUrl();
+      }
     });
   });
 
