@@ -1,9 +1,10 @@
-# caddy-image-gallery
+# caddy_image_gallery
 
-A Caddy v2 HTTP handler module that renders a directory as a dark-themed
+A Caddy v2 HTTP handler module that renders a directory as a light-themed
 image gallery. Replaces Caddy's default `file_server browse` with a
-thumbnailed grid, click-to-expand lightbox, and "Other files" section for
-non-image content.
+thumbnailed grid, click-to-expand lightbox, sortable + paginated layout,
+and a separate "Other files" strip above the image grid for non-image
+content.
 
 ![preview](#) <!-- TODO: add a screenshot if you have one handy -->
 
@@ -25,7 +26,7 @@ Build a custom Caddy binary with this module baked in:
 ```bash
 xcaddy build \
     --with github.com/caddyserver/caddy@v2.11.4 \
-    --with github.com/synapticloop/caddy-image-gallery@latest
+    --with github.com/synapticloop/caddy_image_gallery@latest \
 ```
 
 Or use the included build script (pins Caddy to v2.11.4 and the local module path):
@@ -103,8 +104,8 @@ Cache invalidation is purely mtime-based — no cron job, no inotify watcher.
 
 ```bash
 # Clone
-git clone https://github.com/synapticloop/caddy-image-gallery
-cd caddy-image-gallery
+git clone https://github.com/synapticloop/caddy_image_gallery
+cd caddy_image_gallery
 
 # Build (requires xcaddy and Go 1.21+)
 go mod download
@@ -123,7 +124,7 @@ go test ./... -race       # race detector
 ## Architecture
 
 ```
-caddy-image-gallery/
+caddy_image_gallery/
 ├── gallery.go          # Module registration, Caddyfile parser, ServeHTTP
 ├── scanner.go          # Directory walker + file classification (image/video/other)
 ├── scancache.go        # mtime-keyed in-memory cache of directory scans

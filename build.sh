@@ -36,7 +36,7 @@ xcaddy build \
     --output "$OUTPUT_BIN" \
     --with github.com/caddyserver/caddy@v2.11.4 \
     --with github.com/mholt/caddy-ratelimit \
-    --with github.com/synapticloop/caddy-image-gallery=.
+    --with github.com/synapticloop/caddy_image_gallery=. \
 
 chmod +x "$OUTPUT_BIN"
 

@@ -1,4 +1,4 @@
-module github.com/synapticloop/caddy-image-gallery
+module github.com/synapticloop/caddy_image_gallery
 
 go 1.25.1
 
