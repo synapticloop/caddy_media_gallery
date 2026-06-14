@@ -445,8 +445,10 @@ const galleryTemplate = `<!DOCTYPE html>
         </div>
         <div class="tile-name">{{.Name}}</div>
         <div class="tile-meta">
-          <span class="date">{{.Date}}</span>
-          <span class="size">{{.Size}}</span>
+          <div class="tile-meta-info">
+            <span class="date">{{.Date}}</span>
+            <span class="size">{{.Size}}</span>
+          </div>
           <span class="filetype-chip">{{.Type}}</span>
         </div>
       </a>
@@ -721,13 +723,20 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   align-items: center;
   justify-content: space-between;
   gap: 0.4rem;
-  padding: 0.1rem 0.6rem 0.5rem;
+  padding: 0.15rem 0.6rem 0.5rem;
   font-size: 0.7rem;
   color: #888;
   font-variant-numeric: tabular-nums;
 }
-.tile-meta .date { flex: 0 0 auto; }
-.tile-meta .size { flex: 1 1 auto; text-align: right; }
+.tile-meta-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.tile-meta-info .date,
+.tile-meta-info .size { line-height: 1.35; }
 .filetype-chip {
   background: #e5e9ea;
   color: #333;

@@ -2,6 +2,8 @@ package gallery
 
 import (
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -180,6 +182,26 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 	if !strings.Contains(html, `class="filetype-chip">JPG`) {
 		t.Error("expected JPG filetype chip on image tile")
 	}
+	// Layout: date and size are stacked in a .tile-meta-info
+	// wrapper, with the filetype chip OUTSIDE that wrapper.
+	// Verify the stacking by checking that the order in the HTML
+	// is: tile-meta opens, tile-meta-info opens, date, size,
+	// tile-meta-info closes, filetype-chip, tile-meta closes.
+	tileMetaInfoStart := strings.Index(html, `class="tile-meta-info"`)
+	if tileMetaInfoStart < 0 {
+		t.Fatal("expected a .tile-meta-info wrapper around date+size")
+	}
+	// Inside the wrapper: date should appear before size.
+	wrapperEnd := strings.Index(html[tileMetaInfoStart:], `</div>`)
+	wrapper := html[tileMetaInfoStart : tileMetaInfoStart+wrapperEnd]
+	dateIdx := strings.Index(wrapper, `class="date"`)
+	sizeIdx := strings.Index(wrapper, `class="size"`)
+	if dateIdx < 0 || sizeIdx < 0 {
+		t.Errorf("date and size should both be inside .tile-meta-info; got date=%d size=%d", dateIdx, sizeIdx)
+	}
+	if dateIdx > sizeIdx {
+		t.Error("expected date to appear BEFORE size in the HTML (size under date)")
+	}
 }
 
 func TestRenderPage_EmptyDirShowsEmptyMessage(t *testing.T) {
@@ -304,6 +326,65 @@ func TestRenderPage_NoUpEntryAtRoot(t *testing.T) {
 	dirsSection := html[:othersIdx]
 	if strings.Contains(dirsSection, `>../<`) {
 		t.Error("did not expect '..' entry at the gallery root")
+	}
+}
+
+// TestScanner_SymlinkToDirIsKindDir verifies that a symlink whose
+// target is a directory is classified as KindDir, NOT as KindOther
+// (which would put it in the "Other files" section). The user's
+// filesystem has symlinks pointing at directories that were being
+// misclassified because os.DirEntry.Info() uses Lstat under the
+// hood — it returns the FileInfo of the link itself, not the target.
+// The scanner now explicitly follows symlinks via os.Stat.
+func TestScanner_SymlinkToDirIsKindDir(t *testing.T) {
+	dir := t.TempDir()
+	// Real target directory
+	realDir := filepath.Join(dir, "real-subdir")
+	if err := os.Mkdir(realDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Symlink pointing at the dir, with a .txt extension (the
+	// "looks like a file" case — we want to make sure the
+	// extension doesn't override the dir classification).
+	if err := os.Symlink(realDir, filepath.Join(dir, "looks-like-file.txt")); err != nil {
+		t.Skipf("symlinks not supported on this fs: %v", err)
+	}
+	// Symlink to a real image — should be classified as KindImage.
+	realImg := filepath.Join(dir, "real.jpg")
+	if err := os.WriteFile(realImg, []byte("fake-jpg"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realImg, filepath.Join(dir, "image-link.png")); err != nil {
+		t.Skipf("symlinks not supported on this fs: %v", err)
+	}
+	// Broken symlink — should be silently skipped.
+	if err := os.Symlink(filepath.Join(dir, "does-not-exist"), filepath.Join(dir, "broken")); err != nil {
+		t.Skipf("symlinks not supported on this fs: %v", err)
+	}
+
+	s := NewScanner(dir)
+	got, err := s.Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kindsByName := map[string]FileKind{}
+	for _, f := range got {
+		kindsByName[f.Name] = f.Kind
+	}
+	if kindsByName["looks-like-file.txt"] != KindDir {
+		t.Errorf("symlink to dir: got %q, want %q", kindsByName["looks-like-file.txt"], KindDir)
+	}
+	if kindsByName["image-link.png"] != KindImage {
+		t.Errorf("symlink to image: got %q, want %q", kindsByName["image-link.png"], KindImage)
+	}
+	if _, ok := kindsByName["broken"]; ok {
+		t.Error("broken symlink should be skipped, but it appeared in the scan result")
+	}
+	if kindsByName["real-subdir"] != KindDir {
+		t.Errorf("real dir: got %q, want %q", kindsByName["real-subdir"], KindDir)
+	}
+	if kindsByName["real.jpg"] != KindImage {
+		t.Errorf("real image: got %q, want %q", kindsByName["real.jpg"], KindImage)
 	}
 }
 

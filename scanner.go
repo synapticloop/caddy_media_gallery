@@ -80,7 +80,12 @@ func Classify(name string) FileKind {
 
 // Scan walks the directory and returns a sorted slice of FileInfo.
 // Both files and subdirectories are included (Kind = KindDir for
-// directories).
+// directories). Symlinks are followed: a symlink to a directory
+// is classified as KindDir, and the FileInfo's Size and ModTime
+// come from the symlink's target (not the symlink itself, which
+// would report the length of the target path string and the
+// link's own mtime). Broken symlinks (target missing or
+// inaccessible) are silently skipped.
 //
 // Sort order:
 //   - "mtime" (default): newest first by modification time
@@ -99,8 +104,21 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 			// Skip entries we can't stat (broken symlink, race, etc.)
 			continue
 		}
+		// e.Info() is implemented via Lstat — it gives the FileInfo
+		// of the symlink itself, not the target. For symlinks, follow
+		// the link so we can classify the entry by its target's type
+		// (a symlink to a directory should be shown as a directory)
+		// and report the target's real size + mtime.
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Stat(filepath.Join(s.Root, e.Name()))
+			if err != nil {
+				// Broken symlink — skip
+				continue
+			}
+			info = target
+		}
 		kind := KindOther
-		if e.IsDir() {
+		if info.IsDir() {
 			kind = KindDir
 		} else {
 			kind = Classify(e.Name())
