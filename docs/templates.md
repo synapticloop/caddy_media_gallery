@@ -16,34 +16,45 @@ in place.
 loadTemplate() reads $GALLERY_TEMPLATES_DIR
    │
    ├── /etc/caddy/gallery-templates/gallery.tmpl exists?
-   │     ├── YES → parse that file, append the bundled style.css + lightbox.js
-   │     │         (the on-disk gallery.tmpl is the active template)
+   │     ├── YES → parse that file directly (CSS+JS are inside it)
+   │     │         (the on-disk file is the active template)
    │     └── NO  → use the bundled galleryTemplate constant
-   │               (the bundled style.css + lightbox.js are also constants)
    │
    └── return *template.Template ready to RenderPage
 ```
 
-The bundled constants are the source of truth at build time. The
-on-disk file is an *override* layer; if you delete it, the module
-falls back to the bundled version automatically on the next
-request.
+The template is a single self-contained file. The HTML, CSS
+(inside `<style>`), and JS (inside `<script>`) all live in one
+Go string constant (`galleryTemplate` in `render.go`) and one
+on-disk file (`/etc/caddy/gallery-templates/gallery.tmpl`).
+There is no sub-template loading — the previous Phase 16 design
+that split them into 3 files (`gallery.tmpl` + `style.css` +
+`lightbox.js`) was collapsed in Phase 17 for easier editing.
 
-## What the bundled templates are
+The bundled constant is the source of truth at build time. The
+on-disk file is an *override* layer; if you delete it, the
+module falls back to the bundled version automatically on the
+next request.
 
-Three files in `$GALLERY_TEMPLATES_DIR`:
+## What's in the single template file
 
-| File | Source constant in render.go | Purpose |
+One file, `gallery.tmpl`, ~16.7 KB / 574 lines, containing:
+
+| Section | What's in it | Approx lines |
 |---|---|---|
-| `gallery.tmpl` | `galleryTemplate` (~107 lines) | The main HTML. The `<style>` and `<script>` blocks are inlined as named sub-templates (`{{template "style.css" .}}` etc.). |
-| `style.css` | `styleCSS` (~365 lines) | The stylesheet, inlined in `<style>` in the page `<head>`. Pure CSS, no preprocessing. |
-| `lightbox.js` | `lightboxJS` (~99 lines) | The vanilla-JS click-to-expand overlay. Adapts to whatever tiles are on the current page (knows about `.card` with an `img` child). |
+| `<!DOCTYPE>` ... `<style>` | Document head, including the full CSS inlined as a `<style>` block | ~10 + 365 (CSS) |
+| `<body>`, `<main>`, `<header>` | Title, counts, sort indicator, sort bar | ~50 |
+| Directories section | `{{if .Directories}}` ... `{{end}}` — the dirs chip strip | ~7 |
+| Other files section | `{{if .OtherFiles}}` ... `{{end}}` — the others chip strip | ~7 |
+| Images section | Sort info, paginated grid, per-tile HTML | ~80 |
+| Pagination | `{{if gt .TotalPages 1}}` ... `{{end}}` — prev/next links | ~15 |
+| `<script>` ... `</script>` | The full JS inlined (lightbox, open-in-new-tab, sort indicator) | ~100 (JS) |
 
-`style.css` and `lightbox.js` are not loaded as separate files
-on the page — they're parsed as named sub-templates of the main
-`gallery.tmpl` template, so a single HTTP response carries all
-three. The on-disk files exist as a discoverability/override
-mechanism, not as separate page assets.
+The CSS rules and the HTML they apply to are interleaved
+top-to-bottom in the file, so when you scroll through the
+template you see the structure (HTML), the styling (CSS), and
+the behavior (JS) in document order. Easier to hand-edit than
+three separate files.
 
 ## Template variables
 
@@ -119,37 +130,35 @@ The template engine has a few helper functions registered:
    `sudo rm /etc/caddy/gallery-templates/gallery.tmpl`. The next
    request falls back to the bundled constant.
 
-## Walkthrough: change the header to dark mode
+## Walkthrough: change the theme to dark mode
 
-The bundled template is light-themed. To make it dark:
+Since the CSS is now inlined in the same file as the HTML, you
+edit the `<style>` block directly in `gallery.tmpl` — no second
+file to coordinate, no sub-template indirection.
 
-1. Edit `/etc/caddy/gallery-templates/gallery.tmpl`.
-2. Find the `<style>` block. It's the `{{template "style.css" .}}`
-   reference. The actual CSS is loaded as a sub-template — you
-   can't edit it via the `gallery.tmpl` file directly.
-3. To override the CSS, write a new `style.css` file at
-   `/etc/caddy/gallery-templates/style.css`. The module's
-   `loadTemplate` always parses the bundled `styleCSS` as the
-   `style.css` named sub-template after parsing the on-disk
-   `gallery.tmpl`, so the on-disk `style.css` would need
-   `loadTemplate` to load it instead. **As of this writing, the
-   on-disk override of `style.css` and `lightbox.js` is
-   supported as files-on-disk, but `loadTemplate` always uses
-   the bundled constants for those two.** The on-disk files are
-   present for operator visibility, not for serving.
+1. Open `/etc/caddy/gallery-templates/gallery.tmpl` in your
+   editor.
+2. Find the `<style>` block. It's the big CSS block near the
+   top of the file, just after `<title>...</title>`. Search for
+   `html, body { background: #f3f6f7;` to find the body color.
+3. Change the colors inline. The CSS is plain CSS — no
+   preprocessing. Most of the theme colors are concentrated in
+   the first 50-100 lines.
+4. Save the file. The change takes effect on the next request
+   (no Caddy restart needed — the module re-reads the on-disk
+   template on every `loadTemplate` call).
+5. Hard-reload in the browser to bypass the HTML cache.
 
-   **Practical workaround:** copy the `styleCSS` constant from
-   `render.go` into `/etc/caddy/gallery-templates/style.css`,
-   edit the colors there, then patch `render.go` to read the
-   on-disk `style.css` instead of the constant. (This is a
-   code-level change, not a template-only change.)
+A common set of swaps for dark mode (find/replace these in the
+`<style>` block):
 
-   **The intended way** to do dark mode in v1 is to fork the
-   project and edit the `styleCSS` constant in `render.go`. The
-   planned v2 (per the wiki page) is to have `loadTemplate` also
-   read on-disk `style.css` and `lightbox.js` as overrides.
-
-4. Save the file. The next request renders the new style.
+| Light (default) | Dark variant |
+|---|---|
+| `html, body { background: #f3f6f7; }` | `html, body { background: #1a1a1a; color: #ddd; }` |
+| `main { background: white; }` | `main { background: #222; }` |
+| `header { border-bottom: 1px solid #e5e9ea; }` | `header { border-bottom: 1px solid #333; }` |
+| `.chip { background: #f3f6f7; border: 1px solid #e5e9ea; }` | `.chip { background: #2a2a2a; border: 1px solid #3a3a3a; }` |
+| `a { color: #006ed3; }` | `a { color: #4ea3ff; }` |
 
 ## Walkthrough: add a "Created" column to the image tiles
 
@@ -176,15 +185,40 @@ If you want to read the source (or fork and customise):
 
 | File | Constant | Lines (approx) |
 |---|---|---|
-| `render.go` | `galleryTemplate` | line 392, ~107 lines |
-| `render.go` | `styleCSS` | line 504, ~365 lines |
-| `render.go` | `lightboxJS` | line 874, ~99 lines |
+| `render.go` | `galleryTemplate` | line 392, ~574 lines (HTML + inlined CSS + inlined JS) |
 
-All three are Go string literals (`const foo = \`...\``) in the
-`gallery` package. To customise: edit the constant, rebuild the
-module (`./build.sh`), restart Caddy (`sudo systemctl restart
-caddy`). The on-disk templates are written from the new
-constants on the next startup.
+A single constant. CSS and JS are inlined inside `<style>` and
+`<script>` blocks respectively. To customise: edit the constant,
+rebuild the module (`./build.sh`), restart Caddy (`sudo systemctl
+restart caddy`). The on-disk template is written from the new
+constant on the next startup.
+
+## Upgrading from a pre-inlining install (Phase 16 → Phase 17)
+
+If your site was running the old 3-file template split
+(`gallery.tmpl` + `style.css` + `lightbox.js`) and you upgraded
+to the new inlining build, the on-disk files are in an
+inconsistent state:
+
+- `style.css` and `lightbox.js` from the old build are now
+  dead weight. `writeBundledTemplates` removes them
+  automatically on the next Provision after upgrade. Safe to
+  ignore.
+- The on-disk `gallery.tmpl` from the old build still has
+  the old `{{template "lightbox.js" .}}` references, which
+  no longer work. The new `loadTemplate` will fail to parse
+  this file and the gallery will 500.
+
+**One-time fix on upgrade:**
+
+```
+sudo rm /etc/caddy/gallery-templates/gallery.tmpl
+sudo systemctl restart caddy
+```
+
+The next Provision writes the new inlined template. After that,
+the on-disk file is the canonical inlined version, and any
+operator edits to it become live overrides.
 
 ## Troubleshooting
 
@@ -192,20 +226,25 @@ constants on the next startup.
 (Cmd-Shift-R / Ctrl-F5). The browser may have cached the
 previous HTML.
 
-**Edit took effect but the page is a 500.** Your template has a
-parse error. The response body will contain the Go
+**Edit took effect but the page is a 500.** Your template has
+a parse error. The response body will contain the Go
 `html/template` parser error. Common causes:
 - Unclosed `{{if}}` / `{{range}}` / `{{with}}` blocks
 - `{{end}}` mismatch (most common — Go templates require `{{end}}` to close every block)
 - Calling a method that doesn't exist on the data type (e.g. `{{.Foo.Bar}}` when `Foo` is a string)
+- An unescaped backtick inside a Go template comparison (backticks terminate the Go raw string the constant is in)
 
 **Edit took effect but layout is broken.** You removed or
 re-ordered a structural element. The CSS selectors and the JS
-`querySelector` calls expect a specific DOM shape — see
-`styleCSS` and `lightboxJS` for the contract.
+`querySelector` calls expect a specific DOM shape — search
+for the class name in the template to see what's expected.
 
 **Want to test a new template before deploying it.** Stage the
 edit in a new file at, say, `/etc/caddy/gallery-templates/gallery.tmpl.staging`,
 then copy it over the live file once you're happy. Or
 `curl` the gallery to see the live HTML and check it with a
 browser inspector before saving.
+
+**Got a 500 immediately after upgrading.** You have the
+pre-inlining on-disk `gallery.tmpl` from a previous build.
+See the "Upgrading from a pre-inlining install" section above.
