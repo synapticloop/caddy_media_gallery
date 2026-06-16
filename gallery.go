@@ -4,6 +4,7 @@
 package gallery
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -58,6 +59,14 @@ func (Gallery) CaddyModule() caddy.ModuleInfo {
 func (g *Gallery) Provision(caddy.Context) error {
 	if g.Cache == nil {
 		g.Cache = NewScanCache(time.Minute)
+	}
+	// Make the bundled templates discoverable on disk for the
+	// operator. writeBundledTemplates is a no-op if the files
+	// already exist (operator overrides preserved), and a
+	// non-fatal error here doesn't block the module from serving
+	// (the bundled templates still work).
+	if err := writeBundledTemplates(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: caddy-image-gallery: could not write bundled templates to disk: %v\n", err)
 	}
 	return nil
 }

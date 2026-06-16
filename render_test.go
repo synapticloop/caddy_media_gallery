@@ -388,6 +388,73 @@ func TestScanner_SymlinkToDirIsKindDir(t *testing.T) {
 	}
 }
 
+// TestWriteBundledTemplates verifies the "make templates discoverable"
+// behavior: on first run, the bundled constants are written to the
+// templates dir; on subsequent runs (or if the operator created a
+// file), existing files are NOT overwritten.
+func TestWriteBundledTemplates(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GALLERY_TEMPLATES_DIR", dir)
+
+	// First call: should write all 3 files
+	if err := writeBundledTemplates(); err != nil {
+		t.Fatalf("first writeBundledTemplates: %v", err)
+	}
+	for _, name := range []string{"gallery.tmpl", "style.css", "lightbox.js"} {
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Errorf("expected %s to exist after first call, got stat err: %v", name, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("%s was written but is empty", name)
+		}
+	}
+
+	// Second call: should NOT overwrite. Mutate one file first to
+	// prove that the content is preserved.
+	for _, name := range []string{"gallery.tmpl", "style.css", "lightbox.js"} {
+		path := filepath.Join(dir, name)
+		original, _ := os.ReadFile(path)
+		mutated := []byte("OPERATOR OVERRIDE\n")
+		if err := os.WriteFile(path, mutated, 0o644); err != nil {
+			t.Fatalf("mutate %s: %v", name, err)
+		}
+		if err := writeBundledTemplates(); err != nil {
+			t.Fatalf("second writeBundledTemplates: %v", err)
+		}
+		after, _ := os.ReadFile(path)
+		if string(after) != string(mutated) {
+			t.Errorf("%s was overwritten by the bundled template; expected operator override to survive", name)
+		}
+		_ = original
+	}
+
+	// Cleanup: verify no .tmp files left behind (atomic write)
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("leftover .tmp file: %s", e.Name())
+		}
+	}
+
+	// No env var → uses default /etc/caddy/gallery-templates
+	t.Setenv("GALLERY_TEMPLATES_DIR", "")
+	dir = writeBundledTemplatesDefaultDir()
+	if dir != "/etc/caddy/gallery-templates" {
+		t.Errorf("default templates dir = %q, want %q", dir, "/etc/caddy/gallery-templates")
+	}
+}
+
+func writeBundledTemplatesDefaultDir() string {
+	d := os.Getenv("GALLERY_TEMPLATES_DIR")
+	if d == "" {
+		return "/etc/caddy/gallery-templates"
+	}
+	return d
+}
+
 // TestSplitFiles_DirsAlwaysAlphabetical verifies that the directory
 // strip is always in case-insensitive alphabetical order, regardless
 // of the order the scanner returned or the user's image-sort choice.

@@ -1002,6 +1002,60 @@ var galleryFuncs = template.FuncMap{
 	},
 }
 
+// writeBundledTemplates ensures the bundled templates exist on disk
+// at the templates dir (default /etc/caddy/gallery-templates, or
+// $GALLERY_TEMPLATES_DIR if set). It writes each template only if
+// the file doesn't already exist — operator overrides are
+// preserved. This is for discoverability: after a fresh install,
+// an operator can `ls /etc/caddy/gallery-templates/` and see the
+// templates the plugin is using, and edit them in place to
+// override the defaults. The bundled constants in this file
+// remain the source of truth — the on-disk files are a
+// convenience for inspection + a handhold for the existing
+// override mechanism (loadTemplate's on-disk-first behavior).
+//
+// Called once at Caddy startup (from Gallery.Provision). Idempotent
+// across restarts: if a file already exists, it's left alone.
+// If the write fails (e.g. /etc/caddy not writable), the bundled
+// templates still serve fine — the on-disk files are optional.
+func writeBundledTemplates() error {
+	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
+	if dir == "" {
+		dir = "/etc/caddy/gallery-templates"
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"gallery.tmpl", galleryTemplate},
+		{"style.css", styleCSS},
+		{"lightbox.js", lightboxJS},
+	}
+	for _, f := range files {
+		path := filepath.Join(dir, f.name)
+		if _, err := os.Stat(path); err == nil {
+			// File already exists — leave it alone (operator override)
+			continue
+		}
+		// Atomic write: tmp + rename, so a partial write doesn't
+		// leave a half-baked file that loadTemplate would then
+		// try to parse and fail on.
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, []byte(f.content), 0o644); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("write %s: %w", tmp, err)
+		}
+		if err := os.Rename(tmp, path); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("rename %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
 // loadTemplate returns a *template.Template for rendering the
 // gallery. Tries on-disk templates first (for hot-iteration),
 // falls back to the bundled constants. Bundled style + lightbox
