@@ -388,6 +388,85 @@ func TestScanner_SymlinkToDirIsKindDir(t *testing.T) {
 	}
 }
 
+// TestSplitFiles_DirsAlwaysAlphabetical verifies that the directory
+// strip is always in case-insensitive alphabetical order, regardless
+// of the order the scanner returned or the user's image-sort choice.
+// Per user spec 2026-06-14: "the directory list should be in
+// alphabetical order, and if any ordering is applied to the images,
+// this will not affect the directory listing."
+func TestSplitFiles_DirsAlwaysAlphabetical(t *testing.T) {
+	now := time.Date(2026, 6, 12, 14, 30, 0, 0, time.UTC)
+	// Feed dirs in a non-alphabetical order (which is what the
+	// scanner would produce if it's sorted by mtime desc).
+	files := []FileInfo{
+		{Name: "zeta-dir", ModTime: now.UnixNano(), Size: 0, Kind: KindDir},
+		{Name: "alpha-dir", ModTime: now.Add(-1 * time.Hour).UnixNano(), Size: 0, Kind: KindDir},
+		{Name: "MIDDLE-dir", ModTime: now.Add(-2 * time.Hour).UnixNano(), Size: 0, Kind: KindDir},
+		{Name: "beta-dir", ModTime: now.Add(-3 * time.Hour).UnixNano(), Size: 0, Kind: KindDir},
+		// And some images / others mixed in, to confirm splitFiles
+		// only re-sorts the dirs.
+		{Name: "zebra.jpg", ModTime: now.Add(-4 * time.Hour).UnixNano(), Size: 100, Kind: KindImage},
+		{Name: "apple.jpg", ModTime: now.Add(-5 * time.Hour).UnixNano(), Size: 200, Kind: KindImage},
+		{Name: "notes.txt", ModTime: now.Add(-6 * time.Hour).UnixNano(), Size: 50, Kind: KindOther},
+	}
+	dirs, _, _ := splitFiles(files)
+	want := []string{"alpha-dir", "beta-dir", "MIDDLE-dir", "zeta-dir"}
+	if len(dirs) != len(want) {
+		t.Fatalf("got %d dirs, want %d", len(dirs), len(want))
+	}
+	for i, d := range dirs {
+		if d.Name != want[i] {
+			t.Errorf("dirs[%d].Name = %q, want %q (full order: %v)",
+				i, d.Name, want[i], gotNames(dirs))
+		}
+	}
+}
+
+// TestSplitFiles_DirsUnaffectedByImageSort is a higher-level test:
+// pass in a file list whose dirs are intentionally out of alpha
+// order, run them through RenderPage with various image-sort
+// settings, and confirm the dirs come out in the same alphabetical
+// order regardless.
+func TestSplitFiles_DirsUnaffectedByImageSort(t *testing.T) {
+	now := time.Date(2026, 6, 12, 14, 30, 0, 0, time.UTC)
+	files := []FileInfo{
+		{Name: "zebra-dir", ModTime: now.Add(-10 * time.Hour).UnixNano(), Size: 0, Kind: KindDir},
+		{Name: "alpha-dir", ModTime: now.Add(-20 * time.Hour).UnixNano(), Size: 0, Kind: KindDir},
+		{Name: "yankee.jpg", ModTime: now.Add(-30 * time.Hour).UnixNano(), Size: 100, Kind: KindImage},
+		{Name: "bravo.jpg", ModTime: now.Add(-40 * time.Hour).UnixNano(), Size: 200, Kind: KindImage},
+	}
+	for _, sortSpec := range []string{"mtime", "name", "size"} {
+		for _, order := range []string{"asc", "desc"} {
+			q := url.Values{}
+			q.Set("sort", sortSpec)
+			q.Set("order", order)
+			html, err := RenderPage("test", "./", "./_thumbs/", "", files, q)
+			if err != nil {
+				t.Fatalf("sort=%s order=%s: %v", sortSpec, order, err)
+			}
+			// Find the positions of the two dir names in the HTML
+			// and confirm alpha-dir comes before zebra-dir.
+			alphaPos := strings.Index(html, "alpha-dir")
+			zebraPos := strings.Index(html, "zebra-dir")
+			if alphaPos < 0 || zebraPos < 0 {
+				t.Fatalf("sort=%s order=%s: dir names not found in HTML", sortSpec, order)
+			}
+			if alphaPos > zebraPos {
+				t.Errorf("sort=%s order=%s: dirs NOT alphabetical (alpha-dir at %d, zebra-dir at %d)",
+					sortSpec, order, alphaPos, zebraPos)
+			}
+		}
+	}
+}
+
+func gotNames(files []FileInfo) []string {
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Name
+	}
+	return names
+}
+
 func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 	// Each image/video tile should have an "open in new tab" button
 	// (a <span class="open-btn" role="button">) positioned in the

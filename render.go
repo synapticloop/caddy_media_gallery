@@ -156,6 +156,19 @@ func thumbStripExt(name string) string {
 // Per the user's spec, VIDEOS go in the image grid (with a
 // play-button thumbnail), not in the "Other files" strip.
 // "Others" is therefore only non-media files (HTML, txt, etc.).
+//
+// Dirs are always sorted case-insensitive ascending by name here,
+// independent of the scanner's sort or the user's image-sort
+// choice — the directory strip is a stable navigation aid and
+// shouldn't reshuffle when the user changes how the images are
+// sorted. The user explicitly asked for this in 2026-06-14:
+// "the directory list should be in alphabetical order, and if
+// any ordering is applied to the images, this will not affect
+// the directory listing."
+//
+// Others are returned in scanner order (which respects the user's
+// sort choice by default — same as images). The ".." up entry
+// for subdirs is prepended in RenderPage after this returns.
 func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 	for _, f := range files {
 		switch f.Kind {
@@ -167,6 +180,11 @@ func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 			others = append(others, f)
 		}
 	}
+	// Directories are always alphabetical (case-insensitive),
+	// regardless of how the user sorted the image grid.
+	sort.SliceStable(dirs, func(i, j int) bool {
+		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
+	})
 	return
 }
 

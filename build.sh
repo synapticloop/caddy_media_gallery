@@ -10,8 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Add /root/go/bin to PATH so xcaddy is findable
-export PATH="$PATH:/root/go/bin"
+# Add /home/osmanj/go/bin to PATH so xcaddy is findable
+export PATH="$PATH:/home/osmanj/go/bin"
 
 OUTPUT_BIN="/usr/local/bin/caddy"
 LOCAL_BIN="$SCRIPT_DIR/caddy"
