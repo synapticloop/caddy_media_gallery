@@ -14,7 +14,7 @@ content.
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime.
 - **Vanilla JS lightbox** for click-to-expand, no external JS dependencies.
-- **Dark/noir theme** with monospace headers and cool blue accent.
+- **Light theme** with white card on grey background, blue accent links, Caddy-browse aesthetic.
 - **Native `loading="lazy"`** on every thumbnail.
 - **Video support** — videos show a play-button overlay and link to the raw file.
 - **"Other files" section** for non-image/non-video content in a directory.
@@ -158,6 +158,15 @@ your.caddy.host:443 {
     }
 }
 ```
+
+## Documentation
+
+Detailed operator documentation lives in [`docs/`](docs/):
+
+- [docs/README.md](docs/README.md) — index
+- [docs/configuration.md](docs/configuration.md) — Caddyfile directive, JSON config, env vars
+- [docs/templates.md](docs/templates.md) — template structure, all template variables, how to override
+- [docs/sort-and-pagination.md](docs/sort-and-pagination.md) — the `?sort=&order=&page=` URL API
 
 ## License
 
