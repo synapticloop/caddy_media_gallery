@@ -9,6 +9,24 @@ import (
 	"time"
 )
 
+// TestMain sets GALLERY_TEMPLATES_DIR to a non-existent temp
+// dir for the entire test process. Without this, any RenderPage
+// call would pick up the real /etc/caddy/gallery-templates/gallery.tmpl
+// if it happens to exist on the test host (e.g. from a previous
+// build), which would diverge from the bundled template the tests
+// are written against. By isolating tests to a temp dir, the
+// loadTemplate() fallback to the bundled galleryTemplate constant
+// is what gets used.
+func TestMain(m *testing.M) {
+	tmp, err := os.MkdirTemp("", "caddy-image-gallery-test-*")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(tmp)
+	os.Setenv("GALLERY_TEMPLATES_DIR", tmp)
+	os.Exit(m.Run())
+}
+
 func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 	files := []FileInfo{
 		{Name: "alpha.jpg", ModTime: time.Now().UnixNano(), Size: 12345, Kind: KindImage},
@@ -388,71 +406,71 @@ func TestScanner_SymlinkToDirIsKindDir(t *testing.T) {
 	}
 }
 
-// TestWriteBundledTemplates verifies the "make templates discoverable"
-// behavior: on first run, the bundled constants are written to the
-// templates dir; on subsequent runs (or if the operator created a
-// file), existing files are NOT overwritten.
+// TestWriteBundledTemplates verifies the "make templates
+// discoverable" behavior: on first run, the bundled template
+// is written to the templates dir; on subsequent runs (or if
+// the operator created a file), the existing file is NOT
+// overwritten. Also covers the cleanup of the pre-inlining
+// style.css/lightbox.js files (Phase 17).
 func TestWriteBundledTemplates(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GALLERY_TEMPLATES_DIR", dir)
 
-	// First call: should write all 3 files
+	// Seed the dir with stale style.css + lightbox.js (leftovers
+	// from a pre-inlining install). writeBundledTemplates should
+	// remove them on the first call.
+	for _, stale := range []string{"style.css", "lightbox.js"} {
+		path := filepath.Join(dir, stale)
+		if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+			t.Fatalf("seed %s: %v", stale, err)
+		}
+	}
+
+	// First call: should write gallery.tmpl AND remove the
+	// stale style.css/lightbox.js.
 	if err := writeBundledTemplates(); err != nil {
 		t.Fatalf("first writeBundledTemplates: %v", err)
 	}
-	for _, name := range []string{"gallery.tmpl", "style.css", "lightbox.js"} {
+
+	// gallery.tmpl exists, is non-empty.
+	tmplPath := filepath.Join(dir, "gallery.tmpl")
+	info, err := os.Stat(tmplPath)
+	if err != nil {
+		t.Errorf("expected gallery.tmpl to exist after first call, got stat err: %v", err)
+	} else if info.Size() == 0 {
+		t.Error("gallery.tmpl was written but is empty")
+	}
+
+	// style.css and lightbox.js should be gone (cleanup).
+	for _, name := range []string{"style.css", "lightbox.js"} {
 		path := filepath.Join(dir, name)
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Errorf("expected %s to exist after first call, got stat err: %v", name, err)
-			continue
-		}
-		if info.Size() == 0 {
-			t.Errorf("%s was written but is empty", name)
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("stale %s should have been removed; still present", name)
 		}
 	}
 
-	// Second call: should NOT overwrite. Mutate one file first to
-	// prove that the content is preserved.
-	for _, name := range []string{"gallery.tmpl", "style.css", "lightbox.js"} {
-		path := filepath.Join(dir, name)
-		original, _ := os.ReadFile(path)
-		mutated := []byte("OPERATOR OVERRIDE\n")
-		if err := os.WriteFile(path, mutated, 0o644); err != nil {
-			t.Fatalf("mutate %s: %v", name, err)
-		}
-		if err := writeBundledTemplates(); err != nil {
-			t.Fatalf("second writeBundledTemplates: %v", err)
-		}
-		after, _ := os.ReadFile(path)
-		if string(after) != string(mutated) {
-			t.Errorf("%s was overwritten by the bundled template; expected operator override to survive", name)
-		}
-		_ = original
+	// Second call: should NOT overwrite the existing gallery.tmpl.
+	// Mutate it to a known marker string, call again, assert the
+	// marker is preserved.
+	mutated := []byte("OPERATOR OVERRIDE\n")
+	if err := os.WriteFile(tmplPath, mutated, 0o644); err != nil {
+		t.Fatalf("mutate gallery.tmpl: %v", err)
+	}
+	if err := writeBundledTemplates(); err != nil {
+		t.Fatalf("second writeBundledTemplates: %v", err)
+	}
+	after, _ := os.ReadFile(tmplPath)
+	if string(after) != string(mutated) {
+		t.Errorf("gallery.tmpl was overwritten by the bundled template; expected operator override to survive")
 	}
 
-	// Cleanup: verify no .tmp files left behind (atomic write)
+	// Cleanup: verify no .tmp files left behind (atomic write).
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".tmp") {
 			t.Errorf("leftover .tmp file: %s", e.Name())
 		}
 	}
-
-	// No env var → uses default /etc/caddy/gallery-templates
-	t.Setenv("GALLERY_TEMPLATES_DIR", "")
-	dir = writeBundledTemplatesDefaultDir()
-	if dir != "/etc/caddy/gallery-templates" {
-		t.Errorf("default templates dir = %q, want %q", dir, "/etc/caddy/gallery-templates")
-	}
-}
-
-func writeBundledTemplatesDefaultDir() string {
-	d := os.Getenv("GALLERY_TEMPLATES_DIR")
-	if d == "" {
-		return "/etc/caddy/gallery-templates"
-	}
-	return d
 }
 
 // TestSplitFiles_DirsAlwaysAlphabetical verifies that the directory
@@ -640,4 +658,5 @@ func intStr(i int) string {
 		buf[n] = '-'
 	}
 	return string(buf[n:])
+
 }

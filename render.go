@@ -381,14 +381,25 @@ func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string) []FileView
 	return out
 }
 
-// galleryTemplate is the new light-themed template. Layout (top to
-// bottom):
-//  1. Header (title + total counts)
-//  2. Directories row (always visible, horizontal)
-//  3. Other files row (always visible, horizontal)
-//  4. Images section: sort bar, paginated grid, pagination
+// galleryTemplate is the complete HTML for the gallery page with
+// the CSS and JS inlined as <style> and <script> blocks. Keeping
+// everything in a single Go string constant (and a single on-disk
+// file) makes the template easier to edit and read — the operator
+// can scan the whole page top to bottom in one place, with the
+// CSS rules interleaved with the HTML they apply to and the JS
+// at the bottom.
 //
-// Per-tile content: thumbnail, name, date, size, filetype chip.
+// The single template is parsed by html/template. html/template
+// uses the same {{...}} syntax for both variable substitution and
+// control flow (if, range, with, end), so be careful when
+// writing raw CSS like `width: {{.Width}}` — it WILL be
+// auto-escaped. The `template "name" .` sub-template references
+// have been removed (the inlining makes them unnecessary).
+//
+// Data passed to this template: see PageData in this file, plus
+// the funcs in galleryFuncs (minus1, plus1, sortLabel). The
+// per-tile FileView fields are documented in docs/templates.md
+// in this repo.
 const galleryTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -396,112 +407,8 @@ const galleryTemplate = `<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="light">
 <title>{{.Title}}</title>
-<style>{{template "style.css" .}}</style>
-</head>
-<body>
-<main>
-  <header>
-    <div class="header-top">
-      <div class="header-main">
-        <h1>{{.Title}}</h1>
-        <div class="meta">
-          <span>{{.TotalImages}} images</span>
-          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-          {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
-        </div>
-      </div>
-      {{if eq .Sort.Field "mtime"}}
-      <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
-      {{else}}
-      <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
-      {{end}}
-    </div>
-    <div class="sort-bar">
-      <span class="sort-label">Sort by</span>
-      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?sort=name&order={{if and (eq .Sort.Field "name") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?sort=type&order={{if and (eq .Sort.Field "type") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?sort=mtime&order={{if and (eq .Sort.Field "mtime") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-    </div>
-  </header>
+<style>
 
-  {{if .Directories}}
-  <section class="dirs-section">
-    <h2 class="section-heading">Directories</h2>
-    <div class="chip-row">
-      {{range .Directories}}
-      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
-      {{end}}
-    </div>
-  </section>
-  {{end}}
-
-  {{if .OtherFiles}}
-  <section class="others-section">
-    <h2 class="section-heading">Other files</h2>
-    <div class="chip-row">
-      {{range .OtherFiles}}
-      <a class="chip" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a>
-      {{end}}
-    </div>
-  </section>
-  {{end}}
-
-  {{if gt .TotalImages 0}}
-  <section class="images-section">
-    <h2 class="section-heading">Images</h2>
-    <div class="image-grid">
-      {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
-        <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
-          {{if .IsVideo}}
-          <div class="play-overlay">▶</div>
-          {{else}}
-          <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
-          {{end}}
-          <span class="open-btn" data-open-url="{{.Href}}" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>
-        </div>
-        <div class="tile-name">{{.Name}}</div>
-        <div class="tile-meta">
-          <div class="tile-meta-info">
-            <span class="date">{{.Date}}</span>
-            <span class="size">{{.Size}}</span>
-          </div>
-          <span class="filetype-chip">{{.Type}}</span>
-        </div>
-      </a>
-      {{end}}
-    </div>
-
-    {{if gt .TotalPages 1}}
-    <nav class="pagination">
-      {{if .HasPrev}}
-        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | minus1}}">← Prev</a>
-      {{else}}
-        <span class="page-btn disabled">← Prev</span>
-      {{end}}
-      <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
-      {{if .HasNext}}
-        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
-      {{else}}
-        <span class="page-btn disabled">Next →</span>
-      {{end}}
-    </nav>
-    {{end}}
-  </section>
-  {{else}}
-  <p class="empty">No images in this directory.</p>
-  {{end}}
-</main>
-<script>{{template "lightbox.js" .}}</script>
-</body>
-</html>
-`
-
-// styleCSS is the light-themed stylesheet, inlined in the <head>.
-// Aesthetic inspired by Caddy's built-in browse: light grey
-// background, white card, blue accent, subtle borders and shadows.
-const styleCSS = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: #f3f6f7; color: #333; }
 body {
@@ -866,12 +773,105 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   #gallery-lightbox .lb-btn { font-size: 1.8rem; padding: 0.25rem 0.5rem; }
   #gallery-lightbox .lb-close { top: 0.5rem; right: 0.5rem; }
 }
-`
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="header-top">
+      <div class="header-main">
+        <h1>{{.Title}}</h1>
+        <div class="meta">
+          <span>{{.TotalImages}} images</span>
+          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
+          {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+        </div>
+      </div>
+      {{if eq .Sort.Field "mtime"}}
+      <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
+      {{else}}
+      <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
+      {{end}}
+    </div>
+    <div class="sort-bar">
+      <span class="sort-label">Sort by</span>
+      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?sort=name&order={{if and (eq .Sort.Field "name") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?sort=type&order={{if and (eq .Sort.Field "type") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?sort=mtime&order={{if and (eq .Sort.Field "mtime") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+    </div>
+  </header>
 
-// lightboxJS is the vanilla-JS click-to-expand overlay. Adapted
-// for the new tile structure: it looks for `.card` anchors with an
-// `img` child (image tiles). The caption comes from `.tile-name`.
-const lightboxJS = `
+  {{if .Directories}}
+  <section class="dirs-section">
+    <h2 class="section-heading">Directories</h2>
+    <div class="chip-row">
+      {{range .Directories}}
+      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .OtherFiles}}
+  <section class="others-section">
+    <h2 class="section-heading">Other files</h2>
+    <div class="chip-row">
+      {{range .OtherFiles}}
+      <a class="chip" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if gt .TotalImages 0}}
+  <section class="images-section">
+    <h2 class="section-heading">Images</h2>
+    <div class="image-grid">
+      {{range .Images}}
+      <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
+        <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
+          {{if .IsVideo}}
+          <div class="play-overlay">▶</div>
+          {{else}}
+          <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
+          {{end}}
+          <span class="open-btn" data-open-url="{{.Href}}" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>
+        </div>
+        <div class="tile-name">{{.Name}}</div>
+        <div class="tile-meta">
+          <div class="tile-meta-info">
+            <span class="date">{{.Date}}</span>
+            <span class="size">{{.Size}}</span>
+          </div>
+          <span class="filetype-chip">{{.Type}}</span>
+        </div>
+      </a>
+      {{end}}
+    </div>
+
+    {{if gt .TotalPages 1}}
+    <nav class="pagination">
+      {{if .HasPrev}}
+        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | minus1}}">← Prev</a>
+      {{else}}
+        <span class="page-btn disabled">← Prev</span>
+      {{end}}
+      <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
+      {{if .HasNext}}
+        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
+      {{else}}
+        <span class="page-btn disabled">Next →</span>
+      {{end}}
+    </nav>
+    {{end}}
+  </section>
+  {{else}}
+  <p class="empty">No images in this directory.</p>
+  {{end}}
+</main>
+<script>
+
 (function() {
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
@@ -970,17 +970,26 @@ const lightboxJS = `
     else if (e.key === 'ArrowRight') show(idx + 1);
   });
 })();
+
+</script>
+</body>
+</html>
 `
 
-// galleryFuncs is the template.FuncMap used by RenderPage. It
-// has a small set of arithmetic helpers used by the pagination
-// links (page-1, page+1) plus a sortLabel helper for the
-// header sort indicator.
+// galleryFuncs is the funcmap registered with the html/template
+// engine. Add new helpers here and they'll be available in the
+// template as {{funcName arg1 arg2}}. The current set:
+//
+//	minus1  n int → int    — n - 1
+//	plus1   n int → int    — n + 1
+//	sortLabel field string → string
+//	                       — "name"→"Name", "type"→"Type", "mtime"→"Modified",
+//	                         "size"→"Size", "date"→"Date"; unknown fields
+//	                         fall back to the raw field name capitalised;
+//	                         empty string → "Modified" (the default)
 var galleryFuncs = template.FuncMap{
 	"minus1": func(n int) int { return n - 1 },
 	"plus1":  func(n int) int { return n + 1 },
-	// sortLabel returns the human-readable label for a sort field.
-	// Unknown fields fall back to the raw field name (capitalised).
 	"sortLabel": func(field string) string {
 		switch field {
 		case "name":
@@ -1002,22 +1011,30 @@ var galleryFuncs = template.FuncMap{
 	},
 }
 
-// writeBundledTemplates ensures the bundled templates exist on disk
+// writeBundledTemplates ensures the bundled template exists on disk
 // at the templates dir (default /etc/caddy/gallery-templates, or
-// $GALLERY_TEMPLATES_DIR if set). It writes each template only if
-// the file doesn't already exist — operator overrides are
-// preserved. This is for discoverability: after a fresh install,
-// an operator can `ls /etc/caddy/gallery-templates/` and see the
-// templates the plugin is using, and edit them in place to
-// override the defaults. The bundled constants in this file
-// remain the source of truth — the on-disk files are a
-// convenience for inspection + a handhold for the existing
-// override mechanism (loadTemplate's on-disk-first behavior).
+// $GALLERY_TEMPLATES_DIR if set). It writes the file only if it
+// doesn't already exist — operator overrides are preserved. This
+// is for discoverability: after a fresh install, an operator can
+// `ls /etc/caddy/gallery-templates/` and see the template the
+// plugin is using, and edit it in place to override the default.
+// The bundled constant in this file remains the source of truth —
+// the on-disk file is a convenience for inspection + a handhold
+// for the existing override mechanism (loadTemplate's on-disk-first
+// behavior).
+//
+// As of the inlining change (Phase 17), the gallery template is
+// a single self-contained file (HTML + CSS + JS all in one). The
+// old split layout wrote three files (gallery.tmpl, style.css,
+// lightbox.js). On startup, writeBundledTemplates also removes
+// any leftover style.css / lightbox.js from a previous install —
+// they're not loadable overrides (never were) and leaving them
+// would be confusing. Safe to remove unconditionally.
 //
 // Called once at Caddy startup (from Gallery.Provision). Idempotent
-// across restarts: if a file already exists, it's left alone.
+// across restarts: if gallery.tmpl already exists, it's left alone.
 // If the write fails (e.g. /etc/caddy not writable), the bundled
-// templates still serve fine — the on-disk files are optional.
+// template still serves fine — the on-disk file is optional.
 func writeBundledTemplates() error {
 	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
 	if dir == "" {
@@ -1026,75 +1043,52 @@ func writeBundledTemplates() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	files := []struct {
-		name    string
-		content string
-	}{
-		{"gallery.tmpl", galleryTemplate},
-		{"style.css", styleCSS},
-		{"lightbox.js", lightboxJS},
+	// Clean up the old split style.css / lightbox.js from a
+	// previous install. Never loadable as overrides; just
+	// confusing if left around.
+	for _, stale := range []string{"style.css", "lightbox.js"} {
+		path := filepath.Join(dir, stale)
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale %s: %w", path, err)
+		}
 	}
-	for _, f := range files {
-		path := filepath.Join(dir, f.name)
-		if _, err := os.Stat(path); err == nil {
-			// File already exists — leave it alone (operator override)
-			continue
-		}
-		// Atomic write: tmp + rename, so a partial write doesn't
-		// leave a half-baked file that loadTemplate would then
-		// try to parse and fail on.
-		tmp := path + ".tmp"
-		if err := os.WriteFile(tmp, []byte(f.content), 0o644); err != nil {
-			os.Remove(tmp)
-			return fmt.Errorf("write %s: %w", tmp, err)
-		}
-		if err := os.Rename(tmp, path); err != nil {
-			os.Remove(tmp)
-			return fmt.Errorf("rename %s: %w", path, err)
-		}
+	// Write the bundled gallery.tmpl if it doesn't exist.
+	tmplPath := filepath.Join(dir, "gallery.tmpl")
+	if _, err := os.Stat(tmplPath); err == nil {
+		return nil // already exists, leave it alone
+	}
+	// Atomic write: tmp + rename, so a partial write doesn't
+	// leave a half-baked file that loadTemplate would then
+	// try to parse and fail on.
+	tmp := tmplPath + ".tmp"
+	if err := os.WriteFile(tmp, []byte(galleryTemplate), 0o644); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("write %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, tmplPath); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename %s: %w", tmplPath, err)
 	}
 	return nil
 }
 
 // loadTemplate returns a *template.Template for rendering the
-// gallery. Tries on-disk templates first (for hot-iteration),
-// falls back to the bundled constants. Bundled style + lightbox
-// are always available; on-disk templates may override them.
+// gallery. Tries the on-disk template first (for hot-iteration),
+// falls back to the bundled galleryTemplate constant. The template
+// is a single self-contained file with the CSS and JS inlined —
+// no sub-template loading.
+//
+// Bundled style + lightbox were removed in the inlining change
+// (Phase 17); the inlined template carries both inline.
 func loadTemplate() (*template.Template, error) {
 	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
 	if dir == "" {
 		dir = "/etc/caddy/gallery-templates"
 	}
 	tmplPath := filepath.Join(dir, "gallery.tmpl")
-	var err error
 	if _, statErr := os.Stat(tmplPath); statErr == nil {
-		t := template.New("gallery.tmpl").Funcs(galleryFuncs)
-		t, err = t.ParseFiles(tmplPath)
-		if err != nil {
-			return nil, err
-		}
-		t, err = t.New("style.css").Parse(styleCSS)
-		if err != nil {
-			return nil, err
-		}
-		t, err = t.New("lightbox.js").Parse(lightboxJS)
-		if err != nil {
-			return nil, err
-		}
-		return t, nil
+		return template.New("gallery.tmpl").Funcs(galleryFuncs).ParseFiles(tmplPath)
 	}
-	t := template.New("gallery").Funcs(galleryFuncs)
-	t, err = t.New("style.css").Parse(styleCSS)
-	if err != nil {
-		return nil, err
-	}
-	t, err = t.New("lightbox.js").Parse(lightboxJS)
-	if err != nil {
-		return nil, err
-	}
-	t, err = t.New("gallery").Parse(galleryTemplate)
-	if err != nil {
-		return nil, err
-	}
-	return t, nil
+	// Fall back to the bundled constant.
+	return template.New("gallery").Funcs(galleryFuncs).Parse(galleryTemplate)
 }
