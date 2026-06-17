@@ -9,6 +9,7 @@ and a separate "Other files" strip above.
 
 | Doc | What it covers |
 |---|---|
+| [Configuration reference](configuration-reference.md) | One-page index of every config knob (directives, JSON, env vars, query params, in-code constants) |
 | [Configuration](configuration.md) | The `image_gallery` Caddyfile directive, JSON config, env vars |
 | [Templates](templates.md) | How the templates work, what variables you can use, how to customize |
 | [Sort & Pagination](sort-and-pagination.md) | The `?sort=`, `?order=`, `?page=` URL API |
