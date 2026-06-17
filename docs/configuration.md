@@ -169,6 +169,37 @@ the bundled constant.
 size, and the thumb cache directory are all configurable in code
 (constants in the source) rather than via env vars.
 
+## In-code constants (not configurable)
+
+These are baked into the source. They can be changed by editing the
+code, rebuilding, and restarting Caddy — but they're not exposed
+as Caddyfile directives or env vars. Listed here so you know what
+the defaults are and where to find them.
+
+| Constant | Value | Where |
+|---|---|---|
+| Thumbnail size | 320px | `thumbnails.go` |
+| Thumb `Cache-Control` max-age | 86400 (24h) | `thumbnails.go` |
+| Thumb format | WebP (lossless, via `nativewebp`) | `thumbnails.go` |
+| Scan cache TTL | 1 minute | `gallery.go` (`NewScanCache(time.Minute)`) |
+| Thumb width (px) | 320 | `thumbnails.go` (the resize) |
+
+**Note:** "Thumbnail size" and "Thumb width (px)" both reference
+the same constant (320) — the maximum dimension of the
+generated thumbnail. If you wanted them to be different values
+(say, max-dim 320 and width 280 for a non-square crop), let me
+know and I'll split them into two separate constants.
+
+**Why these aren't configurable yet:** most operators never need
+to change them. The thumb size and Cache-Control max-age are
+sensible defaults that work for the vast majority of galleries.
+The scan cache TTL is short enough (1 minute) that new files
+appear quickly without manual cache busting, and long enough
+that hot directories don't re-scan on every request. If you find
+yourself wanting to change one of these, that's a signal that
+the constant should probably be promoted to a config option —
+file an issue and we can discuss.
+
 ## What `image_gallery` does NOT do
 
 - It does **not** generate thumbnails at build time — thumbnails
