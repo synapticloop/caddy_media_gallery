@@ -1214,6 +1214,28 @@ func TestRenderPage_UpEntryShowsParentDirName(t *testing.T) {
 			relPath:  "photos/vacation/2024",
 			wantText: "Up (../vacation)",
 		},
+		{
+			// The bug case: when the URL has a trailing slash
+			// (e.g. /images/photos/), relPath is "photos/" (with
+			// trailing slash). Without the trailing-slash trim in
+			// RenderPage, filepath.Dir("photos/") returns
+			// "photos" (the CURRENT dir), so the up chip would
+			// say "Up (../photos)" — same text as the current
+			// dir, not the parent. With the trim, relPath is
+			// normalized to "photos" and the parent is correctly
+			// empty (top-level subdir).
+			name:     "trailing slash on top-level subdir (parent is empty, NOT the current dir name)",
+			relPath:  "photos/",
+			wantText: "Up (../)",
+		},
+		{
+			// Same trailing-slash bug for a deeper subdir:
+			// without the trim, "photos/vacation/" would yield
+			// "vacation" (current dir) instead of "photos" (parent).
+			name:     "trailing slash on deeper subdir (parent is the dir above, NOT the current dir name)",
+			relPath:  "photos/vacation/",
+			wantText: "Up (../photos)",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -469,8 +469,18 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		// "photos" and the chip reads "Up (../photos)". Empty
 		// at the gallery root or in a top-level subdir
 		// (parent is the gallery root, no name to show).
+		//
+		// Trim any trailing slash first: when the URL is
+		// "/images/photos/", relPath is "photos/" (with
+		// trailing slash from the URL). filepath.Dir("photos/")
+		// returns "photos" (filepath.Clean strips the slash
+		// before splitting), which is the CURRENT dir's name,
+		// not the parent's. Without the trim, the chip would
+		// say "Up (../photos)" while the user is in
+		// /images/photos/ — same text as the current dir.
+		cleanPath := strings.TrimSuffix(relPath, "/")
 		parentDir := ""
-		if pd := filepath.Base(filepath.Dir(relPath)); pd != "." {
+		if pd := filepath.Base(filepath.Dir(cleanPath)); pd != "." {
 			parentDir = pd
 		}
 		up = &FileView{
