@@ -239,6 +239,39 @@ The next Provision writes the new inlined template. After that,
 the on-disk file is the canonical inlined version, and any
 operator edits to it become live overrides.
 
+## Upgrading the bundled template content
+
+`writeBundledTemplates()` deliberately does NOT overwrite an
+existing `gallery.tmpl` on disk — that's the operator-override
+contract. When the bundled template's contents change (e.g.
+new CSS rule, new template branch, fixed layout bug), the
+on-disk file is NOT updated automatically.
+
+**To pick up the new bundled content:**
+
+```bash
+# 1. Save any local customisations (if you have any)
+diff /etc/caddy/gallery-templates/gallery.tmpl      /home/osmanj/projects/caddy_image_gallery/render.go
+# 2. Delete the on-disk file
+sudo rm /etc/caddy/gallery-templates/gallery.tmpl
+# 3. Restart Caddy so the next Provision runs writeBundledTemplates
+sudo systemctl restart caddy
+# 4. (Optional) Re-apply your local customisations
+```
+
+This workflow is intentional: operators who have customised the
+template (e.g. themed dark mode) keep their changes across
+upgrades. Operators who haven't customised just get the
+"fresh bundled version" after the rm + restart.
+
+**Future enhancement (not v1):** writeBundledTemplates could
+write a content hash into a sidecar file, and on Provision, if
+the sidecar hash doesn't match the bundled hash, overwrite the
+on-disk file. This would auto-update without breaking the
+operator-override contract (the operator could still delete the
+on-disk file to fall back to the bundled version, OR write a
+sidecar with a custom hash to pin to their version).
+
 ## Troubleshooting
 
 **Edit took effect but the page looks the same.** Hard-reload
