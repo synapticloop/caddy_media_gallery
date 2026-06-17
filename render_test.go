@@ -204,6 +204,56 @@ func TestRenderPage_PerPageTextInHeader(t *testing.T) {
 	}
 }
 
+// TestRenderPage_HeaderShowsPageCount verifies that the
+// header meta line shows the total page count after the
+// "N per page" indicator when there is more than one page.
+// Per user request 2026-06-17: "add the number of pages after
+// the 50 per page".
+func TestRenderPage_HeaderShowsPageCount(t *testing.T) {
+	// 3 images at pageSize=10 -> ceil(3/10) = 1 page. No page
+	// count shown (only when TotalPages > 1).
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "c.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaStart := strings.Index(html, `class="meta"`)
+	metaEnd := strings.Index(html[metaStart:], `</div>`)
+	metaBlock := html[metaStart : metaStart+metaEnd]
+	if strings.Contains(metaBlock, "pages") {
+		t.Errorf("expected NO 'pages' indicator when TotalPages=1, got: %q", metaBlock)
+	}
+
+	// 200 images at pageSize=10 -> 20 pages. Should show "20 pages".
+	files2 := make([]FileInfo, 200)
+	for i := 0; i < 200; i++ {
+		files2[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
+	}
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files2, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaStart2 := strings.Index(html2, `class="meta"`)
+	metaEnd2 := strings.Index(html2[metaStart2:], `</div>`)
+	metaBlock2 := html2[metaStart2 : metaStart2+metaEnd2]
+	if !strings.Contains(metaBlock2, "10 per page") {
+		t.Errorf("expected '10 per page' in header, got: %q", metaBlock2)
+	}
+	if !strings.Contains(metaBlock2, "20 pages") {
+		t.Errorf("expected '20 pages' in header, got: %q", metaBlock2)
+	}
+	// The "20 pages" should come AFTER "10 per page"
+	perPageIdx := strings.Index(metaBlock2, "10 per page")
+	pagesIdx := strings.Index(metaBlock2, "20 pages")
+	if pagesIdx <= perPageIdx {
+		t.Errorf("expected '20 pages' to come AFTER '10 per page' in the header, got: %q", metaBlock2)
+	}
+}
+
 func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	files := []FileInfo{
 		{Name: "a.jpg", ModTime: time.Now().UnixNano(), Size: 1024, Kind: KindImage},

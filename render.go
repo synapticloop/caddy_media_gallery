@@ -908,7 +908,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
-          <span>·</span><span>{{.PageSize}} per page</span>
+          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>{{.TotalPages}} pages</span>{{end}}
         </div>
       </div>
       {{if eq .Sort.Field "mtime"}}
