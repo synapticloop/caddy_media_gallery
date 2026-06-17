@@ -316,7 +316,11 @@ const pageSize = 50
 //
 // `query` is the request's URL query values; sort and page are
 // read from it.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath string, files []FileInfo, query url.Values) (string, error) {
+// RenderPage renders the gallery. `tmplName` is the configured
+// template name (relative to the templates dir). Pass "" to use
+// the default ("gallery.tmpl"). The name is validated inside
+// loadTemplate.
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -361,7 +365,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath string, files []FileInfo
 		Sort:        sortSpec,
 	}
 
-	tmpl, err := loadTemplate()
+	tmpl, err := loadTemplate(tmplName)
 	if err != nil {
 		return "", err
 	}
@@ -1072,22 +1076,72 @@ func writeBundledTemplates() error {
 	return nil
 }
 
+// sanitizeTemplateName validates a template file name. The name
+// must be a relative path inside the templates dir — no absolute
+// paths, no `..` traversal. Returns the cleaned name on success,
+// or an error explaining why the name is bad.
+//
+// The validation is intentionally strict: this is a security
+// boundary. The templates dir is a chroot; the operator can only
+// reference files inside it. If you need to load a template from
+// outside the templates dir, that's a code change, not a config
+// change.
+//
+// `name == ""` is allowed and means "use the default" (gallery.tmpl)
+// — the caller decides what to do. Any non-empty name is validated.
+func sanitizeTemplateName(name string) (string, error) {
+	if name == "" {
+		return "", nil
+	}
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("template name must be relative, got absolute path")
+	}
+	clean := filepath.Clean(name)
+	// After cleaning, the path must not start with ".." — that's
+	// the path-traversal escape attempt. Cleaned paths that start
+	// with ".." indicate the operator tried to go above the
+	// templates dir.
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("template name must not traverse above the templates dir")
+	}
+	return clean, nil
+}
+
 // loadTemplate returns a *template.Template for rendering the
 // gallery. Tries the on-disk template first (for hot-iteration),
 // falls back to the bundled galleryTemplate constant. The template
 // is a single self-contained file with the CSS and JS inlined —
 // no sub-template loading.
 //
+// name is the configured template name (relative to the templates
+// dir). An empty name defaults to "gallery.tmpl". The name is
+// re-validated here (defense in depth — Provision also validates,
+// but the runtime check protects against a future bug that sets
+// the field without validating).
+//
 // Bundled style + lightbox were removed in the inlining change
 // (Phase 17); the inlined template carries both inline.
-func loadTemplate() (*template.Template, error) {
+func loadTemplate(name string) (*template.Template, error) {
+	clean, err := sanitizeTemplateName(name)
+	if err != nil {
+		return nil, err
+	}
+	if clean == "" {
+		clean = "gallery.tmpl"
+	}
 	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
 	if dir == "" {
 		dir = "/etc/caddy/gallery-templates"
 	}
-	tmplPath := filepath.Join(dir, "gallery.tmpl")
+	tmplPath := filepath.Join(dir, clean)
+	// Final defensive check after Join: ensure we didn't somehow
+	// escape the dir (the sanitizeTemplateName check should already
+	// prevent this, but belt-and-braces).
+	if rel, err := filepath.Rel(dir, tmplPath); err != nil || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return nil, fmt.Errorf("template name %q resolves outside the templates dir", name)
+	}
 	if _, statErr := os.Stat(tmplPath); statErr == nil {
-		return template.New("gallery.tmpl").Funcs(galleryFuncs).ParseFiles(tmplPath)
+		return template.New(clean).Funcs(galleryFuncs).ParseFiles(tmplPath)
 	}
 	// Fall back to the bundled constant.
 	return template.New("gallery").Funcs(galleryFuncs).Parse(galleryTemplate)

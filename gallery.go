@@ -42,6 +42,15 @@ type Gallery struct {
 	//   "name"           — alphabetical
 	Sort string `json:"sort,omitempty"`
 
+	// Template is the name of the template file to use, relative to
+	// the templates dir ($GALLERY_TEMPLATES_DIR, default
+	// /etc/caddy/gallery-templates). If empty, defaults to
+	// "gallery.tmpl". The path is validated at Provision to
+	// reject absolute paths and any traversal above the templates
+	// dir (no `..` allowed). The template dir is the chroot; the
+	// operator can only reference files inside it.
+	Template string `json:"template,omitempty"`
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache `json:"-"`
@@ -59,6 +68,13 @@ func (Gallery) CaddyModule() caddy.ModuleInfo {
 func (g *Gallery) Provision(caddy.Context) error {
 	if g.Cache == nil {
 		g.Cache = NewScanCache(time.Minute)
+	}
+	// Validate the configured template name. Must be relative and
+	// must not traverse above the templates dir. Fail Caddy
+	// startup on a bad value so a misconfiguration is caught at
+	// boot, not at first request.
+	if _, err := sanitizeTemplateName(g.Template); err != nil {
+		return fmt.Errorf("invalid image_gallery template name %q: %w", g.Template, err)
 	}
 	// Make the bundled templates discoverable on disk for the
 	// operator. writeBundledTemplates is a no-op if the files
@@ -168,7 +184,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, files, r.URL.Query())
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, files, r.URL.Query())
 	if err != nil {
 		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -190,6 +206,14 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				g.Sort = d.Val()
 				if g.Sort != "mtime" && g.Sort != "name" {
+					return d.ArgErr()
+				}
+			case "template":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				g.Template = d.Val()
+				if d.NextArg() {
 					return d.ArgErr()
 				}
 			}

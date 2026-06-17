@@ -34,7 +34,7 @@ func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 		{Name: "gamma.mp4", ModTime: time.Now().UnixNano(), Size: 999999, Kind: KindVideo},
 		{Name: "readme.txt", ModTime: time.Now().UnixNano(), Size: 100, Kind: KindOther},
 	}
-	html, err := RenderPage("Test Gallery", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("Test Gallery", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatalf("RenderPage: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestRenderPage_NoOtherFilesSectionWhenEmpty(t *testing.T) {
 	files := []FileInfo{
 		{Name: "only.jpg", ModTime: time.Now().UnixNano(), Kind: KindImage},
 	}
-	html, err := RenderPage("x", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("x", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestRenderPage_HTMLIsValidish(t *testing.T) {
 	files := []FileInfo{
 		{Name: "a.jpg", ModTime: time.Now().UnixNano(), Kind: KindImage},
 	}
-	html, err := RenderPage("t", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("t", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestRenderPage_DirectoriesAlwaysRendered(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	}
 	// Test page 2
 	q := url.Values{"page": {"2"}}
-	html2, err := RenderPage("test", "./", "./_thumbs/", "", files, q)
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", files, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,14 +155,14 @@ func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	// Clicking it should go to ?sort=name&order=asc.
 	// (Go's html/template leaves & unescaped in href attributes —
 	// they're valid HTML — so we check for & not &amp;.)
-	html, _ := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, _ := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if !strings.Contains(html, `href="?sort=name&order=asc"`) {
 		t.Error("expected default Name link to be asc (clicking activates sort)")
 	}
 
 	// Now activate by name asc. The link should toggle to desc.
 	q := url.Values{"sort": {"name"}, "order": {"asc"}}
-	html, _ = RenderPage("test", "./", "./_thumbs/", "", files, q)
+	html, _ = RenderPage("test", "./", "./_thumbs/", "", "", files, q)
 	if !strings.Contains(html, `class="sort-btn active"`) {
 		t.Error("expected the active sort button to have the 'active' class")
 	}
@@ -184,7 +184,7 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: now.UnixNano(), Size: 234567, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +223,7 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 }
 
 func TestRenderPage_EmptyDirShowsEmptyMessage(t *testing.T) {
-	html, err := RenderPage("empty", "./", "./_thumbs/", "", nil, nil)
+	html, err := RenderPage("empty", "./", "./_thumbs/", "", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 		{Name: "notes.txt", ModTime: 2, Size: 50, Kind: KindOther},
 		{Name: "clip.mp4", ModTime: 3, Size: 9999, Kind: KindVideo},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// Viewing a subdir: relPath = "subdir"
-	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", files, nil)
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestRenderPage_NoUpEntryAtRoot(t *testing.T) {
 		{Name: "nested1", Kind: KindDir},
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("root", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("root", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func TestSplitFiles_DirsUnaffectedByImageSort(t *testing.T) {
 			q := url.Values{}
 			q.Set("sort", sortSpec)
 			q.Set("order", order)
-			html, err := RenderPage("test", "./", "./_thumbs/", "", files, q)
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, q)
 			if err != nil {
 				t.Fatalf("sort=%s order=%s: %v", sortSpec, order, err)
 			}
@@ -562,7 +562,7 @@ func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 		{Name: "clip.mp4", ModTime: now.UnixNano(), Size: 9999, Kind: KindVideo},
 		{Name: "notes.txt", ModTime: now.UnixNano(), Size: 50, Kind: KindOther},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -602,7 +602,7 @@ func TestRenderPage_SortIndicatorInHeader(t *testing.T) {
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// Default sort: should show "Sort: Modified ↓" as a span (not a link).
-	html, err := RenderPage("test", "./", "./_thumbs/", "", files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -619,7 +619,7 @@ func TestRenderPage_SortIndicatorInHeader(t *testing.T) {
 
 	// Custom sort: should show "Sort: Name ↑" as a link to clear.
 	q := url.Values{"sort": {"name"}, "order": {"asc"}}
-	html, _ = RenderPage("test", "./", "./_thumbs/", "", files, q)
+	html, _ = RenderPage("test", "./", "./_thumbs/", "", "", files, q)
 	if !strings.Contains(html, `class="sort-indicator"`) {
 		t.Fatal("expected sort indicator in header (custom sort)")
 	}
