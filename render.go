@@ -53,6 +53,11 @@ type PageData struct {
 	TotalPages  int
 	HasPrev     bool
 	HasNext     bool
+	// PageNumbers is the list of page numbers (and 0 for
+	// ellipsis) to show in the Google-style bottom pagination.
+	// Computed by pageNumbers(current, total). Empty when
+	// total <= 1 (no pagination needed).
+	PageNumbers []int
 
 	// Sort
 	Sort SortSpec
@@ -297,6 +302,50 @@ func paginate(files []FileInfo, page, pageSize int) []FileInfo {
 	return files[start:end]
 }
 
+// pageNumbers returns the list of page numbers (and 0 for
+// ellipsis) to show in the Google-style pagination nav. Standard
+// pattern:
+//   - ≤ 10 pages total: show all
+//   - current near start (current ≤ 4): 1 2 3 4 5 ... N
+//   - current near end (current ≥ N-3): 1 ... N-4 N-3 N-2 N-1 N
+//   - otherwise: 1 ... current-1 current current+1 ... N
+//
+// The 0 entries are rendered as "..." in the template. Per user
+// request 2026-06-17: replace the bottom pagination "← Prev |
+// Page 1 of 2 | Next →" with a Google-style numbered list.
+func pageNumbers(current, total int) []int {
+	// For small totals, just show every page — no ellipsis needed.
+	if total <= 10 {
+		pages := make([]int, total)
+		for i := 0; i < total; i++ {
+			pages[i] = i + 1
+		}
+		return pages
+	}
+
+	pages := []int{1}
+
+	switch {
+	case current <= 4:
+		// Near start: 1 2 3 4 5 ... N
+		for i := 2; i <= 5; i++ {
+			pages = append(pages, i)
+		}
+		pages = append(pages, 0, total)
+	case current >= total-3:
+		// Near end: 1 ... N-4 N-3 N-2 N-1 N
+		pages = append(pages, 0)
+		for i := total - 4; i <= total; i++ {
+			pages = append(pages, i)
+		}
+	default:
+		// In the middle: 1 ... current-1 current current+1 ... N
+		pages = append(pages, 0, current-1, current, current+1, 0, total)
+	}
+
+	return pages
+}
+
 // parseSort reads sort and order from the query string, with a
 // safe default. Unknown fields fall back to the mtime default.
 func parseSort(q url.Values) SortSpec {
@@ -449,6 +498,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		TotalPages:  totalPages,
 		HasPrev:     page > 1,
 		HasNext:     page < totalPages,
+		PageNumbers: pageNumbers(page, totalPages),
 		Sort:        sortSpec,
 	}
 
@@ -811,11 +861,30 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   background: white;
 }
 .page-btn:hover { background: #f3f6f7; border-color: #d0d4d6; }
+.page-btn.active {
+  /* The currently-selected page in the Google-style pagination.
+     Same shape as a normal page-btn but inverted colors so it's
+     distinguishable at a glance (matches the sort-btn.active
+     style). */
+  background: #3B6FB6;
+  border-color: #3B6FB6;
+  color: white;
+  cursor: default;
+  pointer-events: none;
+}
 .page-btn.disabled {
   color: #bbb;
   background: #fafbfc;
   cursor: not-allowed;
   pointer-events: none;
+}
+.page-ellipsis {
+  /* The "..." in the Google-style pagination. Same color as the
+     page-btn text but no border or background — just a visual
+     separator between the numbered buttons. */
+  padding: 0.4rem 0.25rem;
+  color: #888;
+  user-select: none;
 }
 .page-info {
   padding: 0 0.75rem;
@@ -908,7 +977,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
-          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>{{.TotalPages}} pages</span>{{end}}
+          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>{{.TotalPages}} pages</span><span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
       {{if eq .Sort.Field "mtime"}}
@@ -988,7 +1057,15 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
       {{else}}
         <span class="page-btn disabled">← Prev</span>
       {{end}}
-      <span class="page-info">Page {{.Page}} of {{.TotalPages}}</span>
+      {{range .PageNumbers}}
+      {{if eq . 0}}
+        <span class="page-ellipsis">…</span>
+      {{else if eq . $.Page}}
+        <span class="page-btn active">{{.}}</span>
+      {{else}}
+        <a class="page-btn" href="?sort={{$.Sort.Field}}&order={{$.Sort.Order}}&page={{.}}">{{.}}</a>
+      {{end}}
+      {{end}}
       {{if .HasNext}}
         <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
       {{else}}

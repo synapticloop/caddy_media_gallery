@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -861,6 +862,135 @@ func intStr(i int) string {
 		buf[n] = '-'
 	}
 	return string(buf[n:])
+}
+
+func TestRenderPage_GoogleStylePagination(t *testing.T) {
+	// 200 images at pageSize=8 -> 25 pages (well past the
+	// <= 10 threshold, so the Google ellipsis pattern kicks in).
+	files25 := make([]FileInfo, 200)
+	for i := 0; i < 200; i++ {
+		files25[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
+	}
+	cases := []struct {
+		name        string
+		currentPage int
+		wantPages   []int
+	}{
+		{
+			name:        "25 pages, current=1 (near start): 1 2 3 4 5 ... 25",
+			currentPage: 1,
+			wantPages:   []int{1, 2, 3, 4, 5, 0, 25},
+		},
+		{
+			name:        "25 pages, current=13 (middle): 1 ... 12 13 14 ... 25",
+			currentPage: 13,
+			wantPages:   []int{1, 0, 12, 13, 14, 0, 25},
+		},
+		{
+			name:        "25 pages, current=25 (near end): 1 ... 21 22 23 24 25",
+			currentPage: 25,
+			wantPages:   []int{1, 0, 21, 22, 23, 24, 25},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			q := url.Values{"page": {strconv.Itoa(tc.currentPage)}}
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 8, files25, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			navStart := strings.Index(html, `<nav class="pagination">`)
+			if navStart < 0 {
+				t.Fatal(`expected <nav class="pagination"> in the page`)
+			}
+			navEnd := strings.Index(html[navStart:], `</nav>`)
+			nav := html[navStart : navStart+navEnd]
+			// Verify pages appear in order
+			lastIdx := 0
+			for _, p := range tc.wantPages {
+				var want string
+				if p == 0 {
+					want = "page-ellipsis"
+				} else {
+					want = `>` + strconv.Itoa(p) + `<`
+				}
+				idx := strings.Index(nav[lastIdx:], want)
+				if idx < 0 {
+					t.Errorf("expected %q in pagination nav (not found), got: %q", want, nav)
+					break
+				}
+				lastIdx += idx + len(want)
+			}
+			// Verify the current page has the active class
+			currentStr := strconv.Itoa(tc.currentPage)
+			if !strings.Contains(nav, `class="page-btn active">`+currentStr+`<`) {
+				t.Errorf("expected current page %d to have 'page-btn active' class in nav: %q", tc.currentPage, nav)
+			}
+		})
+	}
+
+	// 4-page case (≤ 10 -> show all, no ellipsis)
+	files4 := make([]FileInfo, 200)
+	for i := 0; i < 200; i++ {
+		files4[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
+	}
+	q := url.Values{"page": {"2"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 50, files4, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	navStart := strings.Index(html, `<nav class="pagination">`)
+	if navStart < 0 {
+		t.Fatal(`expected <nav class="pagination"> in the page`)
+	}
+	navEnd := strings.Index(html[navStart:], `</nav>`)
+	nav := html[navStart : navStart+navEnd]
+	for _, p := range []int{1, 2, 3, 4} {
+		want := `>` + strconv.Itoa(p) + `<`
+		if !strings.Contains(nav, want) {
+			t.Errorf("expected page %d in nav (≤ 10 pages, no ellipsis), got: %q", p, nav)
+		}
+	}
+	if strings.Contains(nav, "page-ellipsis") {
+		t.Errorf("expected NO ellipsis for ≤ 10 pages, got: %q", nav)
+	}
+}
+
+// TestRenderPage_HeaderShowsPagePosition verifies that the
+// header meta line shows "Page X of Y" after the per-page
+// indicator (only when multi-page). Per user request 2026-06-17:
+// add the current page and display 'Page 1 of N' in the
+// header as well.
+func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
+	files := make([]FileInfo, 200)
+	for i := 0; i < 200; i++ {
+		files[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
+	}
+	// 200 images, pageSize=50 -> 4 pages. Page 2 of 4.
+	q := url.Values{"page": {"2"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 50, files, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaStart := strings.Index(html, `class="meta"`)
+	metaEnd := strings.Index(html[metaStart:], `</div>`)
+	metaBlock := html[metaStart : metaStart+metaEnd]
+	if !strings.Contains(metaBlock, "Page 2 of 4") {
+		t.Errorf("expected 'Page 2 of 4' in header meta block, got: %q", metaBlock)
+	}
+	if !strings.Contains(metaBlock, "4 pages") {
+		t.Errorf("expected '4 pages' in header meta block, got: %q", metaBlock)
+	}
+	if !strings.Contains(metaBlock, "50 per page") {
+		t.Errorf("expected '50 per page' in header meta block, got: %q", metaBlock)
+	}
+	// Order check: per-page -> pages -> Page X of Y
+	perPageIdx := strings.Index(metaBlock, "50 per page")
+	pagesIdx := strings.Index(metaBlock, "4 pages")
+	pageOfIdx := strings.Index(metaBlock, "Page 2 of 4")
+	if !(perPageIdx < pagesIdx && pagesIdx < pageOfIdx) {
+		t.Errorf("expected order '50 per page' < '4 pages' < 'Page 2 of 4' in meta block, got: %q", metaBlock)
+	}
 }
 
 // TestBundledTemplate_LightboxSupportsVideo verifies that the
