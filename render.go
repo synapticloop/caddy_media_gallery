@@ -573,7 +573,11 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
 }
 .chip:hover { background: #e5e9ea; border-color: #d0d4d6; color: #006ed3; }
 .chip-icon { font-size: 0.95rem; line-height: 1; }
-.dir-chip { font-weight: 500; }
+.dir-chip {
+  font-weight: 500;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
 .images-section { padding: 1.25rem 2rem 1.5rem; }
 .dirs-section, .others-section { padding: 1rem 2rem; }
 .sort-bar {
