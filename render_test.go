@@ -1,8 +1,10 @@
 package gallery
 
 import (
+	"bytes"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -803,5 +805,107 @@ func intStr(i int) string {
 		buf[n] = '-'
 	}
 	return string(buf[n:])
+}
 
+// TestBundledTemplate_LightboxSupportsVideo verifies that the
+// lightbox JS in the bundled template supports both images
+// (via document.createElement('img')) and videos (via
+// document.createElement('video')). Per user request 2026-06-17:
+// "is there a way for videos to also play in a lightbox - isn't
+// there an html element?"
+//
+// This test extracts the <script> block from the bundled
+// template and checks for the presence of the video-supporting
+// code paths. We don't run the JS (no DOM in tests); we just
+// check for the syntactic evidence that videos are supported.
+func TestBundledTemplate_LightboxSupportsVideo(t *testing.T) {
+	// Read the bundled template by parsing the galleryTemplate
+	// constant. We do this via the same path the live system
+	// uses (loadTemplate) so we get the actual content rendered.
+	tmpl, err := loadTemplate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Render an empty data to get the template content
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, PageData{Title: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	// The bundled template should contain code that creates a
+	// <video> element for video tiles
+	if !strings.Contains(html, "createElement('video')") {
+		t.Error("expected bundled template JS to create a <video> element for video tiles")
+	}
+	// Should also still create <img> for image tiles (not
+	// removed the image path)
+	if !strings.Contains(html, "createElement('img')") {
+		t.Error("expected bundled template JS to still create an <img> element for image tiles")
+	}
+	// The card filter should now include videos (was: only
+	// cards with <img> child; should be: cards with <img> OR
+	// .video class)
+	if !strings.Contains(html, "c.classList.contains('video')") {
+		t.Error("expected bundled template JS to include .video class in the card filter (videos in the lightbox)")
+	}
+	// The video element should have controls (browser-native
+	// play/pause/seek UI)
+	if !strings.Contains(html, "v.controls = true") {
+		t.Error("expected bundled template JS to set controls=true on the video element")
+	}
+	// The clear() function should pause the video before
+	// removing it (so audio doesn't keep playing in the
+	// background after the lightbox closes)
+	if !strings.Contains(html, "currentEl.pause()") {
+		t.Error("expected bundled template JS to call currentEl.pause() in clear() (stop video on close/navigate)")
+	}
+	// The CSS should style both img and video in the lightbox
+	// (max-width, max-height, object-fit, etc.)
+	if !strings.Contains(html, "#gallery-lightbox video") {
+		t.Error("expected bundled template CSS to style #gallery-lightbox video (size constraints match img)")
+	}
+}
+
+// TestBundledTemplate_LightboxJSValidSyntax is a defensive
+// check: extract the <script> block from the bundled template
+// and pipe it through `node --check` to verify it's
+// syntactically valid JS. Catches typos introduced by future
+// template edits. Skipped if `node` isn't on PATH.
+func TestBundledTemplate_LightboxJSValidSyntax(t *testing.T) {
+	tmpl, err := loadTemplate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, PageData{Title: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	// Extract the <script>...</script> block
+	sStart := strings.Index(html, "<script>")
+	sEnd := strings.Index(html, "</script>")
+	if sStart < 0 || sEnd < 0 || sEnd < sStart {
+		t.Fatal("expected a <script>...</script> block in the bundled template")
+	}
+	js := html[sStart+len("<script>") : sEnd]
+	// Check if `node` is on PATH
+	_, err = exec.LookPath("node")
+	if err != nil {
+		t.Skipf("node not on PATH; skipping JS syntax check (extracted %d chars)", len(js))
+	}
+	// Write to a temp file and check syntax
+	tmp, err := os.CreateTemp(t.TempDir(), "lightbox-*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write([]byte(js)); err != nil {
+		t.Fatal(err)
+	}
+	tmp.Close()
+	cmd := exec.Command("node", "--check", tmp.Name())
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Errorf("node --check failed on the bundled lightbox JS:\n%s\nerror: %v", out, err)
+	}
 }

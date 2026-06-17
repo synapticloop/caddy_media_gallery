@@ -793,7 +793,8 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
 }
 #gallery-lightbox.open { display: flex; }
 @keyframes lb-fade-in { from { opacity: 0; } to { opacity: 1; } }
-#gallery-lightbox img {
+#gallery-lightbox img,
+#gallery-lightbox video {
   max-width: 95vw;
   max-height: 90vh;
   object-fit: contain;
@@ -966,15 +967,27 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   var counter = overlay.querySelector('.lb-counter');
   var caption = overlay.querySelector('.lb-caption');
 
-  // Only image cards (have an <img> child). Videos and files are
-  // skipped — they keep their default link behavior.
+  // Media cards: image cards have an <img> child; video cards
+  // have the .video class (with a <div class="thumb-video">
+  // child instead of an <img>). Both open in the unified
+  // lightbox. Other file types (no <img> and not .video) keep
+  // their default link behavior.
   var cards = Array.prototype.slice.call(
     document.querySelectorAll('.card')
-  ).filter(function(c) { return c.querySelector('img'); });
+  ).filter(function(c) {
+    return c.querySelector('img') || c.classList.contains('video');
+  });
   var idx = 0;
 
   function clear() {
-    if (currentEl) { currentEl.remove(); currentEl = null; }
+    // Pause the current element if it's a video (removing the
+    // element from the DOM also stops playback, but explicit
+    // pause is cleaner and matches the close-on-cleanup intent).
+    if (currentEl) {
+      if (typeof currentEl.pause === 'function') currentEl.pause();
+      currentEl.remove();
+      currentEl = null;
+    }
   }
 
   function show(i) {
@@ -983,12 +996,23 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     var c = cards[idx];
     var href = c.getAttribute('href') || '';
     var name = (c.querySelector('.tile-name') || {}).textContent || '';
+    var isVideo = c.classList.contains('video');
     clear();
-    var img = document.createElement('img');
-    img.src = href;
-    img.alt = name;
-    currentEl = img;
-    media.appendChild(img);
+    if (isVideo) {
+      var v = document.createElement('video');
+      v.src = href;
+      v.controls = true;
+      v.preload = 'metadata';
+      v.playsInline = true;
+      v.alt = name;
+      currentEl = v;
+    } else {
+      var img = document.createElement('img');
+      img.src = href;
+      img.alt = name;
+      currentEl = img;
+    }
+    media.appendChild(currentEl);
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
     overlay.classList.add('open');
