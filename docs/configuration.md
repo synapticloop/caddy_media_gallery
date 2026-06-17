@@ -16,6 +16,7 @@ The `image_gallery` directive accepts one inline option:
 |---|---|---|---|
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
 | `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
+| `page_size` | integer ≥ 1 | `50` | How many image entries to show per page. Must be a positive integer; `page_size 0` is rejected (use no directive, or set the explicit value you want). The pagination nav only renders when total pages > 1, so a 30-image gallery at the default 50 shows all 30 on a single page with no nav. |
 
 Example with a themed subdir:
 
@@ -55,6 +56,20 @@ With `no_thumbs`:
 Best for: small galleries (< 100 images) where you don't want a thumb cache and the originals aren't huge. Not recommended for large galleries — the page payload goes from ~30 KB (with thumbs) to ~5 MB average (full images) for a 1,000-image dir.
 
 Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in). Videos are unaffected either way (they don't have thumbs — they show a play-button overlay).
+
+### Example: change the page size
+
+```caddy
+handle_path /images/* {
+    root * /var/www/html/images
+    image_gallery {
+        page_size 100
+    }
+    file_server
+}
+```
+
+This shows 100 image entries per page instead of the default 50. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. URL query override: append `?page=2` to the gallery URL to jump to a specific page. `?page_size=N` is NOT a query param — page size is set in the Caddyfile only (per-request override would let the user request arbitrarily large pages and could DOS the server).
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
