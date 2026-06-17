@@ -41,9 +41,9 @@ fall through to `file_server` so the originals serve as-is.
 
 ## What's where
 
-- **Project root:** `/home/osmanj/projects/caddy_image_gallery/`
+- **Project root:** `~/projects/caddy_image_gallery/` (wherever you cloned it — adjust paths below to match)
 - **Templates dir (auto-created on first startup):**
   `/etc/caddy/gallery-templates/` — see [Templates](templates.md)
 - **Thumb cache:** `/var/cache/caddy-gallery/<sha256>.webp`
-- **Plan / design:** `/root/.hermes/plans/2026-06-13_154500-caddy_image_gallery.md`
-- **Wiki page:** `/root/wiki/projects/caddy_image_gallery.md`
+- **Plan / design:** `~/.hermes/plans/2026-06-13_154500-caddy_image_gallery.md`
+- **Wiki page:** `~/.wiki/projects/caddy_image_gallery.md`

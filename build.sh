@@ -10,8 +10,12 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Add /home/osmanj/go/bin to PATH so xcaddy is findable
-export PATH="$PATH:/home/osmanj/go/bin"
+# Add $HOME/go/bin to PATH so xcaddy is findable. xcaddy
+# installs to $GOBIN (default $HOME/go/bin) when you `go install
+# github.com/caddyserver/xcaddy/cmd/xcaddy@latest`. Using $HOME
+# instead of a hardcoded user path keeps this script portable
+# across users.
+export PATH="$PATH:$HOME/go/bin"
 
 OUTPUT_BIN="/usr/local/bin/caddy"
 LOCAL_BIN="$SCRIPT_DIR/caddy"
