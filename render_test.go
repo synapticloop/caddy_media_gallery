@@ -378,8 +378,14 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if !strings.Contains(upRow, `href="../"`) {
 		t.Error("expected Up entry to link to '../'")
 	}
+	// relPath is "subdir" (top-level), so parent dir name is "" (the
+	// gallery root). The chip should read "Up (../)".
 	if !strings.Contains(upRow, "Up (../)") {
-		t.Error("expected 'Up (../)' text in the up-chip-row")
+		t.Error(`expected 'Up (../)' text in the up-chip-row (top-level subdir, parent name empty)`)
+	}
+	// And should NOT have an empty parent dir like "Up (../ )"
+	if strings.Contains(upRow, "Up (../ )") {
+		t.Error(`expected no space before ')' in 'Up (../)' (template should render empty ParentDir as nothing)`)
 	}
 	if !strings.Contains(upRow, ">↑</span>") {
 		t.Error("expected ↑ arrow icon for the Up entry")
@@ -990,5 +996,67 @@ func TestRenderPage_HeaderSeparatesImageAndVideoCounts(t *testing.T) {
 	}
 	if !strings.Contains(metaBlock3, "3 videos") {
 		t.Errorf("expected '3 videos' with all-video directory, got: %q", metaBlock3)
+	}
+}
+
+// TestRenderPage_UpEntryShowsParentDirName verifies that the up
+// chip in a subdir shows the parent directory's name: e.g. when
+// viewing "/photos/vacation/", the chip reads "Up (../photos)".
+// At the gallery root or in a top-level subdir, the parent dir
+// name is empty and the chip reads "Up (../)" with no trailing
+// space. Per user request 2026-06-17.
+func TestRenderPage_UpEntryShowsParentDirName(t *testing.T) {
+	files := []FileInfo{
+		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	cases := []struct {
+		name     string
+		relPath  string
+		wantText string
+	}{
+		{
+			name:     "gallery root (relPath empty) - no up entry, no parent name",
+			relPath:  "",
+			wantText: "",
+		},
+		{
+			name:     "top-level subdir (parent is gallery root) - empty parent name",
+			relPath:  "photos",
+			wantText: "Up (../)",
+		},
+		{
+			name:     "deeper subdir (parent is named photos)",
+			relPath:  "photos/vacation",
+			wantText: "Up (../photos)",
+		},
+		{
+			name:     "even deeper (parent is named vacation)",
+			relPath:  "photos/vacation/2024",
+			wantText: "Up (../vacation)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			html, err := RenderPage("test", "./", "./_thumbs/", tc.relPath, "", false, 0, files, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantText == "" {
+				// Root view: no up entry at all
+				if strings.Contains(html, `class="up-chip-row"`) {
+					t.Errorf("expected NO up-chip-row at the gallery root, but found one")
+				}
+				return
+			}
+			upRowStart := strings.Index(html, `<div class="up-chip-row">`)
+			if upRowStart < 0 {
+				t.Fatalf("expected an up-chip-row for relPath %q", tc.relPath)
+			}
+			upRowEnd := strings.Index(html[upRowStart:], `</div>`)
+			upRow := html[upRowStart : upRowStart+upRowEnd]
+			if !strings.Contains(upRow, tc.wantText) {
+				t.Errorf("up-chip-row for relPath %q: expected text %q, got: %q", tc.relPath, tc.wantText, upRow)
+			}
+		})
 	}
 }

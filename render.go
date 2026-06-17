@@ -71,9 +71,21 @@ type FileView struct {
 	IsImage  bool
 	IsVideo  bool
 	IsOther  bool
-	Type     string // uppercase extension without dot, e.g. "JPG", "DIR", "MP4"
-	Size     string // human-readable, e.g. "234 KB" — for dirs this is empty
-	Date     string // ISO date "2006-01-02" — for dirs this is empty
+
+	// ParentDir is set ONLY on the up-link FileView. It is the
+	// basename of the parent directory (one level up from the
+	// current page). Rendered as part of the up chip's display
+	// text — "Up (../{ParentDir})" — so the user sees which
+	// directory they'll land in. Empty at the gallery root or
+	// in a top-level subdir (parent is the gallery root, no name
+	// to show). Per user request 2026-06-17.
+	ParentDir string
+
+	// Internal fields used by buildFileView to format Size/Date
+	// without round-tripping through fmt in the template.
+	Size string
+	Date string
+	Type string
 }
 
 // SortSpec describes the current sort state. Field is one of
@@ -402,11 +414,22 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	subdirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
 	var up *FileView
 	if relPath != "" {
+		// Compute the parent directory's basename so the up
+		// chip can show "Up (../{name})". E.g. when viewing
+		// "/photos/vacation/", the parent dir's name is
+		// "photos" and the chip reads "Up (../photos)". Empty
+		// at the gallery root or in a top-level subdir
+		// (parent is the gallery root, no name to show).
+		parentDir := ""
+		if pd := filepath.Base(filepath.Dir(relPath)); pd != "." {
+			parentDir = pd
+		}
 		up = &FileView{
-			Name:  "Up",
-			Href:  "../",
-			IsDir: true,
-			IsUp:  true,
+			Name:      "Up",
+			Href:      "../",
+			IsDir:     true,
+			IsUp:      true,
+			ParentDir: parentDir,
 		}
 	}
 
@@ -908,7 +931,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     <h2 class="section-heading">Directories</h2>
     {{if .Up}}
     <div class="up-chip-row">
-      <a class="chip dir-chip up-chip" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../)</a>
+      <a class="chip dir-chip up-chip" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a>
     </div>
     {{end}}
     {{if .Subdirs}}
