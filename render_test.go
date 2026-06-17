@@ -324,10 +324,14 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if !strings.Contains(dirsSection, ">↑</span>") {
 		t.Error("expected ↑ arrow icon for the Up entry (not the 📁 folder icon)")
 	}
-	// Should NOT have a trailing '/' after the Up text (regular
-	// dir chips have a trailing '/' to look like a folder path)
-	if strings.Contains(dirsSection, "> Up/<") {
-		t.Error("expected no trailing '/' after the Up entry")
+	// Should contain the folder icon as well (per user request
+	// 2026-06-17: the up chip shows ↑ + 📁 + "Up (../)")
+	if !strings.Contains(dirsSection, ">📁</span>") {
+		t.Error("expected 📁 folder icon for the Up entry")
+	}
+	// Should contain the "Up (../)" text (the relative path hint)
+	if !strings.Contains(dirsSection, "Up (../)") {
+		t.Error("expected 'Up (../)' text for the Up entry (the relative path hint)")
 	}
 	// The Up entry should be the FIRST dir chip (before the real dirs).
 	upEnd := strings.Index(dirsSection, "</a>") // first </a> closes the Up entry

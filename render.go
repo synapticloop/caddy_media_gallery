@@ -521,6 +521,13 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+/* Dirs section: distribute chips evenly across the available
+   row width so the row looks balanced regardless of how many
+   dirs there are. justify-content: space-evenly puts equal space
+   around every chip and at the row edges. */
+.dirs-section .chip-row {
+  justify-content: space-evenly;
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -840,7 +847,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     <div class="chip-row">
       {{range .Directories}}
       {{if .IsUp}}
-      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">↑</span> {{.Name}}</a>
+      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../)</a>
       {{else}}
       <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
       {{end}}
