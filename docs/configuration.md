@@ -82,13 +82,77 @@ request-time root.
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `GALLERY_TEMPLATES_DIR` | `/etc/caddy/gallery-templates` | Where the module looks for (and writes) on-disk template overrides. See [Templates](templates.md). |
+The plugin reads **one** environment variable:
 
-There are no other env vars. Sort order, pagination, and the
-thumb cache directory are all configurable in code (constants in
-the source) rather than via env vars.
+### `GALLERY_TEMPLATES_DIR`
+
+**Where it's read in code:** `render.go`, in two functions —
+`loadTemplate()` (at request time, to find the on-disk override)
+and `writeBundledTemplates()` (at Caddy startup, to write the
+bundled templates so operators can see them). Both do the same
+thing:
+
+```go
+dir := os.Getenv("GALLERY_TEMPLATES_DIR")
+if dir == "" {
+    dir = "/etc/caddy/gallery-templates"
+}
+```
+
+**Default:** `/etc/caddy/gallery-templates`. Created on first
+Caddy startup by `writeBundledTemplates()` with mode 0755, owned
+by whatever user the Caddy systemd service runs as. If the
+template file already exists, it's left alone (operator overrides
+are preserved across restarts).
+
+**The directory it points to:** the absolute path you set. The
+plugin does **not** create parent directories beyond the templates
+dir itself — it just `MkdirAll`s the final directory. So if you
+point it at `/srv/gallery-templates`, that path needs to be
+writable by the Caddy process.
+
+**How to set it for the live Caddy** (the canonical way —
+systemd starts the process with a clean environment, so your
+shell's env doesn't reach the service):
+
+```bash
+# One-off (persists in the manager's env, inherited by all units)
+sudo systemctl set-environment GALLERY_TEMPLATES_DIR=/etc/caddy/gallery-templates
+sudo systemctl restart caddy
+
+# Or persistently in the caddy service unit
+sudo systemctl edit caddy
+# Add:
+#   [Service]
+#   Environment="GALLERY_TEMPLATES_DIR=/etc/caddy/gallery-templates"
+# Or use EnvironmentFile= pointing at a file with the line
+sudo systemctl daemon-reload
+sudo systemctl restart caddy
+```
+
+**How to set it for dev** (`go test`, `xcaddy build`, or running
+a custom Caddy from your shell):
+
+```bash
+export GALLERY_TEMPLATES_DIR=/path
+# then run your commands
+```
+
+Note: the test suite sets `GALLERY_TEMPLATES_DIR` to a temp dir
+via `TestMain`, so `go test` is isolated from your shell's value.
+The module always reads the env at request time, so changes to
+the env var take effect on the next Caddy restart — no rebuild
+needed.
+
+**What happens if the dir is unwritable or doesn't exist:**
+`writeBundledTemplates()` logs a warning to stderr and continues.
+The bundled templates still serve fine (the on-disk file is a
+convenience, not a requirement). The next request falls back to
+the bundled constant.
+
+**There are no other env vars.** Sort order, pagination, page
+size, and the thumb cache directory are all configurable in code
+(constants in the source) rather than via env vars.
 
 ## What `image_gallery` does NOT do
 
