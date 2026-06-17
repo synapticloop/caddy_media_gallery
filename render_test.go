@@ -909,3 +909,86 @@ func TestBundledTemplate_LightboxJSValidSyntax(t *testing.T) {
 		t.Errorf("node --check failed on the bundled lightbox JS:\n%s\nerror: %v", out, err)
 	}
 }
+
+// TestRenderPage_HeaderSeparatesImageAndVideoCounts verifies that
+// the header meta line shows the image count and video count
+// separately, so videos are not miscounted as images. Per
+// user request 2026-06-17: "Add a 'video' indicator in the
+// header sort UI".
+func TestRenderPage_HeaderSeparatesImageAndVideoCounts(t *testing.T) {
+	// 5 images + 2 videos = 7 media total
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "c.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+		{Name: "d.jpg", ModTime: 4, Size: 100, Kind: KindImage},
+		{Name: "e.jpg", ModTime: 5, Size: 100, Kind: KindImage},
+		{Name: "clip1.mp4", ModTime: 6, Size: 1024, Kind: KindVideo},
+		{Name: "clip2.mp4", ModTime: 7, Size: 2048, Kind: KindVideo},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Find the header meta div
+	metaStart := strings.Index(html, `class="meta"`)
+	if metaStart < 0 {
+		t.Fatal("expected meta div in the header")
+	}
+	metaEnd := strings.Index(html[metaStart:], `</div>`)
+	if metaEnd < 0 {
+		t.Fatal("could not find end of meta div")
+	}
+	metaBlock := html[metaStart : metaStart+metaEnd]
+	// Should show "5 images" (NOT "7 images" — that was the
+	// misleading old behavior)
+	if !strings.Contains(metaBlock, "5 images") {
+		t.Errorf("expected '5 images' in the header meta block, got: %q", metaBlock)
+	}
+	if strings.Contains(metaBlock, "7 images") {
+		t.Errorf("expected NOT to see '7 images' (videos should be separate), got: %q", metaBlock)
+	}
+	// Should show "2 videos"
+	if !strings.Contains(metaBlock, "2 videos") {
+		t.Errorf("expected '2 videos' in the header meta block, got: %q", metaBlock)
+	}
+
+	// Zero videos: should NOT show the videos indicator at all
+	filesNoVideo := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+	}
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, filesNoVideo, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaStart2 := strings.Index(html2, `class="meta"`)
+	metaEnd2 := strings.Index(html2[metaStart2:], `</div>`)
+	metaBlock2 := html2[metaStart2 : metaStart2+metaEnd2]
+	if strings.Contains(metaBlock2, "videos") {
+		t.Errorf("expected NO 'videos' indicator when there are 0 videos, got: %q", metaBlock2)
+	}
+	if !strings.Contains(metaBlock2, "2 images") {
+		t.Errorf("expected '2 images' with no videos, got: %q", metaBlock2)
+	}
+
+	// All videos (zero images): should show "0 images · N videos"
+	filesAllVideo := []FileInfo{
+		{Name: "v1.mp4", ModTime: 1, Size: 1024, Kind: KindVideo},
+		{Name: "v2.mp4", ModTime: 2, Size: 2048, Kind: KindVideo},
+		{Name: "v3.mp4", ModTime: 3, Size: 4096, Kind: KindVideo},
+	}
+	html3, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, filesAllVideo, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaStart3 := strings.Index(html3, `class="meta"`)
+	metaEnd3 := strings.Index(html3[metaStart3:], `</div>`)
+	metaBlock3 := html3[metaStart3 : metaStart3+metaEnd3]
+	if !strings.Contains(metaBlock3, "0 images") {
+		t.Errorf("expected '0 images' with all-video directory, got: %q", metaBlock3)
+	}
+	if !strings.Contains(metaBlock3, "3 videos") {
+		t.Errorf("expected '3 videos' with all-video directory, got: %q", metaBlock3)
+	}
+}

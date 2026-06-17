@@ -34,9 +34,22 @@ type PageData struct {
 	Images     []FileView
 
 	// Pagination
-	Page        int // 1-based
-	PageSize    int
+	Page     int // 1-based
+	PageSize int
+	// TotalImages is the total media count (images + videos)
+	// — used for the pagination math and the visibility check
+	// on the images grid section.
 	TotalImages int
+	// ImageCount is the count of image files only — used for
+	// the "N images" label in the header meta line (so the
+	// label is accurate; videos are no longer miscounted as
+	// images). Per user request 2026-06-17: separate video
+	// indicator in the header.
+	ImageCount int
+	// TotalVideos is the count of video files only — shown in
+	// the header meta line as "N videos" (after the images
+	// count, only if > 0).
+	TotalVideos int
 	TotalPages  int
 	HasPrev     bool
 	HasNext     bool
@@ -362,6 +375,20 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	paged := paginate(allImages, page, pageSize)
 
 	totalImages := len(allImages)
+	// Split the media count by type so the header meta line
+	// can show "N images" (actual image count) and "M videos"
+	// (video count) separately. Per user request 2026-06-17:
+	// videos were previously miscounted as images in the
+	// "X images" label.
+	imageCount := 0
+	videoCount := 0
+	for _, f := range allImages {
+		if f.Kind == KindVideo {
+			videoCount++
+		} else {
+			imageCount++
+		}
+	}
 	totalPages := (totalImages + pageSize - 1) / pageSize
 	if totalPages < 1 {
 		totalPages = 1
@@ -394,6 +421,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Page:        page,
 		PageSize:    pageSize,
 		TotalImages: totalImages,
+		ImageCount:  imageCount,
+		TotalVideos: videoCount,
 		TotalPages:  totalPages,
 		HasPrev:     page > 1,
 		HasNext:     page < totalPages,
@@ -852,7 +881,8 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
-          <span>{{.TotalImages}} images</span>
+          <span>{{.ImageCount}} images</span>
+          {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
           <span>·</span><span>{{.PageSize}} per page</span>
