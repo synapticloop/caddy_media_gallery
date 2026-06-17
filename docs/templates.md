@@ -34,6 +34,14 @@ that picks the template file. See
 [`docs/configuration.md`](configuration.md) for the directive
 syntax and the path-traversal protection details.
 
+**Note on `no_thumbs`:** the template is unaffected by the
+`no_thumbs` Caddyfile directive. The template always uses
+`{{.ThumbURL}}` for the tile `<img src>`; the `no_thumbs` flag
+changes the *value* of that field (to the original file URL
+when true, to the thumb URL when false), not the field name or
+its usage. So a template that works with thumbs also works with
+no_thumbs (and vice versa), with no template changes needed.
+
 The template is a single self-contained file. The HTML, CSS
 (inside `<style>`), and JS (inside `<script>`) all live in one
 Go string constant (`galleryTemplate` in `render.go`) and one

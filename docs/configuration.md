@@ -15,6 +15,7 @@ The `image_gallery` directive accepts one inline option:
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
+| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
 
 Example with a themed subdir:
 
@@ -32,6 +33,28 @@ This loads `$GALLERY_TEMPLATES_DIR/themes/dark/gallery.tmpl` (or
 falls back to the bundled template if the file doesn't exist on
 disk). The path is validated at Provision — an invalid name
 (e.g. `../etc/passwd`) fails Caddy startup, not at first request.
+
+### Example: skip thumbnail generation
+
+```caddy
+handle_path /images/* {
+    root * /var/www/html/images
+    image_gallery {
+        no_thumbs
+    }
+    file_server
+}
+```
+
+With `no_thumbs`:
+- Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
+- No thumb generation, no cache, no CPU cost on first request
+- The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
+- Requests to `~/_thumbs/<name>.webp` fall through to the next handler (file_server), which 404s
+
+Best for: small galleries (< 100 images) where you don't want a thumb cache and the originals aren't huge. Not recommended for large galleries — the page payload goes from ~30 KB (with thumbs) to ~5 MB average (full images) for a 1,000-image dir.
+
+Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in). Videos are unaffected either way (they don't have thumbs — they show a play-button overlay).
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
