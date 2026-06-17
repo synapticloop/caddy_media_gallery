@@ -147,6 +147,61 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	}
 }
 
+// TestRenderPage_PerPageTextInHeader verifies that the header
+// meta line shows "N per page" where N is the configured page
+// size. Per user request 2026-06-17: "add in number of results
+// per page after the text '42 images · 2 other files · 21
+// directories'".
+func TestRenderPage_PerPageTextInHeader(t *testing.T) {
+	// 7 images, pageSize=10 → "10 per page" should appear in
+	// the header meta line, after the "N images" count.
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "c.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+		{Name: "d.jpg", ModTime: 4, Size: 100, Kind: KindImage},
+		{Name: "e.jpg", ModTime: 5, Size: 100, Kind: KindImage},
+		{Name: "f.jpg", ModTime: 6, Size: 100, Kind: KindImage},
+		{Name: "g.jpg", ModTime: 7, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Find the header meta div (class is "meta", not "meta-counts")
+	metaStart := strings.Index(html, `class="meta"`)
+	if metaStart < 0 {
+		t.Fatal("expected meta-counts div in the header")
+	}
+	metaEnd := strings.Index(html[metaStart:], `</div>`)
+	if metaEnd < 0 {
+		t.Fatal("could not find end of meta-counts div")
+	}
+	metaBlock := html[metaStart : metaStart+metaEnd]
+	// Should contain "7 images"
+	if !strings.Contains(metaBlock, "7 images") {
+		t.Errorf("expected '7 images' in the header meta block, got: %q", metaBlock)
+	}
+	// Should contain "10 per page" (the pageSize)
+	if !strings.Contains(metaBlock, "10 per page") {
+		t.Errorf("expected '10 per page' in the header meta block, got: %q", metaBlock)
+	}
+	// "10 per page" should come AFTER "7 images" in the meta block
+	imagesIdx := strings.Index(metaBlock, "7 images")
+	perPageIdx := strings.Index(metaBlock, "10 per page")
+	if imagesIdx < 0 || perPageIdx < 0 || perPageIdx <= imagesIdx {
+		t.Errorf("expected '10 per page' to come AFTER '7 images' in the header, got: %q", metaBlock)
+	}
+	// Should also work with a non-default pageSize (e.g. 25)
+	html25, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 25, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html25, "25 per page") {
+		t.Errorf("expected '25 per page' with pageSize=25, got: %q", html25)
+	}
+}
+
 func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	files := []FileInfo{
 		{Name: "a.jpg", ModTime: time.Now().UnixNano(), Size: 1024, Kind: KindImage},

@@ -824,6 +824,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
           <span>{{.TotalImages}} images</span>
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+          <span>·</span><span>{{.PageSize}} per page</span>
         </div>
       </div>
       {{if eq .Sort.Field "mtime"}}
