@@ -51,6 +51,17 @@ type Gallery struct {
 	// operator can only reference files inside it.
 	Template string `json:"template,omitempty"`
 
+	// NoThumbs disables the on-the-fly WebP thumbnail generation.
+	// When true, the gallery uses the original image as the tile
+	// <img src> instead of `/_thumbs/<name>.webp`. Requests to the
+	// thumb URL fall through to the next handler (typically
+	// file_server, which 404s since no _thumbs/ dir exists).
+	// Tradeoffs: no thumb cache, no CPU cost, but the browser
+	// downloads the full image per tile (bigger page payload, slower
+	// load on dirs of large photos). Useful for small galleries
+	// where the operator doesn't want to maintain a thumb cache.
+	NoThumbs bool `json:"no_thumbs,omitempty"`
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache `json:"-"`
@@ -128,8 +139,16 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// file in (root + subdir) for the path BEFORE the _thumbs/
 	// segment, so /subdir/_thumbs/photo.webp looks up
 	// (root/subdir/photo.<ext>).
-	if g.serveThumb(w, r, root, relPath) {
-		return nil
+	//
+	// When no_thumbs is enabled, we skip this branch entirely.
+	// The request falls through to the next handler (file_server
+	// or whatever) which 404s because no _thumbs/ dir exists on
+	// disk. This is the correct behavior — the thumb URL just
+	// doesn't exist for galleries that don't generate thumbs.
+	if !g.NoThumbs {
+		if g.serveThumb(w, r, root, relPath) {
+			return nil
+		}
 	}
 
 	// If the resolved path exists and is a regular file, fall
@@ -184,7 +203,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, files, r.URL.Query())
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, files, r.URL.Query())
 	if err != nil {
 		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -215,6 +234,18 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				g.Template = d.Val()
 				if d.NextArg() {
 					return d.ArgErr()
+				}
+			case "no_thumbs":
+				// No arg → true (turn off thumbnails). With
+				// "false" arg → false (back to thumb mode).
+				// Any other arg is an error — avoids typos like
+				// `no_thumbs off` silently doing nothing.
+				g.NoThumbs = true
+				if d.NextArg() {
+					if d.Val() != "false" {
+						return d.ArgErr()
+					}
+					g.NoThumbs = false
 				}
 			}
 		}

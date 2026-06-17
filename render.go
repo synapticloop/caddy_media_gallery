@@ -116,7 +116,13 @@ func formatType(name string, isDir bool) string {
 // the relative URL prefix for links ("./" for the gallery root);
 // thumbPrefix is the relative URL prefix for thumb URLs
 // ("./_thumbs/" for the gallery root).
-func buildFileView(f FileInfo, pathPrefix, thumbPrefix string) FileView {
+// buildFileView converts a FileInfo into a template-friendly
+// FileView. The thumb URL is normally `thumbPrefix/<basename>.webp`;
+// when noThumbs is true, images use the original file URL as the
+// `src` (no thumb generation). The field is still called ThumbURL
+// (for template compatibility) but its value is the original file
+// path in this case.
+func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs bool) FileView {
 	v := FileView{
 		Name: f.Name,
 		Type: formatType(f.Name, f.Kind == KindDir),
@@ -128,7 +134,15 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string) FileView {
 	case KindImage:
 		v.IsImage = true
 		v.Href = pathPrefix + f.Name
-		v.ThumbURL = thumbPrefix + thumbStripExt(f.Name) + ".webp"
+		if noThumbs {
+			// Use the original image as the "thumb" (no thumb
+			// generation). The template still uses {{.ThumbURL}}
+			// as the <img src>, so the field name stays the same;
+			// its value just points at the original file.
+			v.ThumbURL = pathPrefix + f.Name
+		} else {
+			v.ThumbURL = thumbPrefix + thumbStripExt(f.Name) + ".webp"
+		}
 		v.Size = humanSize(f.Size)
 		v.Date = formatDate(f.ModTime)
 	case KindVideo:
@@ -320,7 +334,13 @@ const pageSize = 50
 // template name (relative to the templates dir). Pass "" to use
 // the default ("gallery.tmpl"). The name is validated inside
 // loadTemplate.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, files []FileInfo, query url.Values) (string, error) {
+// RenderPage renders the gallery. `tmplName` is the configured
+// template name (relative to the templates dir). Pass "" to use
+// the default ("gallery.tmpl"). `noThumbs` is the configured
+// no_thumbs flag — when true, image tiles use the original file
+// as the <img src> instead of `/_thumbs/<name>.webp` (no thumb
+// generation).
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs bool, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -338,7 +358,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, files 
 	// inside a subdirectory. "../" is the relative URL to the
 	// parent — the browser handles it correctly regardless of the
 	// current page's URL depth.
-	dirViews := buildFileViews(dirs, pathPrefix, thumbPrefix)
+	dirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
 	if relPath != "" {
 		up := FileView{
 			Name:  "..",
@@ -354,8 +374,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, files 
 		PathPrefix:  pathPrefix,
 		ThumbPrefix: thumbPrefix,
 		Directories: dirViews,
-		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix),
-		Images:      buildFileViews(paged, pathPrefix, thumbPrefix),
+		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
+		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
 		Page:        page,
 		PageSize:    pageSize,
 		TotalImages: totalImages,
@@ -377,10 +397,10 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, files 
 }
 
 // buildFileViews maps a []FileInfo to a []FileView.
-func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string) []FileView {
+func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs bool) []FileView {
 	out := make([]FileView, 0, len(files))
 	for _, f := range files {
-		out = append(out, buildFileView(f, pathPrefix, thumbPrefix))
+		out = append(out, buildFileView(f, pathPrefix, thumbPrefix, noThumbs))
 	}
 	return out
 }
