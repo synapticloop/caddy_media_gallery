@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
 )
 
@@ -109,7 +110,7 @@ func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", true, files, nil,
+		"test", "./", "./_thumbs/", "", "", true, 0, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +132,7 @@ func TestRenderPage_WithThumbs_ThumbURLUsed(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, files, nil,
+		"test", "./", "./_thumbs/", "", "", false, 0, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -160,6 +161,143 @@ func extractImgSrcs(html string) string {
 
 // TestUnmarshalCaddyfile_TemplateDirective covers the new
 // `template <name>` Caddyfile directive.
+// TestUnmarshalCaddyfile_PageSize covers the new
+// `page_size <int>` Caddyfile directive. Accepts positive
+// integers; rejects zero, negative, and non-numeric values.
+func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
+	t.Run("page_size 100", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 100\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.PageSize != 100 {
+			t.Errorf("PageSize: got %d, want 100", g.PageSize)
+		}
+	})
+	t.Run("page_size 1 (minimum valid)", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 1\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.PageSize != 1 {
+			t.Errorf("PageSize: got %d, want 1", g.PageSize)
+		}
+	})
+	t.Run("page_size 0 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 0\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `page_size 0` (must be > 0)")
+		}
+	})
+	t.Run("page_size -5 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size -5\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `page_size -5` (must be > 0)")
+		}
+	})
+	t.Run("page_size abc → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size abc\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `page_size abc` (must be an integer)")
+		}
+	})
+	t.Run("page_size with no arg → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `page_size` with no value")
+		}
+	})
+}
+
+// TestProvision_PageSizeDefault verifies that Provision applies
+// the default of 50 when the Caddyfile doesn't set page_size.
+func TestProvision_PageSizeDefault(t *testing.T) {
+	g := Gallery{}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.PageSize != 50 {
+		t.Errorf("expected default PageSize=50 after Provision, got %d", g.PageSize)
+	}
+}
+
+// TestProvision_PageSizePreserved verifies that Provision doesn't
+// override an explicit page_size set via the Caddyfile.
+func TestProvision_PageSizePreserved(t *testing.T) {
+	g := Gallery{PageSize: 100}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.PageSize != 100 {
+		t.Errorf("expected PageSize=100 preserved, got %d", g.PageSize)
+	}
+}
+
+// TestRenderPage_PageSizePagination verifies that the pageSize
+// parameter is honored: with 7 images and pageSize=3, RenderPage
+// produces a "Page 1 of 3" pagination header
+// (ceil(7/3) = 3 pages). The first call exercises an explicit
+// pageSize. (The default-pageSize case is covered by
+// TestProvision_PageSizeDefault + the no-pagination-when-fits
+// behavior below.)
+func TestRenderPage_PageSizePagination(t *testing.T) {
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 7, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 6, Size: 100, Kind: KindImage},
+		{Name: "c.jpg", ModTime: 5, Size: 100, Kind: KindImage},
+		{Name: "d.jpg", ModTime: 4, Size: 100, Kind: KindImage},
+		{Name: "e.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+		{Name: "f.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "g.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	// pageSize=3 → 7 images / 3 per page = 3 pages, "Page 1 of 3"
+	html, err := RenderPage(
+		"test", "./", "./_thumbs/", "", "", false, 3, files, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Page 1 of 3") {
+		t.Errorf("expected 'Page 1 of 3' for 7 images @ page_size=3, got:\n%s",
+			extractMetaSnippets(html))
+	}
+	// pageSize=0 → defaults to 50 → all 7 images fit on page 1 →
+	// pagination block doesn't render (the template only renders
+	// the nav when TotalPages > 1, see render.go around the
+	// `if gt .TotalPages 1` block). This is the right behavior:
+	// no point showing "Page 1 of 1" + disabled prev/next buttons.
+	html, err = RenderPage(
+		"test", "./", "./_thumbs/", "", "", false, 0, files, nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `<nav class="pagination">`) {
+		t.Errorf("expected NO pagination nav when all 7 images fit on one page (page_size=0 → 50), got:\n%s",
+			extractMetaSnippets(html))
+	}
+}
+
+// extractMetaSnippets pulls short "N of M" / "Page N of M" style
+// meta strings from the HTML. Used in failure messages for the
+// page_size tests.
+func extractMetaSnippets(html string) string {
+	var out []string
+	for _, line := range strings.Split(html, "\n") {
+		if strings.Contains(line, "of") && (strings.Contains(line, "Page") ||
+			strings.Contains(line, "image") || strings.Contains(line, "Image")) {
+			out = append(out, "  "+strings.TrimSpace(line))
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
 func TestUnmarshalCaddyfile_TemplateDirective(t *testing.T) {
 	t.Run("no template directive → preserved", func(t *testing.T) {
 		// A caddyfile without the `template` directive must not

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,13 @@ type Gallery struct {
 	// where the operator doesn't want to maintain a thumb cache.
 	NoThumbs bool `json:"no_thumbs,omitempty"`
 
+	// PageSize is the number of image entries per page. Default
+	// is 50 (set in Provision if zero). The user can override
+	// per-route via the Caddyfile: `image_gallery { page_size 100 }`.
+	// Validation: must be > 0. A zero or negative value is rejected
+	// by UnmarshalCaddyfile (the Caddyfile parser).
+	PageSize int `json:"page_size,omitempty"`
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache `json:"-"`
@@ -86,6 +94,13 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// boot, not at first request.
 	if _, err := sanitizeTemplateName(g.Template); err != nil {
 		return fmt.Errorf("invalid image_gallery template name %q: %w", g.Template, err)
+	}
+	// Default the page size if the Caddyfile didn't set one.
+	// Zero means "use the default"; the UnmarshalCaddyfile
+	// already rejects zero or negative values, so if we see zero
+	// here it just means the user didn't specify a value.
+	if g.PageSize == 0 {
+		g.PageSize = 50
 	}
 	// Make the bundled templates discoverable on disk for the
 	// operator. writeBundledTemplates is a no-op if the files
@@ -203,7 +218,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, files, r.URL.Query())
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.PageSize, files, r.URL.Query())
 	if err != nil {
 		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -246,6 +261,21 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 						return d.ArgErr()
 					}
 					g.NoThumbs = false
+				}
+			case "page_size":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil {
+					return d.ArgErr()
+				}
+				if n <= 0 {
+					return d.ArgErr()
+				}
+				g.PageSize = n
+				if d.NextArg() {
+					return d.ArgErr()
 				}
 			}
 		}

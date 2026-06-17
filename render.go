@@ -308,7 +308,10 @@ func parseIntDefault(s string, def int) (int, error) {
 	return n, nil
 }
 
-const pageSize = 50
+// const pageSize = 50 has been removed — PageSize is now a
+// configuration field on Gallery (see the Caddyfile `page_size`
+// directive and the JSON `page_size` field). The default of 50
+// is applied in Gallery.Provision when the field is 0.
 
 // RenderPage renders the gallery page for a directory. The caller
 // provides the raw directory listing (output of Scanner.Scan);
@@ -339,13 +342,17 @@ const pageSize = 50
 // the default ("gallery.tmpl"). `noThumbs` is the configured
 // no_thumbs flag — when true, image tiles use the original file
 // as the <img src> instead of `/_thumbs/<name>.webp` (no thumb
-// generation).
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs bool, files []FileInfo, query url.Values) (string, error) {
+// generation). `pageSize` is the configured page_size — the
+// number of image entries per page. Pass 0 for the default of 50.
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs bool, pageSize int, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
 	dirs, others, allImages := splitFiles(files)
 	sortFiles(allImages, sortSpec)
+	if pageSize <= 0 {
+		pageSize = 50
+	}
 	paged := paginate(allImages, page, pageSize)
 
 	totalImages := len(allImages)
