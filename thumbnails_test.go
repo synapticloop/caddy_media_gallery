@@ -2,9 +2,12 @@ package gallery
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +84,7 @@ func TestThumbPath_DifferentInputsDifferentOutput(t *testing.T) {
 func TestGenerateOrLoadThumb_CreatesWebP(t *testing.T) {
 	src := makeTestJPEG(t, 640, 480)
 	cache := t.TempDir()
-	data, err := GenerateOrLoadThumb(src, cache, 320)
+	data, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,12 +103,12 @@ func TestGenerateOrLoadThumb_CreatesWebP(t *testing.T) {
 func TestGenerateOrLoadThumb_CachesResult(t *testing.T) {
 	src := makeTestJPEG(t, 640, 480)
 	cache := t.TempDir()
-	first, err := GenerateOrLoadThumb(src, cache, 320)
+	first, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Second call should return identical bytes from cache.
-	second, err := GenerateOrLoadThumb(src, cache, 320)
+	second, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +125,7 @@ func TestGenerateOrLoadThumb_CachesResult(t *testing.T) {
 func TestGenerateOrLoadThumb_RegeneratesOnSourceMtimeChange(t *testing.T) {
 	src := makeTestJPEG(t, 640, 480)
 	cache := t.TempDir()
-	_, err := GenerateOrLoadThumb(src, cache, 320)
+	_, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +148,7 @@ func TestGenerateOrLoadThumb_RegeneratesOnSourceMtimeChange(t *testing.T) {
 	// Second call should detect the source is newer than the cache
 	// and regenerate. We then check the cache file's mtime
 	// advanced.
-	data, err := GenerateOrLoadThumb(src, cache, 320)
+	data, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +171,7 @@ func TestGenerateOrLoadThumb_SmallSourcePassesThrough(t *testing.T) {
 	// encoded as WebP without resizing.
 	src := makeTestJPEG(t, 200, 150)
 	cache := t.TempDir()
-	data, err := GenerateOrLoadThumb(src, cache, 320)
+	data, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,14 +187,118 @@ func TestGenerateOrLoadThumb_BadSourceReturnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 	cache := t.TempDir()
-	if _, err := GenerateOrLoadThumb(src, cache, 320); err == nil {
+	if _, err := GenerateOrLoadThumb(src, cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"}); err == nil {
 		t.Error("expected error for corrupt source, got nil")
 	}
 }
 
 func TestGenerateOrLoadThumb_MissingSourceReturnsError(t *testing.T) {
 	cache := t.TempDir()
-	if _, err := GenerateOrLoadThumb("/this/does/not/exist.jpg", cache, 320); err == nil {
+	if _, err := GenerateOrLoadThumb("/this/does/not/exist.jpg", cache, ThumbConfig{Width: 320, Height: 320, Format: "webp"}); err == nil {
 		t.Error("expected error for missing source, got nil")
 	}
+}
+
+// TestGenerateOrLoadThumb_FormatDispatch verifies the new
+// ThumbConfig format dispatch: jpeg, png, and webp all work, and
+// the cache filename uses the right extension.
+func TestGenerateOrLoadThumb_FormatDispatch(t *testing.T) {
+	cases := []struct {
+		format string
+		ext    string
+		magic  []byte
+	}{
+		{"jpeg", "jpg", []byte{0xFF, 0xD8, 0xFF}}, // JPEG SOI marker
+		{"jpg", "jpg", []byte{0xFF, 0xD8, 0xFF}},
+		{"png", "png", []byte{0x89, 0x50, 0x4E, 0x47}}, // PNG magic
+		{"webp", "webp", []byte{'R', 'I', 'F', 'F'}},   // RIFF (WebP container)
+	}
+	for _, c := range cases {
+		t.Run(c.format, func(t *testing.T) {
+			src := writeTestPNG(t, t.TempDir())
+			cache := t.TempDir()
+			data, err := GenerateOrLoadThumb(src, cache, ThumbConfig{
+				Width: 100, Height: 100, Format: c.format,
+			})
+			if err != nil {
+				t.Fatalf("GenerateOrLoadThumb(%q): %v", c.format, err)
+			}
+			if len(data) < len(c.magic) {
+				t.Fatalf("output too short: %d bytes", len(data))
+			}
+			for i, b := range c.magic {
+				if data[i] != b {
+					t.Errorf("magic byte %d: got 0x%02X, want 0x%02X", i, data[i], b)
+				}
+			}
+			// Verify cache file has the right extension
+			abs, _ := filepath.Abs(src)
+			h := sha256.Sum256([]byte(abs))
+			expectedName := hex.EncodeToString(h[:16]) + "." + c.ext
+			entries, _ := os.ReadDir(cache)
+			found := false
+			for _, e := range entries {
+				if e.Name() == expectedName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected cache file %q, got entries: %v", expectedName, entries)
+			}
+		})
+	}
+}
+
+// TestGenerateOrLoadThumb_UnsupportedFormatRejected verifies that
+// requesting a format we don't support returns a clear error (not
+// a 500 from a panic or empty bytes).
+func TestGenerateOrLoadThumb_UnsupportedFormatRejected(t *testing.T) {
+	src := writeTestPNG(t, t.TempDir())
+	cache := t.TempDir()
+	_, err := GenerateOrLoadThumb(src, cache, ThumbConfig{
+		Width: 100, Height: 100, Format: "avif",
+	})
+	if err == nil {
+		t.Fatal("expected error for unsupported format avif, got nil")
+	}
+	if !strings.Contains(err.Error(), "avif") {
+		t.Errorf("expected error to mention avif, got: %v", err)
+	}
+}
+
+// TestGenerateOrLoadThumb_DefaultFormatWhenEmpty verifies that
+// passing Format="" falls back to webp (the default).
+func TestGenerateOrLoadThumb_DefaultFormatWhenEmpty(t *testing.T) {
+	src := writeTestPNG(t, t.TempDir())
+	cache := t.TempDir()
+	data, err := GenerateOrLoadThumb(src, cache, ThumbConfig{
+		Width: 100, Height: 0, Format: "", // empty Format + 0 Height
+	})
+	if err != nil {
+		t.Fatalf("GenerateOrLoadThumb with empty Format: %v", err)
+	}
+	if len(data) < 4 || string(data[:4]) != "RIFF" {
+		t.Errorf("expected WebP (RIFF) output when Format is empty, got first 4 bytes: %q", data[:4])
+	}
+}
+
+// writeTestPNG writes a valid 1x1 PNG to disk using Go's stdlib
+// image/png encoder, and returns the path. Used by the format-
+// dispatch test to ensure we have a decodable source in any of
+// the supported formats (jpeg/png/webp all accept PNG input).
+func writeTestPNG(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "test.png")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	// 1x1 black RGBA pixel.
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

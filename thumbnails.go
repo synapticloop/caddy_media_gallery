@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"image"
 	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
+	"image/jpeg"
+	"image/png"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -24,6 +24,23 @@ import (
 var imageExtsForThumb = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true,
 	".gif": true, ".webp": true, ".avif": true, ".svg": true,
+}
+
+// ThumbConfig holds the runtime configuration for thumb
+// generation. Set at Provision time from the Gallery's
+// Caddyfile-configured values (or defaults).
+type ThumbConfig struct {
+	// Width and Height are the max-dim bounding box (in pixels)
+	// for the generated thumb. The source image is fit-within-
+	// bounds: aspect ratio is preserved and the longest edge
+	// becomes the configured value.
+	Width  int
+	Height int
+	// Format is the output format: "jpeg" (or "jpg"), "png", or
+	// "webp" (the default, lossless). Encoded with stdlib
+	// image/jpeg (quality 75), stdlib image/png, or
+	// github.com/HugoSmits86/nativewebp respectively.
+	Format string
 }
 
 // ThumbPath returns the on-disk path where the thumbnail for src
@@ -45,18 +62,44 @@ func ThumbPath(src, cacheDir string) string {
 
 // GenerateOrLoadThumb returns the thumbnail bytes for src, generating
 // and caching on first call and serving from cache on subsequent
-// calls. The thumbnail is at most maxWidth pixels wide; the source's
-// aspect ratio is preserved. Sources already ≤ maxWidth are encoded
-// without resizing.
+// calls. The cfg parameter (Width, Height, Format) controls the
+// output size and output format. The source is fit-within-bounds
+// (aspect ratio preserved, longest edge becomes the configured
+// value). Sources already within the box are encoded without
+// resizing.
 //
-// The cache file is at <cacheDir>/<sha256>.webp. If the cache file
-// is older than the source (by mtime), it's regenerated.
-func GenerateOrLoadThumb(src, cacheDir string, maxWidth int) ([]byte, error) {
+// The cache file is at <cacheDir>/<sha256(absolute source path)>.<ext>
+// keyed by (source path, cfg.Format) so changing the format
+// invalidates the old cache automatically. The cache is also
+// regenerated when the source mtime is newer than the cache
+// mtime.
+func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
-	cacheFile := ThumbPath(src, cacheDir)
-
+	if cfg.Width <= 0 {
+		cfg.Width = 320
+	}
+	if cfg.Height <= 0 {
+		cfg.Height = 320
+	}
+	if cfg.Format == "" {
+		cfg.Format = "webp"
+	}
+	// Map the format string to its on-disk file extension
+	// (used in the cache filename and the served URL).
+	ext := "webp"
+	switch cfg.Format {
+	case "jpeg", "jpg":
+		ext = "jpg"
+	case "png":
+		ext = "png"
+	case "webp":
+		ext = "webp"
+	default:
+		return nil, fmt.Errorf("unsupported thumb format %q (use jpeg, png, or webp)", cfg.Format)
+	}
+	cacheFile := thumbCachePath(src, cacheDir, ext)
 	srcInfo, err := os.Stat(src)
 	if err != nil {
 		return nil, fmt.Errorf("stat source: %w", err)
@@ -80,36 +123,83 @@ func GenerateOrLoadThumb(src, cacheDir string, maxWidth int) ([]byte, error) {
 	}
 	bounds := img.Bounds()
 	thumb := img
-	if bounds.Dx() > maxWidth {
-		// Resize to maxWidth wide, preserving aspect ratio.
-		scale := float64(maxWidth) / float64(bounds.Dx())
+	if bounds.Dx() > cfg.Width || bounds.Dy() > cfg.Height {
+		// Fit-within-bounds: scale so the longest edge fits
+		// in the cfg.Width × cfg.Height box, preserving aspect
+		// ratio.
+		scaleX := float64(cfg.Width) / float64(bounds.Dx())
+		scaleY := float64(cfg.Height) / float64(bounds.Dy())
+		scale := scaleX
+		if scaleY < scaleX {
+			scale = scaleY
+		}
+		newW := int(float64(bounds.Dx()) * scale)
 		newH := int(float64(bounds.Dy()) * scale)
-		dst := image.NewRGBA(image.Rect(0, 0, maxWidth, newH))
+		if newW < 1 {
+			newW = 1
+		}
+		if newH < 1 {
+			newH = 1
+		}
+		dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
 		draw.ApproxBiLinear.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
 		thumb = dst
 	}
 
-	// Encode to WebP. We use github.com/HugoSmits86/nativewebp, a
-	// pure-Go encoder with no CGO or libwebp dependency. It's
-	// lossless only (VP8L), which produces larger files than lossy
-	// WebP at q=80 (~2-3x bigger) but has zero system deps. For
-	// 320px gallery thumbs the size is still manageable (typically
-	// 10-50KB per thumb). If size becomes a concern, swap to a
-	// libwebp-backed CGO encoder — the call site stays the same.
+	// Encode in the configured format.
 	var buf bytes.Buffer
-	if err := nativewebp.Encode(&buf, thumb, &nativewebp.Options{
-		CompressionLevel: nativewebp.BestCompression,
-	}); err != nil {
-		return nil, fmt.Errorf("encode webp: %w", err)
+	switch cfg.Format {
+	case "jpeg", "jpg":
+		// Quality 75: a common default for thumbnails.
+		// Smaller files than lossless WebP, larger than q=80
+		// lossy WebP would be. Good middle ground for
+		// galleries.
+		if err := jpeg.Encode(&buf, thumb, &jpeg.Options{Quality: 75}); err != nil {
+			return nil, fmt.Errorf("encode jpeg: %w", err)
+		}
+	case "png":
+		if err := png.Encode(&buf, thumb); err != nil {
+			return nil, fmt.Errorf("encode png: %w", err)
+		}
+	case "webp":
+		// github.com/HugoSmits86/nativewebp is a pure-Go
+		// lossless WebP/VP8L encoder. No CGO, no libwebp.
+		// Lossless only — produces 2-3x larger files than
+		// lossy q=80. For 320px gallery thumbs the size is
+		// still manageable (typically 10-50KB per thumb).
+		if err := nativewebp.Encode(&buf, thumb, &nativewebp.Options{
+			CompressionLevel: nativewebp.BestCompression,
+		}); err != nil {
+			return nil, fmt.Errorf("encode webp: %w", err)
+		}
 	}
-	// Write to cache (best-effort; a write error shouldn't fail the
-	// request — the in-memory bytes are still good).
+	// Write to cache (best-effort; a write error shouldn't fail
+	// the request — the in-memory bytes are still good).
 	_ = os.WriteFile(cacheFile, buf.Bytes(), 0o644)
 
-	// Return a copy of the bytes (so callers can't mutate our buffer).
+	// Return a copy of the bytes (so callers can't mutate our
+	// buffer).
 	out := make([]byte, buf.Len())
 	copy(out, buf.Bytes())
 	return out, nil
+}
+
+// thumbCachePath returns the on-disk path where the thumbnail for
+// src should be cached, for a specific output extension. The
+// filename is the first 16 bytes of the SHA256 of src's absolute
+// path, hex-encoded (32 hex chars) + "." + ext. Using a
+// content-hash means cache entries are stable across renames of
+// the parent directory (as long as the absolute source path stays
+// the same) and collisions are effectively impossible.
+func thumbCachePath(src, cacheDir, ext string) string {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		// Fall back to the raw path if Abs fails (shouldn't
+		// happen in practice but avoids a panic).
+		abs = src
+	}
+	h := sha256.Sum256([]byte(abs))
+	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+ext)
 }
 
 // findSourceForThumb looks up the source file for a thumb request.
@@ -171,13 +261,13 @@ func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPa
 		http.NotFound(w, r)
 		return true
 	}
-	data, err := GenerateOrLoadThumb(src, g.thumbCacheDir(), 320)
+	data, err := GenerateOrLoadThumb(src, g.thumbCacheDir(), g.thumbConfig())
 	if err != nil {
 		http.Error(w, "image_gallery: thumb generation failed: "+err.Error(), http.StatusInternalServerError)
 		return true
 	}
 	w.Header().Set("Content-Type", "image/webp")
-	w.Header().Set("Cache-Control", "public, max-age=86400") // thumbs are immutable per source mtime
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", g.ThumbTTLMinutes*60)) // thumbs are immutable per source mtime
 	_, _ = w.Write(data)
 	return true
 }
@@ -190,4 +280,16 @@ func (g *Gallery) thumbCacheDir() string {
 		return d
 	}
 	return "/var/cache/caddy-gallery"
+}
+
+// thumbConfig returns the configured ThumbConfig for this gallery.
+// Used by serveThumb to pass the configured width/height/format
+// to GenerateOrLoadThumb. The values are set in Provision (from
+// the Caddyfile directives or defaults).
+func (g *Gallery) thumbConfig() ThumbConfig {
+	return ThumbConfig{
+		Width:  g.ThumbWidth,
+		Height: g.ThumbHeight,
+		Format: g.ThumbFormat,
+	}
 }

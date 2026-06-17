@@ -70,6 +70,37 @@ type Gallery struct {
 	// by UnmarshalCaddyfile (the Caddyfile parser).
 	PageSize int `json:"page_size,omitempty"`
 
+	// ThumbWidth is the maximum width in pixels of generated
+	// thumbnails. The source image is fit-within-bounds (aspect
+	// ratio preserved, longest edge becomes the configured value).
+	// Default: 320. Caddyfile: `thumb_width 480`.
+	// Validation: must be > 0; zero/negative rejected.
+	ThumbWidth int `json:"thumb_width,omitempty"`
+
+	// ThumbHeight is the maximum height in pixels of generated
+	// thumbnails. Fit-within-bounds behavior — see ThumbWidth.
+	// Default: 320. Caddyfile: `thumb_height 480`.
+	// Validation: must be > 0.
+	ThumbHeight int `json:"thumb_height,omitempty"`
+
+	// ThumbFormat is the output format for generated thumbnails.
+	// One of: "jpeg" (or "jpg"), "png", or "webp" (the current
+	// default, lossless). Default: "webp". Caddyfile:
+	// `thumb_format jpeg`. Validation: must be one of the three.
+	ThumbFormat string `json:"thumb_format,omitempty"`
+
+	// CacheScanMinutes is the in-memory scan cache TTL in
+	// minutes. Default: 1. Caddyfile: `cache_scan 5`.
+	// Validation: must be > 0.
+	CacheScanMinutes int `json:"cache_scan,omitempty"`
+
+	// ThumbTTLMinutes is the HTTP Cache-Control max-age in
+	// minutes for thumb responses. Thumbs are immutable per
+	// source mtime, so a long TTL is safe. Default: 1440
+	// (= 24 hours, matches the previous 86400-second value).
+	// Caddyfile: `thumb_ttl 60`. Validation: must be > 0.
+	ThumbTTLMinutes int `json:"thumb_ttl,omitempty"`
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache `json:"-"`
@@ -86,7 +117,7 @@ func (Gallery) CaddyModule() caddy.ModuleInfo {
 // isn't already set.
 func (g *Gallery) Provision(caddy.Context) error {
 	if g.Cache == nil {
-		g.Cache = NewScanCache(time.Minute)
+		g.Cache = NewScanCache(time.Duration(g.CacheScanMinutes) * time.Minute)
 	}
 	// Validate the configured template name. Must be relative and
 	// must not traverse above the templates dir. Fail Caddy
@@ -95,12 +126,27 @@ func (g *Gallery) Provision(caddy.Context) error {
 	if _, err := sanitizeTemplateName(g.Template); err != nil {
 		return fmt.Errorf("invalid image_gallery template name %q: %w", g.Template, err)
 	}
-	// Default the page size if the Caddyfile didn't set one.
-	// Zero means "use the default"; the UnmarshalCaddyfile
-	// already rejects zero or negative values, so if we see zero
+	// Apply defaults for the Caddyfile-only fields. Zero or
+	// empty means "use the default" — the UnmarshalCaddyfile
+	// already rejects invalid values, so if we see zero/empty
 	// here it just means the user didn't specify a value.
 	if g.PageSize == 0 {
 		g.PageSize = 50
+	}
+	if g.ThumbWidth == 0 {
+		g.ThumbWidth = 320
+	}
+	if g.ThumbHeight == 0 {
+		g.ThumbHeight = 320
+	}
+	if g.ThumbFormat == "" {
+		g.ThumbFormat = "webp"
+	}
+	if g.CacheScanMinutes == 0 {
+		g.CacheScanMinutes = 1
+	}
+	if g.ThumbTTLMinutes == 0 {
+		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
 	}
 	// Make the bundled templates discoverable on disk for the
 	// operator. writeBundledTemplates is a no-op if the files
@@ -274,6 +320,66 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 				g.PageSize = n
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "thumb_width":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil || n <= 0 {
+					return d.ArgErr()
+				}
+				g.ThumbWidth = n
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "thumb_height":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil || n <= 0 {
+					return d.ArgErr()
+				}
+				g.ThumbHeight = n
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "thumb_format":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				format := d.Val()
+				if format != "jpeg" && format != "jpg" && format != "png" && format != "webp" {
+					return d.ArgErr()
+				}
+				g.ThumbFormat = format
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "cache_scan":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil || n <= 0 {
+					return d.ArgErr()
+				}
+				g.CacheScanMinutes = n
+				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "thumb_ttl":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil || n <= 0 {
+					return d.ArgErr()
+				}
+				g.ThumbTTLMinutes = n
 				if d.NextArg() {
 					return d.ArgErr()
 				}

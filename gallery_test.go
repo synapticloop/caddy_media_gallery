@@ -239,6 +239,171 @@ func TestProvision_PageSizePreserved(t *testing.T) {
 	}
 }
 
+// TestUnmarshalCaddyfile_ThumbConfig covers the 5 new Caddyfile
+// directives: thumb_width, thumb_height, thumb_format, cache_scan,
+// thumb_ttl. All accept a positive int (or a string for
+// thumb_format), with validation that rejects invalid values.
+func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
+	t.Run("thumb_width 480", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 480\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbWidth != 480 {
+			t.Errorf("ThumbWidth: got %d, want 480", g.ThumbWidth)
+		}
+	})
+	t.Run("thumb_width 0 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 0\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for thumb_width 0")
+		}
+	})
+	t.Run("thumb_width -1 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width -1\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for thumb_width -1")
+		}
+	})
+	t.Run("thumb_height 240", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_height 240\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbHeight != 240 {
+			t.Errorf("ThumbHeight: got %d, want 240", g.ThumbHeight)
+		}
+	})
+	t.Run("thumb_format jpeg", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format jpeg\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbFormat != "jpeg" {
+			t.Errorf("ThumbFormat: got %q, want jpeg", g.ThumbFormat)
+		}
+	})
+	t.Run("thumb_format jpg (alias)", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format jpg\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbFormat != "jpg" {
+			t.Errorf("ThumbFormat: got %q, want jpg", g.ThumbFormat)
+		}
+	})
+	t.Run("thumb_format png", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format png\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbFormat != "png" {
+			t.Errorf("ThumbFormat: got %q, want png", g.ThumbFormat)
+		}
+	})
+	t.Run("thumb_format webp", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format webp\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbFormat != "webp" {
+			t.Errorf("ThumbFormat: got %q, want webp", g.ThumbFormat)
+		}
+	})
+	t.Run("thumb_format avif → error (not in v1)", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format avif\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for thumb_format avif (not in v1)")
+		}
+	})
+	t.Run("cache_scan 5", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  cache_scan 5\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.CacheScanMinutes != 5 {
+			t.Errorf("CacheScanMinutes: got %d, want 5", g.CacheScanMinutes)
+		}
+	})
+	t.Run("cache_scan 0 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  cache_scan 0\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for cache_scan 0")
+		}
+	})
+	t.Run("thumb_ttl 60", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl 60\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbTTLMinutes != 60 {
+			t.Errorf("ThumbTTLMinutes: got %d, want 60", g.ThumbTTLMinutes)
+		}
+	})
+	t.Run("thumb_ttl 0 → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl 0\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for thumb_ttl 0")
+		}
+	})
+	t.Run("thumb_ttl with abc → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl abc\n}")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for thumb_ttl abc")
+		}
+	})
+	t.Run("all 5 directives together", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 480\n  thumb_height 320\n  thumb_format jpeg\n  cache_scan 5\n  thumb_ttl 60\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.ThumbWidth != 480 || g.ThumbHeight != 320 || g.ThumbFormat != "jpeg" ||
+			g.CacheScanMinutes != 5 || g.ThumbTTLMinutes != 60 {
+			t.Errorf("got %+v, want all 5 set", g)
+		}
+	})
+}
+
+// TestProvision_ThumbConfigDefaults verifies that Provision applies
+// the default values for the 5 new fields when the Caddyfile
+// doesn't set them.
+func TestProvision_ThumbConfigDefaults(t *testing.T) {
+	g := Gallery{}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.ThumbWidth != 320 {
+		t.Errorf("ThumbWidth default: got %d, want 320", g.ThumbWidth)
+	}
+	if g.ThumbHeight != 320 {
+		t.Errorf("ThumbHeight default: got %d, want 320", g.ThumbHeight)
+	}
+	if g.ThumbFormat != "webp" {
+		t.Errorf("ThumbFormat default: got %q, want webp", g.ThumbFormat)
+	}
+	if g.CacheScanMinutes != 1 {
+		t.Errorf("CacheScanMinutes default: got %d, want 1", g.CacheScanMinutes)
+	}
+	if g.ThumbTTLMinutes != 1440 {
+		t.Errorf("ThumbTTLMinutes default: got %d, want 1440 (= 24h)", g.ThumbTTLMinutes)
+	}
+}
+
 // TestRenderPage_PageSizePagination verifies that the pageSize
 // parameter is honored: with 7 images and pageSize=3, RenderPage
 // produces a "Page 1 of 3" pagination header
