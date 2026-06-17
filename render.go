@@ -49,6 +49,7 @@ type FileView struct {
 	Href     string // relative link
 	ThumbURL string // for images, the relative thumb URL; empty for non-images
 	IsDir    bool
+	IsUp     bool // true for the synthetic "../" up-link entry (rendered with ↑ icon, no trailing /)
 	IsImage  bool
 	IsVideo  bool
 	IsOther  bool
@@ -368,10 +369,10 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	dirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
 	if relPath != "" {
 		up := FileView{
-			Name:  "..",
+			Name:  "Up",
 			Href:  "../",
 			IsDir: true,
-			Type:  "UP",
+			IsUp:  true,
 		}
 		dirViews = append([]FileView{up}, dirViews...)
 	}
@@ -838,7 +839,11 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     <h2 class="section-heading">Directories</h2>
     <div class="chip-row">
       {{range .Directories}}
+      {{if .IsUp}}
+      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">↑</span> {{.Name}}</a>
+      {{else}}
       <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
+      {{end}}
       {{end}}
     </div>
   </section>

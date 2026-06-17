@@ -290,9 +290,10 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 }
 
 func TestRenderPage_UpEntryInSubdir(t *testing.T) {
-	// When viewing a subdirectory, an ".." entry should be prepended
-	// to the directories list. The Href is "../" (one level up
-	// relative to the current page).
+	// When viewing a subdirectory, an "Up" entry should be prepended
+	// to the directories list. Rendered with the ↑ icon and the
+	// word "Up" (per the user's 2026-06 request: "use the up arrow
+	// and the word Up"). Href is "../".
 	files := []FileInfo{
 		{Name: "nested1", Kind: KindDir},
 		{Name: "nested2", Kind: KindDir},
@@ -303,26 +304,36 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The ".." entry should be the first dir chip.
+	// The "Up" entry should appear in the directories section.
 	othersIdx := strings.Index(html, "Other files")
 	if othersIdx < 0 {
 		othersIdx = len(html)
 	}
 	dirsSection := html[:othersIdx]
-	upIdx := strings.Index(dirsSection, `>../<`)
-	if upIdx < 0 {
-		t.Fatal("expected '..' entry in the directories section for a subdir view")
-	}
 	// Href should be "../"
 	if !strings.Contains(dirsSection, `href="../"`) {
-		t.Error("expected '..' entry to link to '../'")
+		t.Error("expected Up entry to link to '../'")
 	}
-	// The up entry should be the FIRST dir chip (before the real dirs).
-	// Find positions of the first "..</a>" and the first "nested1</a>"
-	upEnd := strings.Index(dirsSection, "</a>") // first </a> closes the up entry
+	// Should contain the word "Up" as the chip text (note the
+	// leading space from the template's whitespace between
+	// </span> and {{.Name}})
+	if !strings.Contains(dirsSection, " Up") {
+		t.Error("expected 'Up' text in the dirs section (the word 'Up', not '..')")
+	}
+	// Should contain the ↑ arrow icon
+	if !strings.Contains(dirsSection, ">↑</span>") {
+		t.Error("expected ↑ arrow icon for the Up entry (not the 📁 folder icon)")
+	}
+	// Should NOT have a trailing '/' after the Up text (regular
+	// dir chips have a trailing '/' to look like a folder path)
+	if strings.Contains(dirsSection, "> Up/<") {
+		t.Error("expected no trailing '/' after the Up entry")
+	}
+	// The Up entry should be the FIRST dir chip (before the real dirs).
+	upEnd := strings.Index(dirsSection, "</a>") // first </a> closes the Up entry
 	firstNestedPos := strings.Index(dirsSection, "nested1</a>")
 	if firstNestedPos > 0 && upEnd > 0 && upEnd > firstNestedPos {
-		t.Error("expected '..' entry to appear before real directories")
+		t.Error("expected Up entry to appear before real directories")
 	}
 }
 
