@@ -345,10 +345,13 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 }
 
 func TestRenderPage_UpEntryInSubdir(t *testing.T) {
-	// When viewing a subdirectory, an "Up" entry should be prepended
-	// to the directories list. Rendered with the ↑ icon and the
-	// word "Up" (per the user's 2026-06 request: "use the up arrow
-	// and the word Up"). Href is "../".
+	// When viewing a subdirectory, an "Up" entry is rendered on
+	// its OWN LINE (in a separate <div class="up-chip-row">)
+	// and the subdirs are rendered in a SEPARATE <div
+	// class="dirs-row"> with NO gap between chips. Per the
+	// user's 2026-06-17 spec: "the up directory chip should
+	// always be first and on its own line. remove the spacing
+	// for the rest of the directories".
 	files := []FileInfo{
 		{Name: "nested1", Kind: KindDir},
 		{Name: "nested2", Kind: KindDir},
@@ -359,40 +362,112 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The "Up" entry should appear in the directories section.
+
+	// 1. The Up entry must be in its own <div class="up-chip-row">
+	upRowStart := strings.Index(html, `<div class="up-chip-row">`)
+	if upRowStart < 0 {
+		t.Fatal(`expected a <div class="up-chip-row"> containing the Up entry`)
+	}
+	upRowEnd := strings.Index(html[upRowStart:], `</div>`)
+	if upRowEnd < 0 {
+		t.Fatal(`could not find end of up-chip-row div`)
+	}
+	upRow := html[upRowStart : upRowStart+upRowEnd]
+	if !strings.Contains(upRow, `href="../"`) {
+		t.Error("expected Up entry to link to '../'")
+	}
+	if !strings.Contains(upRow, "Up (../)") {
+		t.Error("expected 'Up (../)' text in the up-chip-row")
+	}
+	if !strings.Contains(upRow, ">↑</span>") {
+		t.Error("expected ↑ arrow icon for the Up entry")
+	}
+	if !strings.Contains(upRow, ">📁</span>") {
+		t.Error("expected 📁 folder icon for the Up entry")
+	}
+
+	// 2. The subdirs must be in a SEPARATE <div class="dirs-row">,
+	//    AFTER the up-chip-row
+	dirsRowStart := strings.Index(html, `<div class="dirs-row">`)
+	if dirsRowStart < 0 {
+		t.Fatal(`expected a <div class="dirs-row"> containing the subdirs`)
+	}
+	if dirsRowStart < upRowStart {
+		t.Error("expected dirs-row to come AFTER up-chip-row")
+	}
+	dirsRowEnd := strings.Index(html[dirsRowStart:], `</div>`)
+	if dirsRowEnd < 0 {
+		t.Fatal(`could not find end of dirs-row div`)
+	}
+	dirsRow := html[dirsRowStart : dirsRowStart+dirsRowEnd]
+	// The dirs-row should contain the subdirs (NOT the up entry)
+	if strings.Contains(dirsRow, `href="../"`) {
+		t.Error(`the up entry should not appear in the dirs-row (it\'s in up-chip-row)`)
+	}
+	if !strings.Contains(dirsRow, "nested1/") {
+		t.Error("expected nested1 subdir in dirs-row")
+	}
+	if !strings.Contains(dirsRow, "nested2/") {
+		t.Error("expected nested2 subdir in dirs-row")
+	}
+	// The dirs-row should NOT have any gap between chips
+	// (CSS rule: .dirs-section .dirs-row { gap: 0; }). The
+	// inline style attribute would be the only way to put a
+	// gap on a specific element, so checking for "gap:" or
+	// "gap-" in the dirs-row catches the case where the
+	// template accidentally puts a gap attribute.
+	if strings.Contains(dirsRow, "gap:") || strings.Contains(dirsRow, "gap-") {
+		t.Errorf("expected dirs-row to have no gap (per user spec), but found a gap reference: %q", dirsRow)
+	}
+
+	// 3. The dirs-row should NOT contain the images (the image
+	//    grid is a separate section, comes after the dirs
+	//    section in the page).
 	othersIdx := strings.Index(html, "Other files")
 	if othersIdx < 0 {
 		othersIdx = len(html)
 	}
 	dirsSection := html[:othersIdx]
-	// Href should be "../"
-	if !strings.Contains(dirsSection, `href="../"`) {
-		t.Error("expected Up entry to link to '../'")
+	if !strings.Contains(dirsSection, `class="up-chip-row"`) {
+		t.Error(`expected dirs section to contain the up-chip-row`)
 	}
-	// Should contain the word "Up" as the chip text (note the
-	// leading space from the template's whitespace between
-	// </span> and {{.Name}})
-	if !strings.Contains(dirsSection, " Up") {
-		t.Error("expected 'Up' text in the dirs section (the word 'Up', not '..')")
+	if !strings.Contains(dirsSection, `class="dirs-row"`) {
+		t.Error(`expected dirs section to contain the dirs-row`)
 	}
-	// Should contain the ↑ arrow icon
-	if !strings.Contains(dirsSection, ">↑</span>") {
-		t.Error("expected ↑ arrow icon for the Up entry (not the 📁 folder icon)")
+}
+
+// TestRenderPage_DirsRowNoGap verifies that the subdirs row
+// uses gap:0 (no spacing between chips) per the user's
+// 2026-06-17 spec. We check by looking for the CSS rule in
+// the rendered page (the CSS is in the <style> block in the
+// <head>).
+func TestRenderPage_DirsRowNoGap(t *testing.T) {
+	files := []FileInfo{
+		{Name: "dir1", Kind: KindDir},
+		{Name: "dir2", Kind: KindDir},
+		{Name: "dir3", Kind: KindDir},
 	}
-	// Should contain the folder icon as well (per user request
-	// 2026-06-17: the up chip shows ↑ + 📁 + "Up (../)")
-	if !strings.Contains(dirsSection, ">📁</span>") {
-		t.Error("expected 📁 folder icon for the Up entry")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Should contain the "Up (../)" text (the relative path hint)
-	if !strings.Contains(dirsSection, "Up (../)") {
-		t.Error("expected 'Up (../)' text for the Up entry (the relative path hint)")
+	// The dirs-row class should have a gap: 0 rule (overrides
+	// the default .chip-row gap: 0.5rem).
+	if !strings.Contains(html, ".dirs-section .dirs-row") {
+		t.Error("expected .dirs-section .dirs-row CSS rule in the rendered page")
 	}
-	// The Up entry should be the FIRST dir chip (before the real dirs).
-	upEnd := strings.Index(dirsSection, "</a>") // first </a> closes the Up entry
-	firstNestedPos := strings.Index(dirsSection, "nested1</a>")
-	if firstNestedPos > 0 && upEnd > 0 && upEnd > firstNestedPos {
-		t.Error("expected Up entry to appear before real directories")
+	// Find the rule and verify it has gap: 0
+	ruleStart := strings.Index(html, ".dirs-section .dirs-row")
+	if ruleStart < 0 {
+		t.Fatal(`CSS rule not found`)
+	}
+	ruleEnd := strings.Index(html[ruleStart:], "}")
+	if ruleEnd < 0 {
+		t.Fatal("could not find end of CSS rule")
+	}
+	rule := html[ruleStart : ruleStart+ruleEnd]
+	if !strings.Contains(rule, "gap: 0") {
+		t.Errorf("expected 'gap: 0' in .dirs-section .dirs-row rule, got: %q", rule)
 	}
 }
 

@@ -20,13 +20,18 @@ type PageData struct {
 	PathPrefix  string // e.g. "./" — prefix for relative links
 	ThumbPrefix string // e.g. "./_thumbs/" — prefix for thumb URLs
 
-	// Three sections. Directories and OtherFiles are shown in full
-	// regardless of pagination/sort (per the user's spec — they
-	// always appear at the top, horizontal). Images is the
-	// paginated/sorted set.
-	Directories []FileView
-	OtherFiles  []FileView
-	Images      []FileView
+	// Three sections. OtherFiles is shown in full regardless of
+	// pagination/sort (per the user's spec — it always appears
+	// at the top, horizontal). Images is the paginated/sorted
+	// set. The directories section is split into two
+	// elements: Up (the synthetic ../ entry, rendered on its
+	// own line, always first) and Subdirs (the actual subdirs,
+	// rendered in a tight row with no gap between them, per
+	// the user's 2026-06-17 spec).
+	Up         *FileView  // the up entry, or nil at the gallery root
+	Subdirs    []FileView // the actual subdirs (no up entry)
+	OtherFiles []FileView
+	Images     []FileView
 
 	// Pagination
 	Page        int // 1-based
@@ -362,26 +367,28 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		totalPages = 1
 	}
 
-	// Prepend an "up" entry to the directories list when we're
-	// inside a subdirectory. "../" is the relative URL to the
-	// parent — the browser handles it correctly regardless of the
-	// current page's URL depth.
-	dirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
+	// Split dirs into Up (the synthetic ../ entry, only present
+	// in subdirs) and Subdirs (the actual subdirs). The Up
+	// entry is rendered on its own line (always first when
+	// present); Subdirs is rendered in a tight row with no
+	// gap between chips, per the user's 2026-06-17 spec.
+	subdirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
+	var up *FileView
 	if relPath != "" {
-		up := FileView{
+		up = &FileView{
 			Name:  "Up",
 			Href:  "../",
 			IsDir: true,
 			IsUp:  true,
 		}
-		dirViews = append([]FileView{up}, dirViews...)
 	}
 
 	data := PageData{
 		Title:       title,
 		PathPrefix:  pathPrefix,
 		ThumbPrefix: thumbPrefix,
-		Directories: dirViews,
+		Up:          up,
+		Subdirs:     subdirViews,
 		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
 		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
 		Page:        page,
@@ -521,12 +528,31 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* Dirs section: distribute chips evenly across the available
-   row width so the row looks balanced regardless of how many
-   dirs there are. justify-content: space-evenly puts equal space
-   around every chip and at the row edges. */
-.dirs-section .chip-row {
-  justify-content: space-evenly;
+/* Dirs section layout (Phase 24, per user request 2026-06-17):
+   - Up chip is rendered on its OWN LINE, always first
+   - Subdirs are rendered in a TIGHT row with NO GAP between
+     chips (the user said "remove the spacing for the rest of
+     the directories - it doesn't look as I want")
+   - The dirs section is only shown if there's an Up entry
+     OR at least one subdir */
+.dirs-section .up-chip-row {
+  margin-bottom: 0.5rem; /* visual separation from the subdirs below */
+}
+.dirs-section .dirs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;                /* no spacing between subdir chips */
+  align-items: center;
+}
+.dirs-section .dirs-row .chip {
+  /* Slightly tighten the visual appearance of subdirs (no gap
+     + a smaller border-radius) so they read as a single
+     cluster rather than independent chips. */
+  border-radius: 3px;
+  padding: 0.35rem 0.7rem;
+}
+.dirs-section .dirs-row .chip:not(:last-child) {
+  border-right-width: 0; /* prevent double borders between adjacent chips */
 }
 .chip {
   display: inline-flex;
@@ -823,7 +849,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
         <div class="meta">
           <span>{{.TotalImages}} images</span>
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-          {{if gt (len .Directories) 0}}<span>·</span><span>{{len .Directories}} directories</span>{{end}}
+          {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
           <span>·</span><span>{{.PageSize}} per page</span>
         </div>
       </div>
@@ -842,18 +868,21 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     </div>
   </header>
 
-  {{if .Directories}}
+  {{if or .Up (gt (len .Subdirs) 0)}}
   <section class="dirs-section">
     <h2 class="section-heading">Directories</h2>
-    <div class="chip-row">
-      {{range .Directories}}
-      {{if .IsUp}}
-      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../)</a>
-      {{else}}
+    {{if .Up}}
+    <div class="up-chip-row">
+      <a class="chip dir-chip up-chip" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../)</a>
+    </div>
+    {{end}}
+    {{if .Subdirs}}
+    <div class="dirs-row">
+      {{range .Subdirs}}
       <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
       {{end}}
-      {{end}}
     </div>
+    {{end}}
   </section>
   {{end}}
 
