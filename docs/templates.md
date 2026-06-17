@@ -13,15 +13,26 @@ in place.
 ## How the template loading works
 
 ```
-loadTemplate() reads $GALLERY_TEMPLATES_DIR
+loadTemplate(name string) reads $GALLERY_TEMPLATES_DIR
    │
-   ├── /etc/caddy/gallery-templates/gallery.tmpl exists?
+   ├── name = gallery.Template (from Caddyfile `template` directive)
+   │   default "gallery.tmpl" if the directive is absent
+   │
+   ├── sanitizeTemplateName(name):
+   │   reject absolute paths, reject ".." (any traversal)
+   │
+   ├── /etc/caddy/gallery-templates/<clean name> exists?
    │     ├── YES → parse that file directly (CSS+JS are inside it)
    │     │         (the on-disk file is the active template)
    │     └── NO  → use the bundled galleryTemplate constant
    │
    └── return *template.Template ready to RenderPage
 ```
+
+The `template` Caddyfile directive is the operator-facing knob
+that picks the template file. See
+[`docs/configuration.md`](configuration.md) for the directive
+syntax and the path-traversal protection details.
 
 The template is a single self-contained file. The HTML, CSS
 (inside `<style>`), and JS (inside `<script>`) all live in one

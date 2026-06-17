@@ -10,11 +10,35 @@ handle_path /images/* {
 }
 ```
 
-The `image_gallery` directive takes no inline options. All
-configuration is via the surrounding `handle` / `handle_path` block
-(notably `root *` — the module reads the on-disk directory from
-Caddy's per-request `root` variable, or from the `Root` JSON
-field if set explicitly).
+The `image_gallery` directive accepts one inline option:
+
+| Subdirective | Value | Default | Purpose |
+|---|---|---|---|
+| `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
+
+Example with a themed subdir:
+
+```caddy
+handle_path /images/* {
+    root * /var/www/html/images
+    image_gallery {
+        template themes/dark/gallery.tmpl
+    }
+    file_server
+}
+```
+
+This loads `$GALLERY_TEMPLATES_DIR/themes/dark/gallery.tmpl` (or
+falls back to the bundled template if the file doesn't exist on
+disk). The path is validated at Provision — an invalid name
+(e.g. `../etc/passwd`) fails Caddy startup, not at first request.
+
+All other configuration (the `root *` for the image directory,
+the `handle` / `handle_path` for the route, the auth wrapper) is
+via the surrounding Caddyfile block, not the `image_gallery`
+directive. The module reads the on-disk directory from Caddy's
+per-request `root` variable, or from the `Root` JSON field if
+set explicitly.
 
 ## JSON config (advanced)
 
