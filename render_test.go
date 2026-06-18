@@ -987,10 +987,12 @@ func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
 	if !strings.Contains(metaBlock, "50 per page") {
 		t.Errorf("expected '50 per page' in header meta block, got: %q", metaBlock)
 	}
-	// Per Phase 37: the image count now includes the total
-	// size in parentheses (e.g. "200 images (200.0 KB)").
-	if !strings.Contains(metaBlock, "200 images (") {
-		t.Errorf("expected '200 images (' (with total size) in header meta block, got: %q", metaBlock)
+	// Per Phase 43: the size is now on OTHER FILES (not images).
+	// Images show just the count. To exercise the other-files
+	// size path, the test would need KindOther files (we don't
+	// add them here since the original test was about pagination).
+	if strings.Contains(metaBlock, "images (") {
+		t.Errorf("expected 'N images' (no size — size moved to other files in Phase 43), got: %q", metaBlock)
 	}
 	// Order check: per-page -> Page X of Y (no more 'N pages' in between)
 	perPageIdx := strings.Index(metaBlock, "50 per page")
@@ -1000,13 +1002,16 @@ func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
 	}
 }
 
-// TestRenderPage_TotalImageSize verifies the header meta
-// shows the pre-formatted total size of all image files
-// (NOT including videos) in parentheses after the image
-// count. Per user request 2026-06-18: "89 images (total
-// size) · 4 directories · 50 per page · Page 1 of 2".
-// The size is pre-formatted via humanSize() — KB / MB / GB.
-func TestRenderPage_TotalImageSize(t *testing.T) {
+// TestRenderPage_TotalOtherFilesSize verifies the header meta
+// shows the pre-formatted total size of all "other files"
+// in parentheses after the other-files count. Per user
+// request 2026-06-18 (Phase 43): "2 other files (size)" —
+// the size is now grouped with OTHER FILES (not with
+// images), so the user can see at a glance how much
+// non-media content (config files, sidecar metadata,
+// etc.) is in the gallery.
+// The size is pre-formatted via humanSize() — B / KB / MB / GB.
+func TestRenderPage_TotalOtherFilesSize(t *testing.T) {
 	cases := []struct {
 		name      string
 		sizes     []int64
@@ -1038,8 +1043,12 @@ func TestRenderPage_TotalImageSize(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			files := make([]FileInfo, len(tc.sizes))
+			// Use KindOther for these files (not KindImage) since
+			// the size we're testing is the OTHER FILES size. The
+			// file names use .json / .txt suffixes so splitFiles
+			// classifies them as KindOther.
 			for i, s := range tc.sizes {
-				files[i] = FileInfo{Name: "a.jpg", ModTime: int64(i), Size: s, Kind: KindImage}
+				files[i] = FileInfo{Name: fmt.Sprintf("meta-%d.json", i), ModTime: int64(i), Size: s, Kind: KindOther}
 			}
 			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
 			if err != nil {
@@ -1048,15 +1057,19 @@ func TestRenderPage_TotalImageSize(t *testing.T) {
 			metaStart := strings.Index(html, `class="meta"`)
 			metaEnd := strings.Index(html[metaStart:], `</div>`)
 			metaBlock := html[metaStart : metaStart+metaEnd]
-			want := fmt.Sprintf("%d images (%s)", len(tc.sizes), tc.wantTotal)
+			want := fmt.Sprintf("%d other files (%s)", len(tc.sizes), tc.wantTotal)
 			if !strings.Contains(metaBlock, want) {
 				t.Errorf("expected header to contain %q, got: %q", want, metaBlock)
+			}
+			// And images should NOT have the size anymore.
+			if strings.Contains(metaBlock, "images (") {
+				t.Errorf("expected 'N images' (no size), got: %q", metaBlock)
 			}
 		})
 	}
 }
 
-// Helpers for TestRenderPage_TotalImageSize
+// Helpers for TestRenderPage_TotalOtherFilesSize
 func make100KB(n int) []int64 {
 	out := make([]int64, n)
 	for i := range out {

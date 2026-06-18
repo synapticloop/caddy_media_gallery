@@ -50,16 +50,18 @@ type PageData struct {
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
 	TotalVideos int
-	// TotalImageSize is the pre-formatted (via humanSize) total
-	// size of all image files (NOT including videos). Shown in
-	// the header meta line as "N images (total size)" per user
-	// request 2026-06-18. e.g. "89 images (1.2 GB)". Per the
-	// user's example, the size appears in parentheses after the
-	// image count, not as a separate meta item.
-	TotalImageSize string
-	TotalPages     int
-	HasPrev        bool
-	HasNext        bool
+	// TotalOtherFilesSize is the pre-formatted (via humanSize) total
+	// size of all "other files" in the directory (NOT images, NOT
+	// videos, NOT subdirs). Shown in the header meta line as
+	// "N other files (size)" per user request 2026-06-18.
+	// e.g. "2 other files (12.4 KB)". Per the user's spec, the size
+	// is grouped with the other-files count (not with images), so the
+	// user can see at a glance how much "non-media" content lives in
+	// the gallery (config files, sidecar metadata, etc.).
+	TotalOtherFilesSize string
+	TotalPages          int
+	HasPrev             bool
+	HasNext             bool
 	// PageNumbers is the list of page numbers (and 0 for
 	// ellipsis) to show in the Google-style bottom pagination.
 	// Computed by pageNumbers(current, total). Empty when
@@ -453,14 +455,21 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// "X images" label.
 	imageCount := 0
 	videoCount := 0
-	var totalImageBytes int64
+	var totalOtherBytes int64
 	for _, f := range allImages {
 		if f.Kind == KindVideo {
 			videoCount++
 		} else {
 			imageCount++
-			totalImageBytes += f.Size
 		}
+	}
+	// Per user request 2026-06-18: the size shown in the header
+	// is the total of the OTHER FILES (not images). Other files
+	// are config files, sidecar metadata, etc. — the user wants
+	// to see at a glance how much non-media content is in the
+	// gallery directory.
+	for _, f := range others {
+		totalOtherBytes += f.Size
 	}
 	totalPages := (totalImages + pageSize - 1) / pageSize
 	if totalPages < 1 {
@@ -505,24 +514,24 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	}
 
 	data := PageData{
-		Title:          title,
-		PathPrefix:     pathPrefix,
-		ThumbPrefix:    thumbPrefix,
-		Up:             up,
-		Subdirs:        subdirViews,
-		OtherFiles:     buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
-		Images:         buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
-		Page:           page,
-		PageSize:       pageSize,
-		TotalImages:    totalImages,
-		ImageCount:     imageCount,
-		TotalVideos:    videoCount,
-		TotalImageSize: humanSize(totalImageBytes),
-		TotalPages:     totalPages,
-		HasPrev:        page > 1,
-		HasNext:        page < totalPages,
-		PageNumbers:    pageNumbers(page, totalPages),
-		Sort:           sortSpec,
+		Title:               title,
+		PathPrefix:          pathPrefix,
+		ThumbPrefix:         thumbPrefix,
+		Up:                  up,
+		Subdirs:             subdirViews,
+		OtherFiles:          buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
+		Images:              buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
+		Page:                page,
+		PageSize:            pageSize,
+		TotalImages:         totalImages,
+		ImageCount:          imageCount,
+		TotalVideos:         videoCount,
+		TotalOtherFilesSize: humanSize(totalOtherBytes),
+		TotalPages:          totalPages,
+		HasPrev:             page > 1,
+		HasNext:             page < totalPages,
+		PageNumbers:         pageNumbers(page, totalPages),
+		Sort:                sortSpec,
 	}
 
 	tmpl, err := loadTemplate(tmplName)
@@ -1145,9 +1154,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
-          <span>{{.ImageCount}} images ({{.TotalImageSize}})</span>
+          <span>{{.ImageCount}} images</span>
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
-          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
+          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files ({{.TotalOtherFilesSize}})</span>{{end}}
           {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
           <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
