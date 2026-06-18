@@ -756,10 +756,10 @@ h1 {
   margin-top: 0.3rem;
   font-size: 0.8rem;
   padding: 0.35rem 0.75rem;
-  background: white;
-  border: 1px solid #e5e9ea;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  color: #333;
+  color: var(--fg);
   text-decoration: none;
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s;
@@ -768,7 +768,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; }
 .section {
   padding: 1.25rem 2rem;
-  border-bottom: 1px solid #e5e9ea;
+  border-bottom: 1px solid var(--border);
 }
 .section:last-child { border-bottom: none; }
 .section-heading {
@@ -815,10 +815,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
-  background: #f3f6f7;
-  border: 1px solid #e5e9ea;
+  background: var(--bg-chip);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  color: #333;
+  color: var(--fg);
   font-size: 0.8rem;
   text-decoration: none;
   white-space: nowrap;
@@ -843,18 +843,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-size: 0.85rem;
   flex-wrap: wrap;
   padding-top: 0.75rem;
-  border-top: 1px solid #e5e9ea;
+  border-top: 1px solid var(--border);
 }
 .sort-label { color: var(--fg-faint); margin-right: 0.25rem; }
 .sort-btn {
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.65rem;
-  border: 1px solid #e5e9ea;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  color: #333;
+  color: var(--fg);
   text-decoration: none;
-  background: white;
+  background: var(--bg-card);
   transition: background 0.12s, border-color 0.12s;
 }
 .sort-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
@@ -874,8 +874,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .card {
   display: flex;
   flex-direction: column;
-  background: white;
-  border: 1px solid #e5e9ea;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 5px;
   overflow: hidden;
   text-decoration: none;
@@ -887,7 +887,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  background: #f3f6f7;
+  background: var(--bg-chip);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -907,7 +907,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   height: 28px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
-  color: #333;
+  color: var(--fg);
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
@@ -988,8 +988,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .tile-meta-info .date,
 .tile-meta-info .size { line-height: 1.35; }
 .filetype-chip {
-  background: #e5e9ea;
-  color: #333;
+  background: var(--bg-chip);
+  color: var(--fg);
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
   font-size: 0.65rem;
@@ -1008,20 +1008,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .page-btn {
   display: inline-block;
   padding: 0.4rem 0.75rem;
-  border: 1px solid #e5e9ea;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  color: #333;
+  color: var(--fg);
   text-decoration: none;
-  background: white;
+  background: var(--bg-card);
 }
 .page-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .page-btn.active {
   /* The currently-selected page in the Google-style pagination.
      Same shape as a normal page-btn but inverted colors so it's
      distinguishable at a glance (matches the sort-btn.active
-     style). */
-  background: #3B6FB6;
-  border-color: #3B6FB6;
+     style). Uses var(--accent) so it auto-adapts to dark mode. */
+  background: var(--accent);
+  border-color: var(--accent);
   color: white;
   cursor: default;
   pointer-events: none;
