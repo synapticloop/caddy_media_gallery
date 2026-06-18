@@ -801,40 +801,6 @@ func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 	}
 }
 
-func TestRenderPage_SortIndicatorInHeader(t *testing.T) {
-	files := []FileInfo{
-		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
-	}
-	// Default sort: should show "Sort: Modified ↓" as a span (not a link).
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(html, `class="sort-indicator"`) {
-		t.Fatal("expected sort indicator in header")
-	}
-	if !strings.Contains(html, "Sort: Modified") {
-		t.Error("expected default sort indicator to say 'Sort: Modified'")
-	}
-	// The default indicator is a span (not clickable).
-	if !strings.Contains(html, `<span class="sort-indicator"`) {
-		t.Error("expected default sort indicator to be a <span> (not clickable)")
-	}
-
-	// Custom sort: should show "Sort: Name ↑" as a link to clear.
-	q := url.Values{"sort": {"name"}, "order": {"asc"}}
-	html, _ = RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, q)
-	if !strings.Contains(html, `class="sort-indicator"`) {
-		t.Fatal("expected sort indicator in header (custom sort)")
-	}
-	if !strings.Contains(html, "Sort: Name") {
-		t.Error("expected custom sort indicator to say 'Sort: Name'")
-	}
-	if !strings.Contains(html, `href="?"`) {
-		t.Error("expected custom sort indicator to be a link to reset (href=?)")
-	}
-}
-
 // dirName returns a deterministic directory name for tests.
 func dirName(i int) string { return "dir-" + intStr(i) }
 

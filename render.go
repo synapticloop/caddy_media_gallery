@@ -1091,6 +1091,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   body { padding: 1rem 0.5rem 3rem; }
   header, .dirs-section, .others-section, .images-section { padding-left: 1rem; padding-right: 1rem; }
   .image-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  /* Per user request 2026-06-18: on small screens, stack the
+     .header-top vertically so the meta line wraps onto a new
+     line (instead of being squished by the flex parent).
+     Without this, the meta line ("375 images ... 50 per page")
+     gets compressed on phones and can overflow horizontally. */
+  .header-top { flex-direction: column; }
+  /* Theme toggle now sits below the header-main (in its own
+     row). Right-align it so it stays in the same screen corner
+     the user expects (top-right). */
+  .theme-toggle { align-self: flex-end; }
 }
 
 /* ---- Lightbox overlay (created by lightbox.js) ---- */
@@ -1204,12 +1214,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 <main>
   <header>
     <div class="header-top">
-      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
-        <button type="button" data-theme="auto" aria-pressed="false" aria-label="Auto (follow system preference)" title="Auto">⚙</button>
-        <button type="button" data-theme="light" aria-pressed="false" aria-label="Light mode" title="Light">☀</button>
-        <button type="button" data-theme="dark" aria-pressed="false" aria-label="Dark mode" title="Dark">🌙</button>
-      </div>
-
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
@@ -1222,11 +1226,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
-      {{if eq .Sort.Field "mtime"}}
-      <span class="sort-indicator" title="Default sort: most recently modified first">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></span>
-      {{else}}
-      <a class="sort-indicator" href="?" title="Reset to default sort (most recently modified first)">Sort: {{sortLabel .Sort.Field}}<span class="arrow">{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}</span></a>
-      {{end}}
+      <!-- Per user request 2026-06-18: removed the top-right
+           sort order indicator (the "Sort: Name ↓" link). The sort
+           UI still exists as the sort-bar below the header (with
+           Name/Type/Modified/Size buttons), so the sort order is
+           still visible there. The theme toggle moves to the top-
+           right (where the sort indicator was). -->
+      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+        <button type="button" data-theme="auto" aria-pressed="false" aria-label="Auto (follow system preference)" title="Auto">⚙</button>
+        <button type="button" data-theme="light" aria-pressed="false" aria-label="Light mode" title="Light">☀</button>
+        <button type="button" data-theme="dark" aria-pressed="false" aria-label="Dark mode" title="Dark">🌙</button>
+      </div>
     </div>
     <div class="sort-bar">
       <span class="sort-label">Sort by</span>
