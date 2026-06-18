@@ -787,7 +787,14 @@ h1 {
   transition: background 0.12s, border-color 0.12s;
 }
 a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: #006ed3; }
-.sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; }
+/* Per user request 2026-06-18: arrows in the image gallery
+   should be the same color in both light and dark modes.
+   Fixed #006ed3 (the light-mode accent) — a medium blue
+   that's visible on both light and dark page backgrounds
+   (decent contrast either way). Phase 48 made the .sort-indicator
+   hover state fixed; this makes the NORMAL state of the arrows
+   fixed too, matching the user's spec. */
+.sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; color: #006ed3; }
 .section {
   padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--border);
@@ -890,7 +897,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-weight: 500;
 }
 .sort-btn.active:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; }
+.sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; color: #006ed3; }
 .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
