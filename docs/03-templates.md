@@ -22,9 +22,9 @@ loadTemplate(name string) reads $GALLERY_TEMPLATES_DIR
    │   reject absolute paths, reject ".." (any traversal)
    │
    ├── /etc/caddy/gallery-templates/<clean name> exists?
-   │     ├── YES → parse that file directly (CSS+JS are inside it)
+   │     ├── YES to parse that file directly (CSS+JS are inside it)
    │     │         (the on-disk file is the active template)
-   │     └── NO  → use the bundled galleryTemplate constant
+   │     └── NO  to use the bundled galleryTemplate constant
    │
    └── return *template.Template ready to RenderPage
 ```
@@ -129,9 +129,9 @@ The template engine has a few helper functions registered:
 
 | Func | Signature | What it does |
 |---|---|---|
-| `minus1` | `minus1 n int → int` | Returns `n - 1`. Used for prev-page link targets. |
-| `plus1` | `plus1 n int → int` | Returns `n + 1`. Used for next-page link targets. |
-| `sortLabel` | `sortLabel field string → string` | Maps a sort field code to its display label: `"name"→"Name"`, `"type"→"Type"`, `"mtime"→"Modified"`, `"size"→"Size"`, `"date"→"Date"`. Unknown fields fall back to the raw field name capitalised. Empty string → `"Modified"` (the default). |
+| `minus1` | `minus1 n int to int` | Returns `n - 1`. Used for prev-page link targets. |
+| `plus1` | `plus1 n int to int` | Returns `n + 1`. Used for next-page link targets. |
+| `sortLabel` | `sortLabel field string to string` | Maps a sort field code to its display label: `"name"to"Name"`, `"type"to"Type"`, `"mtime"to"Modified"`, `"size"to"Size"`, `"date"to"Date"`. Unknown fields fall back to the raw field name capitalised. Empty string to `"Modified"` (the default). |
 
 ## Editing the templates — the basics
 
@@ -212,7 +212,7 @@ rebuild the module (`./build.sh`), restart Caddy (`sudo systemctl
 restart caddy`). The on-disk template is written from the new
 constant on the next startup.
 
-## Upgrading from a pre-inlining install (Phase 16 → Phase 17)
+## Upgrading from a pre-inlining install (Phase 16 to Phase 17)
 
 If your site was running the old 3-file template split
 (`gallery.tmpl` + `style.css` + `lightbox.js`) and you upgraded

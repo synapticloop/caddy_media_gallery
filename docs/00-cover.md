@@ -1,9 +1,5 @@
 ---
 geometry: margin=1in
-header-includes: |
-  \usepackage{graphicx}
-  \usepackage{xcolor}
-  \pagestyle{empty}
 ---
 
 \thispagestyle{empty}

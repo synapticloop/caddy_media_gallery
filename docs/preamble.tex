@@ -1,0 +1,37 @@
+% Preamble for the Caddy Image Gallery docs PDF.
+% Included via pandoc's --include-in-header=preamble.tex
+
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+% Google Fonts (variable fonts from docs/fonts/)
+% Libre Baskerville for body text
+% JetBrains Mono for code blocks
+\usepackage{fontspec}
+
+% Use absolute paths to the fonts. xelatex's working
+% directory may differ from where the fonts live, so
+% relative paths can fail. The Path option strips the
+% leading "/" and fontspec concatenates Path + UprightFont
+% + Extension to find the file.
+\setmainfont{LibreBaskerville-VF}[
+  Path = /home/osmanj/projects/caddy_image_gallery/docs/fonts/,
+  Extension = .ttf,
+  UprightFont    = LibreBaskerville-VF,
+  BoldFont       = LibreBaskerville-VF,
+  ItalicFont     = LibreBaskerville-Italic-VF,
+  BoldItalicFont = LibreBaskerville-Italic-VF
+]
+\setmonofont{JetBrainsMono-VF}[
+  Path = /home/osmanj/projects/caddy_image_gallery/docs/fonts/,
+  Extension = .ttf,
+  UprightFont    = JetBrainsMono-VF,
+  BoldFont       = JetBrainsMono-VF,
+  ItalicFont     = JetBrainsMono-Italic-VF,
+  BoldItalicFont = JetBrainsMono-Italic-VF
+]
+
+% Math font for math symbols Libre Baskerville doesn't have
+% (>=, ->, etc.). Latin Modern Math is part of TeX Live and
+% covers all the standard math operators.
+\setmathfont{Latin Modern Math}

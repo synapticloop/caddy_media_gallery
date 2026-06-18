@@ -18,15 +18,15 @@ Inside an `image_gallery { ... }` block:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
-| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](04-sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
+| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination to Aliases](04-sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
-| `page_size` | integer ≥ 1 | `50` | Image entries per page. Nav only renders when `total pages > 1`. |
-| `thumb_width` | integer ≥ 1 | `320` | Max width in pixels. Source is fit-within-bounds. |
-| `thumb_height` | integer ≥ 1 | `320` | Max height in pixels. Source is fit-within-bounds. |
+| `page_size` | integer &gt;= 1 | `50` | Image entries per page. Nav only renders when `total pages > 1`. |
+| `thumb_width` | integer &gt;= 1 | `320` | Max width in pixels. Source is fit-within-bounds. |
+| `thumb_height` | integer &gt;= 1 | `320` | Max height in pixels. Source is fit-within-bounds. |
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
-| `cache_scan` | integer ≥ 1 | `1` | Scan cache TTL in minutes. |
-| `thumb_ttl` | integer ≥ 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
+| `cache_scan` | integer &gt;= 1 | `1` | Scan cache TTL in minutes. |
+| `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
 
 **Full Caddyfile example** (every directive set):
 
@@ -78,9 +78,9 @@ producer to set them:
 
 | Param | Values | Default | Effect |
 |---|---|---|---|
-| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](04-sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
+| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination to Aliases](04-sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
 | `order` | `asc` / `desc` | depends on `sort` | Sort direction |
-| `page` | integer ≥ 1 | `1` | Which page (only meaningful when `page_size` causes pagination) |
+| `page` | integer &gt;= 1 | `1` | Which page (only meaningful when `page_size` causes pagination) |
 
 **Deliberately NOT query-overridable:**
 - `?page_size=N` — would let users request arbitrarily large pages and could DOS the server
@@ -99,7 +99,7 @@ The page size, format, and thumb dimensions are set in the Caddyfile only.
 
 A second env var exists in the code for testing only: `GALLERY_THUMB_CACHE_DIR` (default `/var/cache/caddy-gallery`) — not documented as a user-facing knob.
 
-See [configuration.md → Environment variables](01-configuration.md#environment-variables) for the full setup story (systemd unit, dev workflow, failure mode).
+See [configuration.md to Environment variables](01-configuration.md#environment-variables) for the full setup story (systemd unit, dev workflow, failure mode).
 
 ---
 

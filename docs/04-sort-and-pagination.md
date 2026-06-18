@@ -11,7 +11,7 @@ view on every visit.
 |---|---|---|---|
 | `?sort=` | `name` / `type` / `size` / `mtime` | `mtime` | What field to sort images by. The URL also accepts `?sort=date` (treated as `?sort=mtime`) for back-compat. See "Aliases" below. |
 | `?order=` | `asc` / `desc` | `desc` | Sort direction. `desc` for `mtime` is newest-first; `desc` for `name`/`type`/`size` is Z-A / largest-first. |
-| `?page=` | integer ≥ 1 | `1` | Which page of results to show. 1-based. Out-of-range or non-numeric values fall back to 1. |
+| `?page=` | integer &gt;= 1 | `1` | Which page of results to show. 1-based. Out-of-range or non-numeric values fall back to 1. |
 
 The URL parameter is preserved across sort changes: clicking
 "Name" on `?sort=mtime&order=desc&page=2` becomes
