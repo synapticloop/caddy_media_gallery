@@ -945,6 +945,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   z-index: 1;
   font-family: inherit;
   user-select: none;
+  /* Per user request 2026-06-18: dark border so the button
+     stands out more. The button has a light translucent bg
+     (rgba(255,255,255,0.85)), so a dark border is visible
+     in BOTH light and dark modes (the bg stays light over
+     any page bg). */
+  border: 2px solid #000;
 }
 .card:hover .open-btn,
 .open-btn:hover,
@@ -1117,6 +1123,34 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 #gallery-lightbox .lb-close { top: 1rem; right: 1.5rem; }
 #gallery-lightbox .lb-prev { left: 1.5rem; top: 50%; transform: translateY(-50%); }
 #gallery-lightbox .lb-next { right: 1.5rem; top: 50%; transform: translateY(-50%); }
+/* Open-in-new-tab button in the lightbox. Per user request
+   2026-06-18. Styled like the .open-btn on tiles (light bg +
+   dark border) so the visitor sees the same affordance
+   inside the lightbox. Positioned to the left of lb-close. */
+#gallery-lightbox .lb-open {
+  position: absolute;
+  top: 1rem;
+  right: 4.5rem; /* leaves room for lb-close (1.5rem + 28px ≈ 3.2rem + gap) */
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a26;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 2px 1px; /* optical centering for ↗ glyph */
+  font-family: inherit;
+  border: 2px solid #000;
+  z-index: 2;
+}
+#gallery-lightbox .lb-open:hover {
+  background: #fff;
+  transform: scale(1.05);
+}
 #gallery-lightbox .lb-caption {
   position: absolute;
   bottom: 1.5rem;
@@ -1274,6 +1308,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     '<button class="lb-btn lb-close" aria-label="Close">×</button>' +
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
+    '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>';
   document.body.appendChild(overlay);
@@ -1380,6 +1415,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   overlay.querySelector('.lb-close').addEventListener('click', close);
   overlay.querySelector('.lb-prev').addEventListener('click', function() { show(idx - 1); });
   overlay.querySelector('.lb-next').addEventListener('click', function() { show(idx + 1); });
+  // Open-in-new-tab: opens the current image/video URL in a new
+  // tab. Uses cards[idx].href (the same href that show() set on
+  // currentEl). window.open with _blank is the standard way; the
+  // noopener/noreferrer flags prevent the new tab from accessing
+  // window.opener (security best practice).
+  overlay.querySelector('.lb-open').addEventListener('click', function() {
+    if (cards.length === 0) return;
+    var href = cards[idx].getAttribute('href') || '';
+    if (href) window.open(href, '_blank', 'noopener,noreferrer');
+  });
   media.addEventListener('click', function(e) { e.stopPropagation(); show(idx + 1); });
   document.addEventListener('keydown', function(e) {
     if (!overlay.classList.contains('open')) return;
