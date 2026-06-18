@@ -610,8 +610,9 @@ const galleryTemplate = `<!DOCTYPE html>
   --fg-disabled: #bbbbbb;    /* disabled text (page-btn.disabled) */
   --border: #e5e9ea;         /* standard border */
   --border-strong: #d0d4d6;  /* hover border */
-  --accent: #006ed3;         /* accent color (links, active sort, page-btn.active, card hover) */
+  --accent: #006ed3;         /* accent color (links, card hover border) */
   --accent-hover: #0095e4;   /* accent hover */
+  --accent-bg: #006ed3;      /* button-background accent (active sort/page btns); darker in dark mode to fit the aesthetic */
   --shadow: rgba(0, 0, 0, 0.05);  /* standard shadow */
   --shadow-strong: rgba(0, 0, 0, 0.15); /* strong shadow (lightbox) */
 }
@@ -645,6 +646,13 @@ const galleryTemplate = `<!DOCTYPE html>
     --border-strong: #444444;
     --accent: #4dabff;
     --accent-hover: #6b9fd8;
+    /* accent-bg in dark mode is intentionally darker than --accent
+       (which is light blue for text + borders). A bright accent as
+       a button fill on a dark page looks glaring; the muted
+       #3b6fb6 is more in keeping with the dark aesthetic. The
+       active sort/page buttons use --accent-bg (not --accent)
+       for their fill. */
+    --accent-bg: #3b6fb6;
     --shadow: rgba(0, 0, 0, 0.3);
     --shadow-strong: rgba(0, 0, 0, 0.5);
   }
@@ -669,6 +677,7 @@ const galleryTemplate = `<!DOCTYPE html>
   --border-strong: #444444;
   --accent: #4dabff;
   --accent-hover: #6b9fd8;
+  --accent-bg: #3b6fb6;
   --shadow: rgba(0, 0, 0, 0.3);
   --shadow-strong: rgba(0, 0, 0, 0.5);
 }
@@ -859,8 +868,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .sort-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .sort-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  /* Uses --accent-bg (not --accent) for the bg fill so the
+     active sort button is muted/darker in dark mode while
+     --accent stays light blue for text + borders. */
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
   color: white;
   font-weight: 500;
 }
@@ -1019,9 +1031,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   /* The currently-selected page in the Google-style pagination.
      Same shape as a normal page-btn but inverted colors so it's
      distinguishable at a glance (matches the sort-btn.active
-     style). Uses var(--accent) so it auto-adapts to dark mode. */
-  background: var(--accent);
-  border-color: var(--accent);
+     style). Uses --accent-bg so it's muted/darker in dark mode. */
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
   color: white;
   cursor: default;
   pointer-events: none;
