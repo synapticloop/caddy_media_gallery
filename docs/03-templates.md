@@ -300,3 +300,79 @@ browser inspector before saving.
 **Got a 500 immediately after upgrading.** You have the
 pre-inlining on-disk `gallery.tmpl` from a previous build.
 See the "Upgrading from a pre-inlining install" section above.
+
+
+## Dark mode + theme toggle
+
+The template supports three themes:
+
+1. **Auto** (default) — follows the visitor's OS preference via the
+   `prefers-color-scheme` CSS media query. macOS, Windows, iOS,
+   and Android all expose this preference; if the visitor's OS is
+   in dark mode, the gallery renders in dark mode automatically.
+2. **Light** — forces light mode regardless of OS preference.
+3. **Dark** — forces dark mode regardless of OS preference.
+
+The choice is presented as a small toggle button group in the page
+header (top-right area), next to the sort UI. Three buttons:
+Three buttons: a gear icon (Auto), a sun icon (Light), a moon icon (Dark). The current state is marked
+with `aria-pressed="true"` and a slightly inset background.
+
+The choice persists across visits via `localStorage` under the key
+`gallery-theme`. Values stored: `auto` | `light` | `dark`. `auto`
+is the default (no attribute set on `<html>`); `light` and `dark`
+set the `data-theme` attribute on `<html>`.
+
+### No flash of wrong theme
+
+There's a tiny inline `<script>` in the `<head>` that reads
+`localStorage` and applies the `data-theme` attribute to `<html>`
+BEFORE the body paints. This runs synchronously during HTML parsing,
+so the CSS already sees the right theme when the body renders. No
+flash of light theme when the visitor has chosen dark.
+
+### How dark mode is implemented
+
+All colors are defined as CSS custom properties (CSS variables) in
+the `:root` selector at the top of the template's `<style>` block.
+There are ~15 tokens: `--bg`, `--bg-card`, `--bg-chip`, `--bg-hover`,
+`--bg-active`, `--fg`, `--fg-muted`, `--fg-faint`, `--fg-disabled`,
+`--border`, `--border-strong`, `--accent`, `--accent-hover`, `--shadow`,
+`--shadow-strong`.
+
+The dark mode override is just a second block of token assignments
+that applies when:
+
+- `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { ... } }`
+  — the OS is in dark mode AND the user hasn't explicitly picked
+  light. The `:not([data-theme="light"])` selector is what makes
+  the "Auto" state work: when the OS is dark but the user picked
+  Light, the dark tokens don't apply.
+- `[data-theme="dark"] { ... }` — manual dark mode regardless of
+  OS preference. Triggered by clicking the moon icon; choice
+  persists in localStorage.
+
+### Customizing colors
+
+To override a color, edit the on-disk template at
+`/etc/caddy/gallery-templates/gallery.tmpl` and change the token
+value in the `:root` block. For example, to make the accent color
+green instead of blue:
+
+```css
+:root {
+  --accent: #2e8b57;       /* was #006ed3 */
+  --accent-hover: #3aa86a; /* was #0095e4 */
+}
+```
+
+To add a new dark-mode-specific color, define it in all three
+blocks (`:root`, the media query, and `[data-theme="dark"]`).
+
+### Lightbox (always dark)
+
+The lightbox overlay (the full-screen image/video viewer) has its
+own dark colors that are theme-independent — the dark background
+and white controls work in both modes. This is intentional: a dark
+overlay focuses attention on the content regardless of the page
+theme.

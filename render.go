@@ -567,10 +567,27 @@ func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs b
 const galleryTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="color-scheme" content="light">
-<title>{{.Title}}</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <!-- No-flash-of-wrong-theme: read the visitor's saved
+       preference from localStorage and apply it to <html>
+       BEFORE the page paints. This runs synchronously in the
+       <head> so the CSS already sees the correct data-theme
+       attribute when the body renders. Without this, a visitor
+       who picked "Dark" would briefly see a flash of light
+       theme on each page load before the JS at the bottom of
+       the page applies the saved choice. -->
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('gallery-theme');
+        if (t === 'light' || t === 'dark') {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+      } catch (e) { /* localStorage unavailable */ }
+    })();
+  </script>
 <style>
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -607,7 +624,12 @@ const galleryTemplate = `<!DOCTYPE html>
   :root:not([data-theme="light"]) {
     --bg: #1a1a1a;
     --bg-card: #252525;
-    --bg-chip: #2a2a2a;
+    /* chip bg in dark mode is intentionally CLOSE to the page bg
+       (only 2-3% lighter) so chips don't stand out as a brighter
+       element; the border + text color do the visual work. Per
+       user feedback 2026-06-18, the previous #2a2a2a was 'too
+       light for the page'. */
+    --bg-chip: #1d1d1d;
     --bg-hover: #333333;
     --bg-active: #2a2a2a;
     --fg: #e5e5e5;
@@ -628,7 +650,7 @@ const galleryTemplate = `<!DOCTYPE html>
 [data-theme="dark"] {
   --bg: #1a1a1a;
   --bg-card: #252525;
-  --bg-chip: #2a2a2a;
+  --bg-chip: #1d1d1d;
   --bg-hover: #333333;
   --bg-active: #2a2a2a;
   --fg: #e5e5e5;
@@ -714,7 +736,7 @@ h1 {
 }
 .meta {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--fg-muted);
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
@@ -746,7 +768,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #888;
+  color: var(--fg-muted);
   margin-bottom: 0.75rem;
 }
 .chip-row {
@@ -932,7 +954,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .tile-name {
   font-size: 0.8rem;
   font-weight: 500;
-  color: #222;
+  color: var(--fg);
   padding: 0.5rem 0.6rem 0.15rem;
   white-space: nowrap;
   overflow: hidden;
@@ -945,7 +967,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   padding: 0.15rem 0.6rem 0.5rem;
   font-size: 0.7rem;
-  color: #888;
+  color: var(--fg-faint);
   font-variant-numeric: tabular-nums;
 }
 .tile-meta-info {
@@ -998,7 +1020,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .page-btn.disabled {
   color: var(--fg-disabled);
-  background: #fafbfc;
+  background: var(--bg-card);
   cursor: not-allowed;
   pointer-events: none;
 }
@@ -1007,7 +1029,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      page-btn text but no border or background — just a visual
      separator between the numbered buttons. */
   padding: 0.4rem 0.25rem;
-  color: #888;
+  color: var(--fg-faint);
   user-select: none;
 }
 .page-info {
@@ -1017,7 +1039,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .empty {
   padding: 2rem;
   text-align: center;
-  color: #888;
+  color: var(--fg-faint);
 }
 @media (max-width: 600px) {
   body { padding: 1rem 0.5rem 3rem; }
