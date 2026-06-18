@@ -18,7 +18,7 @@ Inside an `image_gallery { ... }` block:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
-| `sort` | `mtime` / `name` | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
+| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
 | `page_size` | integer ≥ 1 | `50` | Image entries per page. Nav only renders when `total pages > 1`. |
@@ -78,7 +78,7 @@ producer to set them:
 
 | Param | Values | Default | Effect |
 |---|---|---|---|
-| `sort` | `mtime` / `name` / `type` / `size` | inherits from Caddyfile | Sort field |
+| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
 | `order` | `asc` / `desc` | depends on `sort` | Sort direction |
 | `page` | integer ≥ 1 | `1` | Which page (only meaningful when `page_size` causes pagination) |
 

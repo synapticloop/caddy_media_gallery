@@ -9,7 +9,7 @@ view on every visit.
 
 | Param | Values | Default | What it does |
 |---|---|---|---|
-| `?sort=` | `name` / `type` / `size` / `mtime` | `mtime` | What field to sort images by. The URL also accepts `?sort=date` (treated as `?sort=mtime`) for back-compat. |
+| `?sort=` | `name` / `type` / `size` / `mtime` | `mtime` | What field to sort images by. The URL also accepts `?sort=date` (treated as `?sort=mtime`) for back-compat. See "Aliases" below. |
 | `?order=` | `asc` / `desc` | `desc` | Sort direction. `desc` for `mtime` is newest-first; `desc` for `name`/`type`/`size` is Z-A / largest-first. |
 | `?page=` | integer ≥ 1 | `1` | Which page of results to show. 1-based. Out-of-range or non-numeric values fall back to 1. |
 
@@ -82,6 +82,49 @@ falls back to `?page=1`.
 /images/?page=3                    # third page of default sort
 /images/?sort=type&order=asc&page=2
 ```
+
+## Aliases
+
+`?sort=date` is an alias for `?sort=mtime` — both sort by
+the file's modification time. The two values produce
+identical results:
+
+```
+/images/?sort=date&order=desc    # == /images/?sort=mtime&order=desc
+/images/?sort=date&order=asc     # == /images/?sort=mtime&order=asc
+```
+
+**Why have the alias?** The two names describe the same
+thing from different angles — "mtime" is the technical
+field name (modification time, from the filesystem), "date"
+is the user-friendly name (the date the file was last
+changed). The "Modified" sort button in the UI emits
+`?sort=mtime` (the technical name), but the URL API accepts
+both for back-compat with bookmarks and external links that
+might use either name.
+
+**Implementation:** `parseSort` in `render.go` accepts
+`"date"` in its switch statement and treats it identically
+to `"mtime"`:
+
+```go
+switch field {
+case "name", "type", "date", "mtime", "size":
+    // all valid; "date" is an alias for "mtime"
+default:
+    field = "mtime" // unknown fields fall back to the default
+}
+```
+
+In `sortFiles`, both `"mtime"`, `"date"`, and `""` (the empty
+default) share the same sort branch — sort by `ModTime` per
+the `order` param. So functionally there's no distinction
+between them.
+
+**When to use which:** if you're writing a new integration
+or bookmark, prefer `?sort=mtime` (it's the canonical name
+and what the UI button emits). `?sort=date` is fine too —
+just pick one and stick with it for consistency.
 
 ## Stability guarantees
 
