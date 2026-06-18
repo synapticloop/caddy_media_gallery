@@ -1002,53 +1002,62 @@ func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
 	}
 }
 
-// TestRenderPage_TotalOtherFilesSize verifies the header meta
-// shows the pre-formatted total size of all "other files"
-// in parentheses after the other-files count. Per user
-// request 2026-06-18 (Phase 43): "2 other files (size)" —
-// the size is now grouped with OTHER FILES (not with
-// images), so the user can see at a glance how much
-// non-media content (config files, sidecar metadata,
-// etc.) is in the gallery.
-// The size is pre-formatted via humanSize() — B / KB / MB / GB.
-func TestRenderPage_TotalOtherFilesSize(t *testing.T) {
+// TestRenderPage_TotalAllFilesSize verifies the header meta
+// shows the pre-formatted total size of ALL files (images +
+// other files) in a separate segment wrapped in //
+// separators. Per user request 2026-06-18 (Phase 44):
+//
+//	"the X.X KB is the total for all files in the directory"
+//
+// The size is shown as `// (size) //` between the file
+// counts and the directories count, visually distinct from
+// the regular `·` separator. Pre-formatted via humanSize() —
+// B / KB / MB / GB.
+func TestRenderPage_TotalAllFilesSize(t *testing.T) {
+	// Use a mix of KindImage and KindOther files to verify
+	// the size covers BOTH types (not just other files like
+	// Phase 43, not just images like Phase 37).
 	cases := []struct {
-		name      string
-		sizes     []int64
-		wantTotal string
+		name       string
+		imageSizes []int64
+		otherSizes []int64
+		wantTotal  string
 	}{
 		{
-			name:      "single small file: 100 B",
-			sizes:     []int64{100},
-			wantTotal: "100 B",
+			name:       "small mix: 1 image (500 B) + 2 others (500 B) = 1.5 KB",
+			imageSizes: []int64{500},
+			otherSizes: []int64{500, 500},
+			wantTotal:  "1.5 KB",
 		},
 		{
-			name:      "kilobyte-range: 5 * 1 KB",
-			sizes:     []int64{1024, 1024, 1024, 1024, 1024},
-			wantTotal: "5.0 KB",
+			name:       "kilobyte-range: 5 * 1 KB images = 5.0 KB",
+			imageSizes: []int64{1024, 1024, 1024, 1024, 1024},
+			otherSizes: nil,
+			wantTotal:  "5.0 KB",
 		},
 		{
-			name:      "megabyte-range: 100 * 100 KB",
-			sizes:     make100KB(100),
-			wantTotal: "9.8 MB", // 100 * 100 KB = 9.77... MB, rounded to 9.8
+			name:       "megabyte-range: 100 images * 100 KB + 10 others * 1 KB",
+			imageSizes: make100KB(100),
+			otherSizes: []int64{1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 1024},
+			wantTotal:  "9.8 MB", // (100*100KB + 10*1KB) = ~9.8 MB
 		},
 		{
-			// 1000 files * 1000 MB each = 976.56 GB total
+			// 1000 images * 1000 MB each = 976.56 GB total
 			// (humanSize uses 1024-based units, not 1000-based).
-			name:      "gigabyte-range: 1000 * 1000 MB (=> 976.56 GB)",
-			sizes:     make1000MB(1000),
-			wantTotal: "976.56 GB",
+			name:       "gigabyte-range: 1000 * 1000 MB (=> 976.56 GB)",
+			imageSizes: make1000MB(1000),
+			otherSizes: nil,
+			wantTotal:  "976.56 GB",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			files := make([]FileInfo, len(tc.sizes))
-			// Use KindOther for these files (not KindImage) since
-			// the size we're testing is the OTHER FILES size. The
-			// file names use .json / .txt suffixes so splitFiles
-			// classifies them as KindOther.
-			for i, s := range tc.sizes {
-				files[i] = FileInfo{Name: fmt.Sprintf("meta-%d.json", i), ModTime: int64(i), Size: s, Kind: KindOther}
+			var files []FileInfo
+			for i, s := range tc.imageSizes {
+				files = append(files, FileInfo{Name: fmt.Sprintf("img-%d.jpg", i), ModTime: int64(i), Size: s, Kind: KindImage})
+			}
+			for i, s := range tc.otherSizes {
+				files = append(files, FileInfo{Name: fmt.Sprintf("meta-%d.json", i), ModTime: int64(i + 1000), Size: s, Kind: KindOther})
 			}
 			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
 			if err != nil {
@@ -1057,19 +1066,30 @@ func TestRenderPage_TotalOtherFilesSize(t *testing.T) {
 			metaStart := strings.Index(html, `class="meta"`)
 			metaEnd := strings.Index(html[metaStart:], `</div>`)
 			metaBlock := html[metaStart : metaStart+metaEnd]
-			want := fmt.Sprintf("%d other files (%s)", len(tc.sizes), tc.wantTotal)
-			if !strings.Contains(metaBlock, want) {
-				t.Errorf("expected header to contain %q, got: %q", want, metaBlock)
+			// The size segment is rendered as `//<size>//` with
+			// `//` separators on both sides (each in its own
+			// <span> for the visual `·` vs `//` distinction).
+			// The browser adds visual spacing via the flex
+			// `gap: 0.5rem` on the parent .meta, so the
+			// rendered text is `// (size) //` with gaps.
+			// We assert the size string is present in parens,
+			// AND the `//` separator appears on both sides.
+			wantParens := fmt.Sprintf("(%s)", tc.wantTotal)
+			if !strings.Contains(metaBlock, wantParens) {
+				t.Errorf("expected header to contain %q, got: %q", wantParens, metaBlock)
 			}
-			// And images should NOT have the size anymore.
-			if strings.Contains(metaBlock, "images (") {
-				t.Errorf("expected 'N images' (no size), got: %q", metaBlock)
+			if strings.Count(metaBlock, "//</span>") < 2 {
+				t.Errorf("expected at least 2 `//` separator spans in header, got: %q", metaBlock)
+			}
+			// The old per-count size formats should NOT appear.
+			if strings.Contains(metaBlock, "images (") || strings.Contains(metaBlock, "other files (") {
+				t.Errorf("expected NO size attached to file counts (size is a separate segment now), got: %q", metaBlock)
 			}
 		})
 	}
 }
 
-// Helpers for TestRenderPage_TotalOtherFilesSize
+// Helpers for TestRenderPage_TotalAllFilesSize
 func make100KB(n int) []int64 {
 	out := make([]int64, n)
 	for i := range out {
