@@ -786,7 +786,7 @@ h1 {
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s;
 }
-a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: var(--accent); }
+a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: #006ed3; }
 .sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; }
 .section {
   padding: 1.25rem 2rem;
@@ -1123,18 +1123,33 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 #gallery-lightbox .lb-close { top: 1rem; right: 1.5rem; }
 #gallery-lightbox .lb-prev { left: 1.5rem; top: 50%; transform: translateY(-50%); }
 #gallery-lightbox .lb-next { right: 1.5rem; top: 50%; transform: translateY(-50%); }
-/* Open-in-new-tab button in the lightbox. Per user request
-   2026-06-18. Styled like the .open-btn on tiles (light bg +
-   dark border) so the visitor sees the same affordance
-   inside the lightbox. Positioned to the left of lb-close. */
-#gallery-lightbox .lb-open {
+/* Lightbox controls container — wraps the "open in new tab"
+   and "close" buttons in a rounded pill. Per user request
+   2026-06-18: the two buttons should be aligned (same y,
+   same size, in a flex container) inside a rounded box with
+   a visible background. The pill sits at top-right of the
+   lightbox, just above where lb-prev/next are on the sides. */
+#gallery-lightbox .lb-controls {
   position: absolute;
   top: 1rem;
-  right: 4.5rem; /* leaves room for lb-close (1.5rem + 28px ≈ 3.2rem + gap) */
-  width: 32px;
-  height: 32px;
-  border-radius: 4px;
+  right: 1.5rem;
+  display: flex;
+  gap: 0;
+  padding: 4px;
   background: rgba(255, 255, 255, 0.92);
+  border: 2px solid #000;
+  border-radius: 10px;
+  z-index: 2;
+}
+#gallery-lightbox .lb-controls .lb-btn {
+  /* Override the default .lb-btn positioning — they're now in
+     a flex container, so they're laid out by flex not absolute.
+     Also: no individual bg/border (the container provides those). */
+  position: static;
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
   color: #1a1a26;
   font-size: 1.1rem;
   line-height: 1;
@@ -1142,14 +1157,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0 2px 1px; /* optical centering for ↗ glyph */
+  padding: 0;
+  border-radius: 6px;
   font-family: inherit;
-  border: 2px solid #000;
-  z-index: 2;
+  transition: background 0.12s;
 }
-#gallery-lightbox .lb-open:hover {
-  background: #fff;
-  transform: scale(1.05);
+#gallery-lightbox .lb-controls .lb-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
 }
 #gallery-lightbox .lb-caption {
   position: absolute;
@@ -1305,10 +1319,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
   overlay.innerHTML =
-    '<button class="lb-btn lb-close" aria-label="Close">×</button>' +
+    '<div class="lb-controls">' +
+      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
+      '<button class="lb-btn lb-close" aria-label="Close" title="Close">×</button>' +
+    '</div>' +
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
-    '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>';
   document.body.appendChild(overlay);
