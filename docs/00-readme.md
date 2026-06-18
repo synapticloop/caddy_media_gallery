@@ -9,10 +9,10 @@ and a separate "Other files" strip above.
 
 | Doc | What it covers |
 |---|---|
-| [Configuration reference](configuration-reference.md) | One-page index of every config knob (directives, JSON, env vars, query params, in-code constants) |
-| [Configuration](configuration.md) | The `image_gallery` Caddyfile directive, JSON config, env vars |
-| [Templates](templates.md) | How the templates work, what variables you can use, how to customize |
-| [Sort & Pagination](sort-and-pagination.md) | The `?sort=`, `?order=`, `?page=` URL API |
+| [Configuration reference](02-configuration-reference.md) | One-page index of every config knob (directives, JSON, env vars, query params, in-code constants) |
+| [Configuration](01-configuration.md) | The `image_gallery` Caddyfile directive, JSON config, env vars |
+| [Templates](03-templates.md) | How the templates work, what variables you can use, how to customize |
+| [Sort & Pagination](04-sort-and-pagination.md) | The `?sort=`, `?order=`, `?page=` URL API |
 
 ## Quick start
 
@@ -44,7 +44,7 @@ fall through to `file_server` so the originals serve as-is.
 
 - **Project root:** `~/projects/caddy_image_gallery/` (wherever you cloned it — adjust paths below to match)
 - **Templates dir (auto-created on first startup):**
-  `/etc/caddy/gallery-templates/` — see [Templates](templates.md)
+  `/etc/caddy/gallery-templates/` — see [Templates](03-templates.md)
 - **Thumb cache:** `/var/cache/caddy-gallery/<sha256>.webp`
 - **Plan / design:** `~/.hermes/plans/2026-06-13_154500-caddy_image_gallery.md`
 - **Wiki page:** `~/.wiki/projects/caddy_image_gallery.md`

@@ -163,10 +163,11 @@ your.caddy.host:443 {
 
 Detailed operator documentation lives in [`docs/`](docs/):
 
-- [docs/README.md](docs/README.md) — index
-- [docs/configuration.md](docs/configuration.md) — Caddyfile directive, JSON config, env vars
-- [docs/templates.md](docs/templates.md) — template structure, all template variables, how to override
-- [docs/sort-and-pagination.md](docs/sort-and-pagination.md) — the `?sort=&order=&page=` URL API
+- [docs/00-readme.md](docs/00-readme.md) — index
+- [docs/01-configuration.md](docs/01-configuration.md) — Caddyfile directive, JSON config, env vars
+- [docs/02-configuration-reference.md](docs/02-configuration-reference.md) — one-page reference of every config knob
+- [docs/03-templates.md](docs/03-templates.md) — template structure, all template variables, how to override
+- [docs/04-sort-and-pagination.md](docs/04-sort-and-pagination.md) — the `?sort=&order=&page=` URL API
 
 ## License
 

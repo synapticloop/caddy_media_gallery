@@ -6,9 +6,9 @@ configure" reference; for how to use individual features, see the
 per-topic docs linked below.
 
 For per-topic deep dives:
-- [configuration.md](configuration.md) — Caddyfile directive details + env vars
-- [templates.md](templates.md) — the template file + variables
-- [sort-and-pagination.md](sort-and-pagination.md) — the URL query API
+- [configuration.md](01-configuration.md) — Caddyfile directive details + env vars
+- [templates.md](03-templates.md) — the template file + variables
+- [sort-and-pagination.md](04-sort-and-pagination.md) — the URL query API
 
 ---
 
@@ -18,7 +18,7 @@ Inside an `image_gallery { ... }` block:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
-| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
+| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](04-sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
 | `page_size` | integer ≥ 1 | `50` | Image entries per page. Nav only renders when `total pages > 1`. |
@@ -78,7 +78,7 @@ producer to set them:
 
 | Param | Values | Default | Effect |
 |---|---|---|---|
-| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
+| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination → Aliases](04-sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
 | `order` | `asc` / `desc` | depends on `sort` | Sort direction |
 | `page` | integer ≥ 1 | `1` | Which page (only meaningful when `page_size` causes pagination) |
 
@@ -99,7 +99,7 @@ The page size, format, and thumb dimensions are set in the Caddyfile only.
 
 A second env var exists in the code for testing only: `GALLERY_THUMB_CACHE_DIR` (default `/var/cache/caddy-gallery`) — not documented as a user-facing knob.
 
-See [configuration.md → Environment variables](configuration.md#environment-variables) for the full setup story (systemd unit, dev workflow, failure mode).
+See [configuration.md → Environment variables](01-configuration.md#environment-variables) for the full setup story (systemd unit, dev workflow, failure mode).
 
 ---
 

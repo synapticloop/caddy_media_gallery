@@ -49,7 +49,7 @@ the direction that's the "natural" opposite of the current
 order (so you don't get the same direction twice in a row).
 
 The button labels are produced by the `sortLabel` template
-function (see the [Templates](templates.md) doc for the full
+function (see the [Templates](03-templates.md) doc for the full
 map). To add a new sort field:
 
 1. Add a `case` to `sortLabel` in `render.go`

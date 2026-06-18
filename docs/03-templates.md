@@ -31,7 +31,7 @@ loadTemplate(name string) reads $GALLERY_TEMPLATES_DIR
 
 The `template` Caddyfile directive is the operator-facing knob
 that picks the template file. See
-[`docs/configuration.md`](configuration.md) for the directive
+[`docs/configuration.md`](01-configuration.md) for the directive
 syntax and the path-traversal protection details.
 
 **Note on `no_thumbs`:** the template is unaffected by the
