@@ -574,7 +574,108 @@ const galleryTemplate = `<!DOCTYPE html>
 <style>
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { background: #f3f6f7; color: #333; }
+/* === COLOR TOKENS ============================================
+   Defined as CSS custom properties so dark mode is a single
+   override block, not a CSS duplication exercise. The light
+   values are the defaults; dark overrides come via either the
+   prefers-color-scheme media query (auto) or [data-theme="dark"]
+   (manual override via the in-page toggle, persists in
+   localStorage). */
+:root {
+  --bg: #f3f6f7;             /* page background */
+  --bg-card: #ffffff;        /* card/chip background (sort UI, page-btn, dirs-row) */
+  --bg-chip: #f3f6f7;        /* subtle chip background (dirs, sort indicator, theme toggle) */
+  --bg-hover: #e5e9ea;       /* hover background for chips */
+  --bg-active: #f3f6f7;      /* active/selected chip background */
+  --fg: #111111;             /* primary text */
+  --fg-muted: #666666;       /* secondary text (meta, sort labels) */
+  --fg-faint: #888888;       /* tertiary text (page-info) */
+  --fg-disabled: #bbbbbb;    /* disabled text (page-btn.disabled) */
+  --border: #e5e9ea;         /* standard border */
+  --border-strong: #d0d4d6;  /* hover border */
+  --accent: #006ed3;         /* accent color (links, active sort, page-btn.active, card hover) */
+  --accent-hover: #0095e4;   /* accent hover */
+  --shadow: rgba(0, 0, 0, 0.05);  /* standard shadow */
+  --shadow-strong: rgba(0, 0, 0, 0.15); /* strong shadow (lightbox) */
+}
+/* Auto dark mode: applies when the visitor's OS is in dark mode,
+   UNLESS they have explicitly chosen "light" (overrides the media
+   query). The :not([data-theme="light"]) selector is the trick
+   that makes "Auto" mode work: when the OS is dark but the user
+   picked Light, this block doesn't apply. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1a1a;
+    --bg-card: #252525;
+    --bg-chip: #2a2a2a;
+    --bg-hover: #333333;
+    --bg-active: #2a2a2a;
+    --fg: #e5e5e5;
+    --fg-muted: #aaaaaa;
+    --fg-faint: #888888;
+    --fg-disabled: #666666;
+    --border: #333333;
+    --border-strong: #444444;
+    --accent: #4dabff;
+    --accent-hover: #6b9fd8;
+    --shadow: rgba(0, 0, 0, 0.3);
+    --shadow-strong: rgba(0, 0, 0, 0.5);
+  }
+}
+/* Manual dark override: applies regardless of OS preference.
+   Triggered by clicking the moon icon in the header; the choice
+   is stored in localStorage and read on page load. */
+[data-theme="dark"] {
+  --bg: #1a1a1a;
+  --bg-card: #252525;
+  --bg-chip: #2a2a2a;
+  --bg-hover: #333333;
+  --bg-active: #2a2a2a;
+  --fg: #e5e5e5;
+  --fg-muted: #aaaaaa;
+  --fg-faint: #888888;
+  --fg-disabled: #666666;
+  --border: #333333;
+  --border-strong: #444444;
+  --accent: #4dabff;
+  --accent-hover: #6b9fd8;
+  --shadow: rgba(0, 0, 0, 0.3);
+  --shadow-strong: rgba(0, 0, 0, 0.5);
+}
+
+/* === THEME TOGGLE BUTTON GROUP (header) ====================== */
+.theme-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.theme-toggle button {
+  background: transparent;
+  border: 0;
+  padding: 0.3rem 0.55rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+.theme-toggle button:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.theme-toggle button[aria-pressed="true"] {
+  background: var(--bg-card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+html, body { background: var(--bg); color: var(--fg); }
 body {
   font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   font-size: 16px;
@@ -583,19 +684,19 @@ body {
   min-height: 100vh;
   padding: 2rem 1rem 4rem;
 }
-a { color: #006ed3; text-decoration: none; }
-a:hover { color: #0095e4; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
 main {
   max-width: 1200px;
   margin: 0 auto;
-  background: white;
+  background: var(--bg-card);
   border-radius: 5px;
-  box-shadow: 0 2px 5px 1px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 5px 1px var(--shadow);
   overflow: hidden;
 }
 header {
   padding: 1.25rem 2rem 1rem;
-  border-bottom: 1px solid #e5e9ea;
+  border-bottom: 1px solid var(--border);
 }
 .header-top {
   display: flex;
@@ -608,7 +709,7 @@ header {
 h1 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #111;
+  color: var(--fg);
   margin-bottom: 0.25rem;
 }
 .meta {
@@ -618,7 +719,7 @@ h1 {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-.meta span { color: #888; }
+.meta span { color: var(--fg-faint); }
 .sort-indicator {
   flex: 0 0 auto;
   align-self: flex-start;
@@ -633,7 +734,7 @@ h1 {
   white-space: nowrap;
   transition: background 0.12s, border-color 0.12s;
 }
-a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006ed3; }
+a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: var(--accent); }
 .sort-indicator .arrow { margin-left: 0.3rem; font-weight: 600; }
 .section {
   padding: 1.25rem 2rem;
@@ -696,7 +797,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   text-overflow: ellipsis;
   transition: background 0.12s, border-color 0.12s;
 }
-.chip:hover { background: #e5e9ea; border-color: #d0d4d6; color: #006ed3; }
+.chip:hover { background: var(--bg-hover); border-color: var(--border-strong); color: var(--accent); }
 .chip-icon { font-size: 0.95rem; line-height: 1; }
 .dir-chip {
   font-weight: 500;
@@ -714,7 +815,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   padding-top: 0.75rem;
   border-top: 1px solid #e5e9ea;
 }
-.sort-label { color: #888; margin-right: 0.25rem; }
+.sort-label { color: var(--fg-faint); margin-right: 0.25rem; }
 .sort-btn {
   display: inline-flex;
   align-items: center;
@@ -726,14 +827,14 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   background: white;
   transition: background 0.12s, border-color 0.12s;
 }
-.sort-btn:hover { background: #f3f6f7; border-color: #d0d4d6; }
+.sort-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .sort-btn.active {
-  background: #006ed3;
-  border-color: #006ed3;
+  background: var(--accent);
+  border-color: var(--accent);
   color: white;
   font-weight: 500;
 }
-.sort-btn.active:hover { background: #0095e4; border-color: #0095e4; }
+.sort-btn.active:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; }
 .image-grid {
   display: grid;
@@ -751,7 +852,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   color: inherit;
   transition: border-color 0.12s, transform 0.12s;
 }
-.card:hover { border-color: #006ed3; transform: translateY(-1px); }
+.card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .thumb {
   position: relative;
   width: 100%;
@@ -883,7 +984,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   text-decoration: none;
   background: white;
 }
-.page-btn:hover { background: #f3f6f7; border-color: #d0d4d6; }
+.page-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .page-btn.active {
   /* The currently-selected page in the Google-style pagination.
      Same shape as a normal page-btn but inverted colors so it's
@@ -896,7 +997,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
   pointer-events: none;
 }
 .page-btn.disabled {
-  color: #bbb;
+  color: var(--fg-disabled);
   background: #fafbfc;
   cursor: not-allowed;
   pointer-events: none;
@@ -911,7 +1012,7 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
 }
 .page-info {
   padding: 0 0.75rem;
-  color: #666;
+  color: var(--fg-muted);
 }
 .empty {
   padding: 2rem;
@@ -993,6 +1094,12 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
 <main>
   <header>
     <div class="header-top">
+      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+        <button type="button" data-theme="auto" aria-pressed="false" aria-label="Auto (follow system preference)" title="Auto">⚙</button>
+        <button type="button" data-theme="light" aria-pressed="false" aria-label="Light mode" title="Light">☀</button>
+        <button type="button" data-theme="dark" aria-pressed="false" aria-label="Dark mode" title="Dark">🌙</button>
+      </div>
+
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
@@ -1223,7 +1330,64 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
     else if (e.key === 'ArrowLeft') show(idx - 1);
     else if (e.key === 'ArrowRight') show(idx + 1);
   });
-})();
+
+    // === THEME TOGGLE ========================================
+    // 3 states: auto (default, follows OS), light, dark.
+    // The choice persists in localStorage so the visitor doesn't
+    // have to re-pick on every visit. The data-theme attribute
+    // is set on <html> so CSS can target it.
+    (function() {
+      var STORAGE_KEY = 'gallery-theme';
+      var toggle = document.querySelector('.theme-toggle');
+      if (!toggle) return;
+
+      function currentTheme() {
+        var attr = document.documentElement.getAttribute('data-theme');
+        if (attr === 'light' || attr === 'dark') return attr;
+        return 'auto';
+      }
+
+      function applyTheme(theme) {
+        if (theme === 'auto') {
+          document.documentElement.removeAttribute('data-theme');
+        } else {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+        updateButtons();
+      }
+
+      function updateButtons() {
+        var current = currentTheme();
+        var buttons = toggle.querySelectorAll('button[data-theme]');
+        for (var i = 0; i < buttons.length; i++) {
+          var btn = buttons[i];
+          var isActive = btn.dataset.theme === current;
+          btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        }
+      }
+
+      // Apply saved preference (or remove data-theme for 'auto')
+      try {
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === 'light' || saved === 'dark') {
+          document.documentElement.setAttribute('data-theme', saved);
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
+      } catch (e) { /* localStorage unavailable */ }
+      updateButtons();
+
+      // Click handler
+      toggle.addEventListener('click', function(e) {
+        var btn = e.target.closest('button[data-theme]');
+        if (!btn) return;
+        var theme = btn.dataset.theme;
+        applyTheme(theme);
+        try { localStorage.setItem(STORAGE_KEY, theme); } catch (e) {}
+      });
+    })();
+
+    })();
 
 </script>
 </body>
