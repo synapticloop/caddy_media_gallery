@@ -239,15 +239,25 @@ func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 }
 
 // sortFiles sorts a slice of FileInfo by the given spec. The
-// slice is sorted in place. Sort field "mtime" is the natural
-// scan order (already sorted by the scanner); we honour it by
-// NOT re-sorting (the scanner's order is the most recent first).
+// slice is sorted in place. For all fields including "mtime",
+// we sort from scratch here. The scanner DOES pre-sort by
+// mtime desc (its default), so this means a second sort pass
+// for the mtime-desc case — but that pass is O(n log n) on
+// 50-200 items (microseconds) and keeps sortFiles correct
+// regardless of the caller's input order. Earlier this
+// function returned early for "mtime", which (a) silently
+// ignored `order=asc` and (b) was fragile to callers passing
+// pre-sorted data.
 func sortFiles(files []FileInfo, spec SortSpec) {
-	if spec.Field == "mtime" || spec.Field == "" {
-		return // scanner already sorted
-	}
 	asc := spec.Order == "asc"
 	switch spec.Field {
+	case "mtime", "date", "":
+		sort.SliceStable(files, func(i, j int) bool {
+			if asc {
+				return files[i].ModTime < files[j].ModTime
+			}
+			return files[i].ModTime > files[j].ModTime
+		})
 	case "name":
 		sort.SliceStable(files, func(i, j int) bool {
 			ci, cj := strings.ToLower(files[i].Name), strings.ToLower(files[j].Name)
@@ -264,13 +274,6 @@ func sortFiles(files []FileInfo, spec SortSpec) {
 				return ti < tj
 			}
 			return ti > tj
-		})
-	case "date":
-		sort.SliceStable(files, func(i, j int) bool {
-			if asc {
-				return files[i].ModTime < files[j].ModTime
-			}
-			return files[i].ModTime > files[j].ModTime
 		})
 	case "size":
 		sort.SliceStable(files, func(i, j int) bool {

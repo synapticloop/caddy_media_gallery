@@ -1262,3 +1262,76 @@ func TestRenderPage_UpEntryShowsParentDirName(t *testing.T) {
 		})
 	}
 }
+
+// TestSortFiles_MtimeHonorsOrder verifies that sortFiles
+// actually honors the `order` parameter for the "mtime" field.
+// Per the bug reported 2026-06-17 by the user: "sort=mtime&order=asc
+// is not working - it does not sort them". The previous code
+// returned early for "mtime" (because the scanner already sorts
+// by mtime desc), so the asc case was silently ignored.
+func TestSortFiles_MtimeHonorsOrder(t *testing.T) {
+	// Files in a deliberately shuffled order. By ModTime
+	// (asc):  b=2, d=4, a=1, e=5, c=3
+	// By ModTime (desc): e=5, d=4, c=3, b=2, a=1
+	files := []FileInfo{
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "d.jpg", ModTime: 4, Size: 100, Kind: KindImage},
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "e.jpg", ModTime: 5, Size: 100, Kind: KindImage},
+		{Name: "c.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+	}
+	cases := []struct {
+		name      string
+		spec      SortSpec
+		wantOrder []string
+	}{
+		{
+			name:      "mtime asc: oldest first",
+			spec:      SortSpec{Field: "mtime", Order: "asc"},
+			wantOrder: []string{"a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg"},
+		},
+		{
+			name:      "mtime desc: newest first",
+			spec:      SortSpec{Field: "mtime", Order: "desc"},
+			wantOrder: []string{"e.jpg", "d.jpg", "c.jpg", "b.jpg", "a.jpg"},
+		},
+		{
+			name:      "mtime (default order=desc): newest first",
+			spec:      SortSpec{Field: "mtime", Order: ""},
+			wantOrder: []string{"e.jpg", "d.jpg", "c.jpg", "b.jpg", "a.jpg"},
+		},
+		{
+			name:      "empty Field (defaults to mtime): newest first",
+			spec:      SortSpec{Field: "", Order: "desc"},
+			wantOrder: []string{"e.jpg", "d.jpg", "c.jpg", "b.jpg", "a.jpg"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Make a fresh copy of the shuffled input for each
+			// sub-test (sortFiles mutates in place)
+			input := make([]FileInfo, len(files))
+			copy(input, files)
+			sortFiles(input, tc.spec)
+			got := make([]string, len(input))
+			for i, f := range input {
+				got[i] = f.Name
+			}
+			if !equalStrings(got, tc.wantOrder) {
+				t.Errorf("expected %v, got %v", tc.wantOrder, got)
+			}
+		})
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
