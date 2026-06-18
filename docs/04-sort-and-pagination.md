@@ -35,14 +35,14 @@ The header shows the current sort + a reset link:
 
 - On the **default sort** (`mtime desc`), the indicator is a
   plain `<span>` — clicking it would just reload the same page,
-  so it's not a link. It reads `Sort: Modified ↓`.
+  so it's not a link. It reads `Sort: Modified $\downarrow$`.
 - On **any other sort**, the indicator is a link to `?` (no
-  query params, which is the default). It reads e.g. `Sort: Size ↑`.
+  query params, which is the default). It reads e.g. `Sort: Size $\uparrow$`.
 
 ## Sort buttons
 
 The sort bar at the top of the header has four buttons: Name,
-Type, Modified, Size. Each shows a `↑` or `↓` arrow if it's the
+Type, Modified, Size. Each shows a `$\uparrow$` or `$\downarrow$` arrow if it's the
 currently active sort. Clicking the active button toggles the
 order; clicking an inactive button switches to that field at
 the direction that's the "natural" opposite of the current
@@ -66,8 +66,8 @@ visible button.
 configurable via env var or Caddyfile — it's a code constant).
 
 Pagination links in the live template:
-- `‹‹ First` and `‹ Prev` (when `{{.HasPrev}}`)
-- `Next ›` and `Last ››` (when `{{.HasNext}}`)
+- The "First" and "Prev" pagination buttons (rendered by the template with double- and single-left-arrow icons, when `{{.HasPrev}}` is true)
+- The "Next" and "Last" pagination buttons (single- and double-right-arrow icons, rendered when `{{.HasNext}}` is true)
 - Current page indicator in the middle
 
 The page numbers in the URL are 1-based, not 0-based. `?page=0`

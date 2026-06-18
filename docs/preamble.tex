@@ -8,12 +8,6 @@
 % Libre Baskerville for body text
 % JetBrains Mono for code blocks
 \usepackage{fontspec}
-
-% Use absolute paths to the fonts. xelatex's working
-% directory may differ from where the fonts live, so
-% relative paths can fail. The Path option strips the
-% leading "/" and fontspec concatenates Path + UprightFont
-% + Extension to find the file.
 \setmainfont{LibreBaskerville-VF}[
   Path = /home/osmanj/projects/caddy_image_gallery/docs/fonts/,
   Extension = .ttf,
@@ -30,8 +24,40 @@
   ItalicFont     = JetBrainsMono-Italic-VF,
   BoldItalicFont = JetBrainsMono-Italic-VF
 ]
-
-% Math font for math symbols Libre Baskerville doesn't have
-% (>=, ->, etc.). Latin Modern Math is part of TeX Live and
-% covers all the standard math operators.
 \setmathfont{Latin Modern Math}
+
+% Light grey for code highlighting (inline + blocks)
+\definecolor{codebg}{HTML}{F0F0F0}
+\definecolor{codeborder}{HTML}{000000}
+
+% Inline code: pandoc emits \texttt{code} for backtick-wrapped
+% spans in markdown. Wrap that in a light-grey colorbox so
+% inline `code` reads as a subtle highlight, not just a
+% different font.
+\let\oldtexttt\texttt
+\renewcommand{\texttt}[1]{\colorbox{codebg}{\oldtexttt{#1}}}
+
+% Code blocks (longer snippets). The pandoc command uses
+% --listings so fenced code blocks become \begin{lstlisting}.
+% Settings per the user spec (2026-06-17):
+%   - light grey background
+%   - black outline (frame=single, rulecolor=black)
+%   - line numbers on the LEFT, in monospace
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeborder},
+  numbers=left,
+  numberstyle=\ttfamily\small,
+  numbersep=10pt,
+  xleftmargin=15pt,
+  framexleftmargin=5pt,
+  breaklines=true,
+  showstringspaces=false,
+  aboveskip=10pt,
+  belowskip=10pt,
+  columns=fullflexible,
+  keepspaces=true,
+}

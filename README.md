@@ -161,6 +161,12 @@ your.caddy.host:443 {
 
 ## Documentation
 
+The full documentation is also available as a single
+PDF: [caddy-image-gallery-book.pdf](caddy-image-gallery-book.pdf)
+(19 pages, with cover page, table of contents, and the
+Google Fonts typography - Libre Baskerville for body text,
+JetBrains Mono for code).
+
 Detailed operator documentation lives in [`docs/`](docs/):
 
 - [docs/00-readme.md](docs/00-readme.md) — index
