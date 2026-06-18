@@ -2,6 +2,7 @@ package gallery
 
 import (
 	"bytes"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -229,7 +230,9 @@ func TestRenderPage_HeaderShowsPageCount(t *testing.T) {
 		t.Errorf("expected NO 'pages' indicator when TotalPages=1, got: %q", metaBlock)
 	}
 
-	// 200 images at pageSize=10 -> 20 pages. Should show "20 pages".
+	// 200 images at pageSize=10 -> 20 pages. Should show
+	// "Page 1 of 20" (and NOT the old "N pages" indicator,
+	// which was removed in Phase 37 per user request).
 	files2 := make([]FileInfo, 200)
 	for i := 0; i < 200; i++ {
 		files2[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
@@ -244,14 +247,11 @@ func TestRenderPage_HeaderShowsPageCount(t *testing.T) {
 	if !strings.Contains(metaBlock2, "10 per page") {
 		t.Errorf("expected '10 per page' in header, got: %q", metaBlock2)
 	}
-	if !strings.Contains(metaBlock2, "20 pages") {
-		t.Errorf("expected '20 pages' in header, got: %q", metaBlock2)
+	if !strings.Contains(metaBlock2, "Page 1 of 20") {
+		t.Errorf("expected 'Page 1 of 20' in header, got: %q", metaBlock2)
 	}
-	// The "20 pages" should come AFTER "10 per page"
-	perPageIdx := strings.Index(metaBlock2, "10 per page")
-	pagesIdx := strings.Index(metaBlock2, "20 pages")
-	if pagesIdx <= perPageIdx {
-		t.Errorf("expected '20 pages' to come AFTER '10 per page' in the header, got: %q", metaBlock2)
+	if strings.Contains(metaBlock2, "20 pages") {
+		t.Errorf("expected NO '20 pages' indicator (removed in Phase 37), got: %q", metaBlock2)
 	}
 }
 
@@ -978,19 +978,99 @@ func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
 	if !strings.Contains(metaBlock, "Page 2 of 4") {
 		t.Errorf("expected 'Page 2 of 4' in header meta block, got: %q", metaBlock)
 	}
-	if !strings.Contains(metaBlock, "4 pages") {
-		t.Errorf("expected '4 pages' in header meta block, got: %q", metaBlock)
+	// The 'N pages' indicator was removed in Phase 37 per user
+	// request; only the 'Page X of Y' indicator remains. Make
+	// sure the old indicator is NOT in the output anymore.
+	if strings.Contains(metaBlock, "4 pages") {
+		t.Errorf("expected NO '4 pages' indicator (removed in Phase 37), got: %q", metaBlock)
 	}
 	if !strings.Contains(metaBlock, "50 per page") {
 		t.Errorf("expected '50 per page' in header meta block, got: %q", metaBlock)
 	}
-	// Order check: per-page -> pages -> Page X of Y
-	perPageIdx := strings.Index(metaBlock, "50 per page")
-	pagesIdx := strings.Index(metaBlock, "4 pages")
-	pageOfIdx := strings.Index(metaBlock, "Page 2 of 4")
-	if !(perPageIdx < pagesIdx && pagesIdx < pageOfIdx) {
-		t.Errorf("expected order '50 per page' < '4 pages' < 'Page 2 of 4' in meta block, got: %q", metaBlock)
+	// Per Phase 37: the image count now includes the total
+	// size in parentheses (e.g. "200 images (200.0 KB)").
+	if !strings.Contains(metaBlock, "200 images (") {
+		t.Errorf("expected '200 images (' (with total size) in header meta block, got: %q", metaBlock)
 	}
+	// Order check: per-page -> Page X of Y (no more 'N pages' in between)
+	perPageIdx := strings.Index(metaBlock, "50 per page")
+	pageOfIdx := strings.Index(metaBlock, "Page 2 of 4")
+	if !(perPageIdx < pageOfIdx) {
+		t.Errorf("expected order '50 per page' < 'Page 2 of 4' in meta block, got: %q", metaBlock)
+	}
+}
+
+// TestRenderPage_TotalImageSize verifies the header meta
+// shows the pre-formatted total size of all image files
+// (NOT including videos) in parentheses after the image
+// count. Per user request 2026-06-18: "89 images (total
+// size) · 4 directories · 50 per page · Page 1 of 2".
+// The size is pre-formatted via humanSize() — KB / MB / GB.
+func TestRenderPage_TotalImageSize(t *testing.T) {
+	cases := []struct {
+		name      string
+		sizes     []int64
+		wantTotal string
+	}{
+		{
+			name:      "single small file: 100 B",
+			sizes:     []int64{100},
+			wantTotal: "100 B",
+		},
+		{
+			name:      "kilobyte-range: 5 * 1 KB",
+			sizes:     []int64{1024, 1024, 1024, 1024, 1024},
+			wantTotal: "5.0 KB",
+		},
+		{
+			name:      "megabyte-range: 100 * 100 KB",
+			sizes:     make100KB(100),
+			wantTotal: "9.8 MB", // 100 * 100 KB = 9.77... MB, rounded to 9.8
+		},
+		{
+			// 1000 files * 1000 MB each = 976.56 GB total
+			// (humanSize uses 1024-based units, not 1000-based).
+			name:      "gigabyte-range: 1000 * 1000 MB (=> 976.56 GB)",
+			sizes:     make1000MB(1000),
+			wantTotal: "976.56 GB",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			files := make([]FileInfo, len(tc.sizes))
+			for i, s := range tc.sizes {
+				files[i] = FileInfo{Name: "a.jpg", ModTime: int64(i), Size: s, Kind: KindImage}
+			}
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			metaStart := strings.Index(html, `class="meta"`)
+			metaEnd := strings.Index(html[metaStart:], `</div>`)
+			metaBlock := html[metaStart : metaStart+metaEnd]
+			want := fmt.Sprintf("%d images (%s)", len(tc.sizes), tc.wantTotal)
+			if !strings.Contains(metaBlock, want) {
+				t.Errorf("expected header to contain %q, got: %q", want, metaBlock)
+			}
+		})
+	}
+}
+
+// Helpers for TestRenderPage_TotalImageSize
+func make100KB(n int) []int64 {
+	out := make([]int64, n)
+	for i := range out {
+		out[i] = 100 * 1024
+	}
+	return out
+}
+
+func make1000MB(n int) []int64 {
+	out := make([]int64, n)
+	for i := range out {
+		out[i] = 1000 * 1024 * 1024
+	}
+	return out
 }
 
 // TestBundledTemplate_LightboxSupportsVideo verifies that the

@@ -50,9 +50,16 @@ type PageData struct {
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
 	TotalVideos int
-	TotalPages  int
-	HasPrev     bool
-	HasNext     bool
+	// TotalImageSize is the pre-formatted (via humanSize) total
+	// size of all image files (NOT including videos). Shown in
+	// the header meta line as "N images (total size)" per user
+	// request 2026-06-18. e.g. "89 images (1.2 GB)". Per the
+	// user's example, the size appears in parentheses after the
+	// image count, not as a separate meta item.
+	TotalImageSize string
+	TotalPages     int
+	HasPrev        bool
+	HasNext        bool
 	// PageNumbers is the list of page numbers (and 0 for
 	// ellipsis) to show in the Google-style bottom pagination.
 	// Computed by pageNumbers(current, total). Empty when
@@ -446,11 +453,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// "X images" label.
 	imageCount := 0
 	videoCount := 0
+	var totalImageBytes int64
 	for _, f := range allImages {
 		if f.Kind == KindVideo {
 			videoCount++
 		} else {
 			imageCount++
+			totalImageBytes += f.Size
 		}
 	}
 	totalPages := (totalImages + pageSize - 1) / pageSize
@@ -496,23 +505,24 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	}
 
 	data := PageData{
-		Title:       title,
-		PathPrefix:  pathPrefix,
-		ThumbPrefix: thumbPrefix,
-		Up:          up,
-		Subdirs:     subdirViews,
-		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
-		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
-		Page:        page,
-		PageSize:    pageSize,
-		TotalImages: totalImages,
-		ImageCount:  imageCount,
-		TotalVideos: videoCount,
-		TotalPages:  totalPages,
-		HasPrev:     page > 1,
-		HasNext:     page < totalPages,
-		PageNumbers: pageNumbers(page, totalPages),
-		Sort:        sortSpec,
+		Title:          title,
+		PathPrefix:     pathPrefix,
+		ThumbPrefix:    thumbPrefix,
+		Up:             up,
+		Subdirs:        subdirViews,
+		OtherFiles:     buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
+		Images:         buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
+		Page:           page,
+		PageSize:       pageSize,
+		TotalImages:    totalImages,
+		ImageCount:     imageCount,
+		TotalVideos:    videoCount,
+		TotalImageSize: humanSize(totalImageBytes),
+		TotalPages:     totalPages,
+		HasPrev:        page > 1,
+		HasNext:        page < totalPages,
+		PageNumbers:    pageNumbers(page, totalPages),
+		Sort:           sortSpec,
 	}
 
 	tmpl, err := loadTemplate(tmplName)
@@ -986,11 +996,11 @@ a.sort-indicator:hover { background: #f3f6f7; border-color: #d0d4d6; color: #006
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
-          <span>{{.ImageCount}} images</span>
+          <span>{{.ImageCount}} images ({{.TotalImageSize}})</span>
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           {{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
-          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>{{.TotalPages}} pages</span><span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
+          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
       {{if eq .Sort.Field "mtime"}}
