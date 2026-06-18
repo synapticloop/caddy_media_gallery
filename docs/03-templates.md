@@ -335,10 +335,14 @@ flash of light theme when the visitor has chosen dark.
 
 All colors are defined as CSS custom properties (CSS variables) in
 the `:root` selector at the top of the template's `<style>` block.
-There are ~15 tokens: `--bg`, `--bg-card`, `--bg-chip`, `--bg-hover`,
-`--bg-active`, `--fg`, `--fg-muted`, `--fg-faint`, `--fg-disabled`,
-`--border`, `--border-strong`, `--accent`, `--accent-hover`, `--shadow`,
-`--shadow-strong`.
+There are ~16 tokens, divided into semantic groups:
+
+| Group | Tokens |
+|---|---|
+| Backgrounds | `--bg` (page), `--bg-card` (cards), `--bg-chip` (chips), `--bg-hover` (chip hover), `--bg-active` (active chip) |
+| Text | `--fg` (primary), `--fg-muted` (secondary), `--fg-faint` (tertiary), `--fg-disabled` (disabled) |
+| Borders & shadows | `--border`, `--border-strong`, `--shadow`, `--shadow-strong` |
+| Accents | `--accent` (links + borders), `--accent-hover`, `--accent-bg` (button fills — separate from `--accent` so the dark-mode button can be a muted darker blue without dimming link text) |
 
 The dark mode override is just a second block of token assignments
 that applies when:
@@ -352,6 +356,33 @@ that applies when:
   OS preference. Triggered by clicking the moon icon; choice
   persists in localStorage.
 
+**Why `--accent` and `--accent-bg` are separate tokens:** the
+accent color serves two visual roles — text/borders (good as a
+bright color on a dark bg, e.g. `#4dabff`) and button fills
+(looks glaring as a bright color, should be muted, e.g. `#3b6fb6`).
+Splitting them lets each role have its own dark-mode value.
+
+### Dark mode refinements (Phase 40–42)
+
+The first dark-mode pass had two issues:
+
+- **Chip bg too light** (Phase 40): the chips (directories, other
+  files, sort buttons, page buttons) had a `--bg-chip` value
+  (`#1d1d1d` in dark mode) that was visibly lighter than the page
+  bg (`#1a1a1a`), making the chips stand out as bright blobs. Fixed
+  by setting `--bg-chip: #1a1a1a` (same as `--bg`) in dark mode, so
+  chips blend in with the page; only the border + text show. This
+  mirrors the light-mode behavior (where `--bg-chip` already equals
+  `--bg`).
+- **Hardcoded colors in 11 CSS rules** (Phase 41): a regex-based
+  refactor (the original dark-mode implementation) caught 18 rules
+  but missed 11 more that used hardcoded light-mode hex values.
+  After a comprehensive sweep, all CSS rules now use `var()` token
+  references. The only `#hex` colors left in the on-disk template
+  are: the token definitions themselves (light + dark overrides),
+  the video tile placeholder gradient (theme-independent), and the
+  play button colors (white-on-dark, theme-independent).
+
 ### Customizing colors
 
 To override a color, edit the on-disk template at
@@ -363,6 +394,7 @@ green instead of blue:
 :root {
   --accent: #2e8b57;       /* was #006ed3 */
   --accent-hover: #3aa86a; /* was #0095e4 */
+  --accent-bg: #2e8b57;    /* was #006ed3 — used by active sort/page buttons */
 }
 ```
 
@@ -376,3 +408,49 @@ own dark colors that are theme-independent — the dark background
 and white controls work in both modes. This is intentional: a dark
 overlay focuses attention on the content regardless of the page
 theme.
+
+## Header meta line format
+
+The page header (below the page title) shows a meta line summarizing
+the directory's contents. The format (Phase 44/45) is:
+
+```
+34 images · 8 videos · 2 other files // (8.3 MB total) // · 26 directories · 50 per page
+└─────┬─────┘ └────┬────┘ └─────┬───────┘ └──────┬───────┘ └───────┬────────┘ └──┬─────┘
+      count       count       count            total size          count         page size
+                                              (ALL files:                              (when
+                                              images + videos                          TotalPages
+                                              + other files)                           > 1: also
+                                                                                      "Page X of Y")
+```
+
+**Meta items, in order:**
+
+1. **Image count** — `N images`. Always shown.
+2. **Video count** — `· N videos`. Shown only when `N > 0`.
+3. **Other files count** — `· N other files`. Shown only when `N > 0`.
+4. **Total size** — `// (X.X KB total) //`. Wrapped in `//`
+   separators (visually distinct from the `·` separator used for
+   the file counts). Represents the SUM of `Size` for all files in
+   the directory: images + videos + other files. Excludes
+   subdirectories. The literal word `total` follows the size
+   inside the parens, making the meaning clear. Pre-formatted via
+   the `humanSize()` helper (B / KB / MB / GB).
+5. **Directory count** — `· N directories`. Shown when the user is
+   in a subdir (N = subdirs of the current dir) or when there are
+   subdirs in the root listing.
+6. **Per page size** — `· 50 per page`. Always shown.
+7. **Page indicator** — `· Page X of Y`. Shown only when
+   `TotalPages > 1` (multi-page gallery).
+
+**Why the size uses `//` separators instead of `·`:** the `//`
+visually distinguishes the size from the other meta items (which
+all use `·`). The size is conceptually different — it's a
+quantity (bytes), not a count. The `//` is a "this is special"
+marker.
+
+**Implementation:** the meta line is rendered by the template at
+the top of the `<style>` block's wrapping `<header>`. The size
+segment uses three separate `<span>` elements (one for each `//`,
+one for the parens) so the browser's flex `gap: 0.5rem` adds
+visual spacing between them.
