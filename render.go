@@ -624,12 +624,17 @@ const galleryTemplate = `<!DOCTYPE html>
   :root:not([data-theme="light"]) {
     --bg: #1a1a1a;
     --bg-card: #252525;
-    /* chip bg in dark mode is intentionally CLOSE to the page bg
-       (only 2-3% lighter) so chips don't stand out as a brighter
-       element; the border + text color do the visual work. Per
-       user feedback 2026-06-18, the previous #2a2a2a was 'too
-       light for the page'. */
-    --bg-chip: #1d1d1d;
+    /* chip bg in dark mode is intentionally the SAME as the
+       page bg (not lighter) so chips don't stand out as a
+       visible element — only the border + text show. This
+       mirrors the light-mode behavior (--bg-chip = --bg in
+       light mode too) and matches how the .tile-name /
+       .tile-meta elements look on the card (text directly on
+       the card bg, no separate fill). Per user feedback
+       2026-06-18, even the previous #1d1d1d was 'too light
+       for the page'; the user wants chips to blend in like
+       the tile details. */
+    --bg-chip: #1a1a1a;
     --bg-hover: #333333;
     --bg-active: #2a2a2a;
     --fg: #e5e5e5;
@@ -650,7 +655,10 @@ const galleryTemplate = `<!DOCTYPE html>
 [data-theme="dark"] {
   --bg: #1a1a1a;
   --bg-card: #252525;
-  --bg-chip: #1d1d1d;
+  /* Same as @media (prefers-color-scheme: dark): chips blend
+     into the page, only border + text are visible. See comment
+     in the @media block above for the rationale. */
+  --bg-chip: #1a1a1a;
   --bg-hover: #333333;
   --bg-active: #2a2a2a;
   --fg: #e5e5e5;
