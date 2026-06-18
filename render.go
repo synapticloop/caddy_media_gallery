@@ -1162,7 +1162,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           <span>//</span>
-          <span>({{.TotalAllFilesSize}})</span>
+          <span>({{.TotalAllFilesSize}} total)</span>
           <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}}<span>·</span><span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
           <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>

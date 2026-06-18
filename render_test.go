@@ -1074,7 +1074,7 @@ func TestRenderPage_TotalAllFilesSize(t *testing.T) {
 			// rendered text is `// (size) //` with gaps.
 			// We assert the size string is present in parens,
 			// AND the `//` separator appears on both sides.
-			wantParens := fmt.Sprintf("(%s)", tc.wantTotal)
+			wantParens := fmt.Sprintf("(%s total)", tc.wantTotal)
 			if !strings.Contains(metaBlock, wantParens) {
 				t.Errorf("expected header to contain %q, got: %q", wantParens, metaBlock)
 			}
