@@ -3,3 +3,16 @@
 *.test
 .idea/
 .vscode/
+
+# LaTeX/pandoc build artifacts (regenerable from the
+# source markdown via `pandoc -t pdf --pdf-engine=xelatex`)
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.toc
+docs/missfont.log
+docs/cover-image.jpg.bak
+
+# Binaries
+/caddy
