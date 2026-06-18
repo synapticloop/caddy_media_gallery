@@ -1097,10 +1097,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      Without this, the meta line ("375 images ... 50 per page")
      gets compressed on phones and can overflow horizontally. */
   .header-top { flex-direction: column; }
-  /* Theme toggle now sits below the header-main (in its own
-     row). Right-align it so it stays in the same screen corner
-     the user expects (top-right). */
-  .theme-toggle { align-self: flex-end; }
+  /* Theme toggle now sits ABOVE the title and meta line (was
+     below in Phase 50; user wants the toggle at the top).
+     Use CSS 'order' to reorder without changing the HTML
+     source order (which matters for accessibility / reading
+     order). Right-align the toggle in its own row. */
+  .header-main { order: 2; }
+  .theme-toggle { order: 1; align-self: flex-end; }
 }
 
 /* ---- Lightbox overlay (created by lightbox.js) ---- */
