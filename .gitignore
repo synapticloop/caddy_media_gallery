@@ -13,6 +13,6 @@
 *.toc
 docs/missfont.log
 docs/cover-image.jpg.bak
-
+.DS_Store
 # Binaries
 /caddy

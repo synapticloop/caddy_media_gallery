@@ -1,9 +1,25 @@
 # caddy-image-gallery — Documentation
 
 A Caddy v2 HTTP handler module that replaces Caddy's default
-`file_server browse` with a self-contained, image-aware gallery:
-thumbnails, click-to-expand lightbox, sortable + paginated image grid,
-and a separate "Other files" strip above.
+`file_server browse` with a self-contained, image and video 
+aware gallery - built for ease of visualisation:
+
+ - Choose your mode, light, dark, or auto
+ - Status line with an overview of the directory
+ - Sort files by name, type, date modified, or size
+ - Parent directory link
+ - List of sub-directories
+ - List of other - non-media files
+ - Individual tiles for media files
+   - thumbnails for images,
+   - play button placeholders for videos
+ - click-to-expand lightbox, or open the media in a new tab
+ - 
+ - and a separate "Other files" strip above,
+ - temaplates so that you can roll your own
+ - light and dark modes (including matching the system defaults)
+ - pagination (configurable number of results per page)
+ - Sortable
 
 ## Index
 
