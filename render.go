@@ -1397,7 +1397,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{end}}
 </main>
 <footer class="site-footer">
-  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_image_gallery" rel="noopener" target="_blank">synapticloop</a>
+  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_image_gallery" rel="noopener" target="_blank">synapticloop // image gallery</a>
 </footer>
 <script>
 
