@@ -1115,6 +1115,29 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   .theme-toggle { order: 1; align-self: flex-end; }
 }
 
+/* Site footer (Phase 56): "proudly served by caddy + synapticloop"
+   credit at the bottom of the page. Subtle — muted color, small
+   text, centered, with a top border to separate it from the rest
+   of the page content. The two brand names are linked to their
+   respective homepages (caddyserver.com, github.com/synapticloop).
+   rel="noopener" is the standard security practice for
+   target="_blank" links. */
+.site-footer {
+  text-align: center;
+  padding: 1.5rem 1rem 2rem;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+}
+.site-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.site-footer a:hover {
+  text-decoration: underline;
+}
+
 /* ---- Lightbox overlay (created by lightbox.js) ---- */
 #gallery-lightbox {
   position: fixed;
@@ -1370,6 +1393,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   <p class="empty">No images in this directory.</p>
   {{end}}
 </main>
+<footer class="site-footer">
+  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop" rel="noopener" target="_blank">synapticloop</a>
+</footer>
 <script>
 
 (function() {
