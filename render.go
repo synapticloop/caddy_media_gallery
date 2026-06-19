@@ -939,7 +939,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   height: 28px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
-  color: var(--fg);
+  /* Per user request 2026-06-18: the arrow inside the open-btn
+     span should be #111111 (a fixed dark color), not the
+     theme-aware --fg token. The --fg variable stays at its
+     current value (#e5e5e5 in dark mode, #111111 in light mode)
+     and continues to be used by other elements. The open-btn
+     arrow is intentionally a different color than --fg
+     because the button has a light translucent bg
+     (rgba(255,255,255,0.85)) that stays light in both modes —
+     a dark arrow on a light bg is always visible. */
+  color: #111111;
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
