@@ -313,10 +313,41 @@ The template supports three themes:
 2. **Light** — forces light mode regardless of OS preference.
 3. **Dark** — forces dark mode regardless of OS preference.
 
-The choice is presented as a small toggle button group in the page
-header (top-right area), next to the sort UI. Three buttons:
-Three buttons: a gear icon (Auto), a sun icon (Light), a moon icon (Dark). The current state is marked
+The choice is presented as a small toggle button group in the
+page header. Three buttons: a gear icon (Auto), a sun icon (Light),
+a moon icon (Dark). The current state is marked
 with `aria-pressed="true"` and a slightly inset background.
+
+**Position (Phase 50/51):** the toggle was originally at the
+top-LEFT of the header (just to the left of the page title). As
+of Phase 50, it sits at the top-RIGHT, where the old sort-order
+indicator used to be. The sort indicator itself was removed in
+Phase 50 (the sort UI still exists as the sort-bar below the
+header — the active sort field is still visible there).
+
+**Mobile layout (Phase 50/51):** on screens ≤600px wide, the
+header stacks vertically via `@media (max-width: 600px) {
+.header-top { flex-direction: column; }`. The visual order on
+mobile is:
+
+1. **Theme toggle** (top, right-aligned via `align-self: flex-end`)
+2. **h1 + meta line** (below, full width)
+
+This is achieved with CSS `order` on the flex children, not
+by reordering the HTML source (the source order stays h1 →
+meta → toggle, which is better for screen readers):
+
+```css
+.header-main { order: 2; }
+.theme-toggle { order: 1; align-self: flex-end; }
+```
+
+The toggle's row order (`order: 1`) puts it above the header
+content (`order: 2`) on mobile; the `align-self: flex-end` keeps
+it right-aligned. On desktop (the default), neither `order` nor
+`flex-direction` applies, so the layout reverts to the normal
+horizontal flex with the toggle at the right (via the
+`justify-content: space-between` on `.header-top`).
 
 The choice persists across visits via `localStorage` under the key
 `gallery-theme`. Values stored: `auto` | `light` | `dark`. `auto`
@@ -454,3 +485,104 @@ the top of the `<style>` block's wrapping `<header>`. The size
 segment uses three separate `<span>` elements (one for each `//`,
 one for the parens) so the browser's flex `gap: 0.5rem` adds
 visual spacing between them.
+
+
+## Open-in-new-tab button
+
+The template has a small **↗** button on each image/video tile
+(top-right corner of the card) that opens the file's URL in a
+new browser tab. Added in Phase 47; refined in Phase 52.
+
+**Visual:**
+- Position: `top: 6px, right: 6px` inside the `.card`
+- Size: 28×28 px
+- Background: `rgba(255, 255, 255, 0.85)` — light translucent
+- Dark border: `border: 2px solid #000` (Phase 47) so the button
+  stands out more
+- Arrow color: `#111111` (Phase 52) — a fixed dark color,
+  **NOT** the theme-aware `--fg` token
+- The character itself is `north east arrow` (U+2197 NORTH EAST ARROW, displayed as the arrow glyph in the bundled template)
+- Default opacity: `0.5` (subtle). On hover/focus, opacity goes
+  to `1.0` and the button scales up slightly.
+
+**Why the arrow color is fixed `#111111` (not `var(--fg)`):**
+the button has a light translucent background
+(`rgba(255,255,255,0.85)`) that stays light over ANY page
+background (light or dark). A dark arrow on a light button
+background is always visible — no need to adapt to the page's
+theme. The `--fg` token stays at its current values
+(`#111111` light / `#e5e5e5` dark) and continues to be used by
+other elements (h1, body, meta, sort buttons, etc.) — only
+`.open-btn` is excluded from the theme-aware color rule.
+
+**Behavior:**
+- Click or Enter on the button → `window.open(href, '_blank',
+  'noopener,noreferrer')` opens the file in a new tab
+- The `noopener,noreferrer` flags are a security best practice
+  (prevents the new tab from accessing `window.opener`)
+- The click event is `stopPropagation`'d so it doesn't also
+  trigger the parent's "open in lightbox" handler
+
+## Lightbox controls
+
+The lightbox overlay has 4 buttons + 2 text labels:
+
+| Element | Position | Behavior |
+|---|---|---|
+| `.lb-close` (×) | Top-right (inside `.lb-controls` pill) | Closes the lightbox; Esc key |
+| `.lb-open` (↗) | Top-right (inside `.lb-controls` pill, left of close) | Opens the current image/video in a new tab |
+| `.lb-prev` (‹) | Left edge, vertically centered | Previous image; Left-arrow key |
+| `.lb-next` (›) | Right edge, vertically centered | Next image; Right-arrow key |
+| `.lb-counter` | Bottom-left (or bottom-center on mobile) | "N / total" text |
+| `.lb-caption` | Bottom-center | The current file's name |
+
+**The `.lb-controls` rounded pill (Phase 48):** the open (↗)
+and close (×) buttons are wrapped in a single flex container
+`.lb-controls` so they appear as a single rounded pill at the
+top-right of the lightbox. The container has:
+- Position: `top: 1rem, right: 1.5rem`
+- Background: `rgba(255, 255, 255, 0.92)` (light pill on the
+  dark lightbox)
+- Border: `2px solid #000`
+- Border-radius: `10px` (the "rounded box")
+- Padding: `4px` around the buttons
+- Display: `flex` (lays out open + close side-by-side, perfectly
+  aligned vertically and horizontally)
+
+The two buttons inside have:
+- `position: static` (flex lays them out, not absolute)
+- Transparent background (the container provides it)
+- No individual border
+- 28×28 px
+- Dark icon color (`#1a1a26`)
+- `border-radius: 6px` on each button (rounded corners within
+  the pill)
+- Hover: subtle dark background tint (`rgba(0, 0, 0, 0.08)`)
+
+**Why a pill instead of separate buttons:** a single rounded
+container gives the two related actions (close + open) a visual
+unity — they're both "exit the lightbox" actions (close or
+view-on-its-own), and grouping them makes that clearer.
+
+**The prev/next buttons are NOT in the pill** — they're at
+the left/right edges of the lightbox, vertically centered. These
+are navigation actions (different from exit actions), so they
+get their own positioning.
+
+**Why a dark border:** like the tile `.open-btn`, the pill has
+a black 2px border so it stands out clearly against the dark
+lightbox background. The light pill on a dark bg with a dark
+border is a strong visual "this is a control" signal.
+
+**Keyboard navigation:**
+- `Escape` → close
+- `Left arrow` → previous image
+- `Right arrow` → next image
+- (Clicking on the image itself also goes to next, like
+  carousel UIs)
+
+The `data-theme` attribute on `<html>` is NOT read by the
+lightbox CSS — the lightbox is intentionally theme-independent
+(dark always, with light controls). This is the same design
+choice as the lightbox bg and counter/caption: focus
+on the content, regardless of page theme.
