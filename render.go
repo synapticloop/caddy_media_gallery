@@ -1127,7 +1127,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding: 1.5rem 1rem 2rem;
   font-size: 0.8rem;
   color: var(--fg-muted);
-  border-top: 1px solid var(--border);
+  /* Per user request 2026-06-19: removed the border-top. The
+     footer now blends into the page content above without a
+     visible separator. Padding-top (1.5rem) still provides
+     visual breathing room. */
   margin-top: 1rem;
 }
 .site-footer a {
@@ -1394,7 +1397,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{end}}
 </main>
 <footer class="site-footer">
-  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop" rel="noopener" target="_blank">synapticloop</a>
+  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_image_gallery" rel="noopener" target="_blank">synapticloop</a>
 </footer>
 <script>
 
