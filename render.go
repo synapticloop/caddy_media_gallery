@@ -1049,7 +1049,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 1.5rem;
+  margin: 1.5rem 0; /* both top and bottom — applies to the bottom pagination (between images-section and the end of main) AND the new top pagination (between sort-bar and dirs-section) */
   font-size: 0.85rem;
 }
 .page-btn {
@@ -1257,10 +1257,38 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?sort=mtime&order={{if and (eq .Sort.Field "mtime") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
       <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
-  </header>
+    </header>
 
-  {{if or .Up (gt (len .Subdirs) 0)}}
-  <section class="dirs-section">
+    {{if gt .TotalPages 1}}
+    <!-- Per user request 2026-06-18: pagination at the top, just
+       below the sort-bar and above the DIRECTORIES section.
+       Mirrors the bottom pagination (same HTML, same styling).
+       Same conditional (only when multi-page). -->
+    <nav class="pagination">
+    {{if .HasPrev}}
+      <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | minus1}}">← Prev</a>
+    {{else}}
+      <span class="page-btn disabled">← Prev</span>
+    {{end}}
+    {{range .PageNumbers}}
+    {{if eq . 0}}
+      <span class="page-ellipsis">…</span>
+    {{else if eq . $.Page}}
+      <span class="page-btn active">{{.}}</span>
+    {{else}}
+      <a class="page-btn" href="?sort={{$.Sort.Field}}&order={{$.Sort.Order}}&page={{.}}">{{.}}</a>
+    {{end}}
+    {{end}}
+    {{if .HasNext}}
+      <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
+    {{else}}
+      <span class="page-btn disabled">Next →</span>
+    {{end}}
+    </nav>
+    {{end}}
+
+    {{if or .Up (gt (len .Subdirs) 0)}}
+    <section class="dirs-section">
     <h2 class="section-heading">Directories</h2>
     {{if .Up}}
     <div class="up-chip-row">
