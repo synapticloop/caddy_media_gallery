@@ -1199,10 +1199,68 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: color 0.15s;
   font-family: inherit;
 }
-#gallery-lightbox .lb-btn:hover { color: #4dabff; }
+/* Per user request 2026-06-20: prev/next buttons fill the full
+   window height and extend ~120px into the window width, with a
+   subtle hover background. The hit area is large (full height
+   makes them easy to click on touch devices; the ~120px width
+   gives a clear target without obscuring the media).
+
+   The hover color uses an alpha-blended fill so it works on top
+   of any media background:
+     - Dark mode (light overlay): rgba(255, 255, 255, 0.08) —
+       a subtle "whiter" tint on the dark lightbox bg
+     - Light mode (darker overlay): rgba(0, 0, 0, 0.06) — a
+       subtle "darker" tint
+
+   The lightbox itself is theme-independent (always dark), so
+   the dark mode tint is the default. A :root[data-theme="light"]
+   override would be needed for an actually-light lightbox, but
+   since we don't have one, the dark tint is correct for both
+   page themes.
+
+   Both buttons have z-index: 1 so they sit ABOVE the media
+   element (the media click handler is short-circuited for
+   <video> in Phase 61; for <img> the buttons stopPropagation
+   when their own click handler fires).
+
+   The arrow icon is centered visually inside the wide hit area
+   via flex. The hit area itself is invisible at rest (no bg)
+   — only the hover reveals the target. */
+#gallery-lightbox .lb-prev,
+#gallery-lightbox .lb-next {
+  top: 0;
+  height: 100vh;
+  width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Replace the previous "vertical center via translate" with
+     this full-height layout. The arrow is flex-centered. */
+  transform: none;
+  padding: 0;
+  background: transparent;
+  transition: background 0.18s, color 0.15s;
+}
+#gallery-lightbox .lb-prev { left: 0; }
+#gallery-lightbox .lb-next { right: 0; }
+#gallery-lightbox .lb-prev:hover,
+#gallery-lightbox .lb-next:hover {
+  /* Dark mode hover (the default — lightbox is always dark). */
+  background: rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="light"] #gallery-lightbox .lb-prev:hover,
+:root[data-theme="light"] #gallery-lightbox .lb-next:hover {
+  /* Light mode hover: a darker tint. The lightbox itself is
+     still dark (theme-independent per existing design), but the
+     page-level theme is light, so we use a darker bg tint for
+     contrast. */
+  background: rgba(0, 0, 0, 0.06);
+}
 #gallery-lightbox .lb-close { top: 1rem; right: 1.5rem; }
-#gallery-lightbox .lb-prev { left: 1.5rem; top: 50%; transform: translateY(-50%); }
-#gallery-lightbox .lb-next { right: 1.5rem; top: 50%; transform: translateY(-50%); }
+/* Revert the previous .lb-prev / .lb-next transform/position rules
+   (the more specific selectors above override them; keeping them
+   would be a no-op but the comments help future readers understand
+   the design intent). */
 /* Lightbox controls container — wraps the "open in new tab"
    and "close" buttons in a rounded pill. Per user request
    2026-06-18: the two buttons should be aligned (same y,
@@ -1563,8 +1621,21 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (e.target === overlay) close();
   });
   overlay.querySelector('.lb-close').addEventListener('click', close);
-  overlay.querySelector('.lb-prev').addEventListener('click', function() { show(idx - 1); });
-  overlay.querySelector('.lb-next').addEventListener('click', function() { show(idx + 1); });
+  // Per Phase 65: the prev/next hit areas are now 100vh tall x
+  // 120px wide. They sit ON TOP of the media (z-index: 1). When
+  // the user clicks inside the prev/next area, the button's click
+  // fires (which advances/retreats by 1) AND the event bubbles to
+  // media, which would ALSO advance (its click handler runs
+  // show(idx+1) for <img>). Without stopPropagation here, clicking
+  // "Next" would advance by 2 instead of 1.
+  overlay.querySelector('.lb-prev').addEventListener('click', function(e) {
+    e.stopPropagation();
+    show(idx - 1);
+  });
+  overlay.querySelector('.lb-next').addEventListener('click', function(e) {
+    e.stopPropagation();
+    show(idx + 1);
+  });
   // Open-in-new-tab: opens the current image/video URL in a new
   // tab. Uses cards[idx].href (the same href that show() set on
   // currentEl). window.open with _blank is the standard way; the
