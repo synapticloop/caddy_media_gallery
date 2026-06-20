@@ -103,8 +103,24 @@ set explicitly.
 
 ## JSON config (advanced)
 
-Equivalent JSON, if you're configuring Caddy via the admin API or
-a config file rather than a Caddyfile:
+Caddy supports two configuration formats: the **Caddyfile** (text,
+what most examples on this page use) and **JSON** (the native
+config format Caddy uses internally). Every Caddyfile gets
+converted to JSON before being applied — but you can also write
+JSON directly, which is useful for:
+
+- **Programmatic / templated config** (Kubernetes, Terraform,
+  Ansible) — JSON can be generated from variables
+- **Many Caddy instances** — JSON is diffable, lintable, and
+  can be validated in CI pipelines
+- **Dynamic reload** — `caddy reload` accepts JSON via the admin
+  API (`curl -X POST http://localhost:2019/load`)
+- **Sharing snippets** — unambiguous quoting (no special-character
+  rules like Caddyfile)
+
+### Minimum JSON config
+
+The minimum handler block (only `handler` is required):
 
 ```json
 {
@@ -117,6 +133,108 @@ The `Root` field is optional — the module falls back to the
 per-request `root` set by the surrounding `handle` / `handle_path`
 block. Set it explicitly only if you need to override the
 request-time root.
+
+### Full JSON config (all fields)
+
+Here's a complete JSON config showing every configurable field
+of the `image_gallery` handler, with realistic values:
+
+```json
+{
+  "handler": "image_gallery",
+  "root": "/var/www/html/images",
+  "sort": "name",
+  "template": "gallery.tmpl",
+  "no_thumbs": false,
+  "no_video_thumbs": false,
+  "page_size": 50,
+  "thumb_width": 320,
+  "thumb_height": 320,
+  "thumb_format": "webp",
+  "thumb_ttl": 1440,
+  "cache_scan": 1
+}
+```
+
+All fields are optional except `handler` (always required).
+Defaults match the Caddyfile defaults — if you omit a field,
+the same default value applies.
+
+### Caddyfile ↔ JSON field mapping
+
+| Caddyfile directive | JSON field | Type | Default |
+|---|---|---|---|
+| `root` (per-handle) | `"root"` | string | (per-request) |
+| `sort <name\|mtime\|type\|size>` | `"sort"` | string | `"mtime"` |
+| `template <name>` | `"template"` | string | `"gallery.tmpl"` |
+| `no_thumbs` | `"no_thumbs"` | bool | `false` |
+| `no_video_thumbs` | `"no_video_thumbs"` | bool | `false` |
+| `page_size <N>` | `"page_size"` | int | `50` |
+| `thumb_width <N>` | `"thumb_width"` | int | `320` |
+| `thumb_height <N>` | `"thumb_height"` | int | `320` |
+| `thumb_format <webp\|jpeg\|png>` | `"thumb_format"` | string | `"webp"` |
+| `thumb_ttl_minutes <N>` | `"thumb_ttl"` | int | `1440` (24h) |
+| `cache_scan_minutes <N>` | `"cache_scan"` | int | `1` |
+
+**Heads up on the JSON naming:** the JSON field names use the
+`json:"name"` struct tags — for `CacheScanMinutes` the tag is
+`cache_scan` (not `cache_scan_minutes`), and for `ThumbTTLMinutes`
+it's `thumb_ttl` (not `thumb_ttl_minutes`). This is intentional:
+the Go struct tags are short, and the Caddyfile subdirectives
+keep the verbose names. The mapping table above is authoritative
+for what JSON field names to use — the Go field names are an
+implementation detail.
+
+The mapping for the other fields is mechanical: every Caddyfile
+subdirective has a matching JSON field with the same name
+(snake_case throughout). The Go struct field names are `Root`,
+`Sort`, etc. (PascalCase), but the JSON tags normalize them to
+snake_case via the `json:"name,omitempty"` struct tags.
+
+### Validation
+
+You can validate a JSON config without starting Caddy:
+
+```
+caddy validate --config /etc/caddy/caddy.json
+```
+
+Output: `Valid configuration` (or a JSON parse error pointing
+to the problem). The `caddy validate` command works for both
+JSON and Caddyfile inputs — for Caddyfile, just point it at the
+file directly.
+
+### Dynamic reload
+
+Push a JSON config to a running Caddy via the admin API:
+
+```
+curl -X POST http://localhost:2019/load \
+  -H "Content-Type: application/json" \
+  --data-binary @new-config.json
+```
+
+Returns `200 OK` on success, or a JSON error response on failure.
+This is what `caddy reload` does internally — but you can also
+script reloads (e.g., update the gallery config when the disk
+layout changes) by POSTing to this endpoint.
+
+### When to use JSON vs Caddyfile
+
+For **single-host, edit-by-hand** use, Caddyfile is the right tool:
+simpler for humans, more forgiving of whitespace and comments,
+easier to read for someone not familiar with the schema. This is
+what most of this document shows.
+
+For **automated / multi-instance / programmatic** use, JSON is
+the right tool: it's diffable, lintable, validatable, and can be
+generated from templates. This is what Caddy uses internally,
+and what most CI/CD pipelines produce.
+
+You can also convert between them: `caddy adapt --config Caddyfile`
+produces JSON on stdout, and `caddy adapt --config caddy.json --adapter caddyfile`
+goes the other way (rare, since the Caddyfile syntax is
+less expressive).
 
 ## Environment variables
 
