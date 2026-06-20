@@ -1344,7 +1344,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   {{if gt .TotalImages 0}}
   <section class="images-section">
-    <h2 class="section-heading">Images</h2>
+    <h2 class="section-heading">Media</h2>
     <div class="image-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">

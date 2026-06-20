@@ -355,7 +355,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The image section header should appear exactly once.
-	if c := strings.Count(html, ">Images<"); c != 1 {
+	if c := strings.Count(html, ">Media<"); c != 1 {
 		t.Errorf("expected exactly one 'Images' section, got %d", c)
 	}
 	// The "Other files" section should appear exactly once.
@@ -365,7 +365,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 	// notes.txt should be in the "Other files" section.
 	// clip.mp4 should be in the image grid section (with a play-button).
 	othersIdx := strings.Index(html, "Other files")
-	imagesIdx := strings.Index(html, ">Images<")
+	imagesIdx := strings.Index(html, ">Media<")
 	if othersIdx < 0 || imagesIdx < 0 {
 		t.Fatal("could not find both 'Other files' and 'Images' sections")
 	}
@@ -789,7 +789,7 @@ func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 	}
 	// The open-btn should be inside the .thumb (not in the .other-files strip).
 	othersIdx := strings.Index(html, "Other files")
-	imagesIdx := strings.Index(html, ">Images<")
+	imagesIdx := strings.Index(html, ">Media<")
 	imagesSection := html[imagesIdx:]
 	if !strings.Contains(imagesSection, `class="open-btn"`) {
 		t.Error("expected open-btn to be in the image grid section")
