@@ -443,17 +443,23 @@ theme.
 ## Header meta line format
 
 The page header (below the page title) shows a meta line summarizing
-the directory's contents. The format (Phase 44/45) is:
+the directory's contents. The format (Phase 44/45/55) is:
 
 ```
-34 images · 8 videos · 2 other files // (8.3 MB total) // · 26 directories · 50 per page
-└─────┬─────┘ └────┬────┘ └─────┬───────┘ └──────┬───────┘ └───────┬────────┘ └──┬─────┘
-      count       count       count            total size          count         page size
+34 images · 8 videos · 2 other files // (8.3 MB total) // 4 directories · 50 per page · Page 1 of 2
+└─────┬─────┘ └────┬────┘ └─────┬───────┘ └──────┬───────┘  └───┬─────┘ └──┬─────┘ └──┬───────┘
+      count       count       count            total size     count     page size page indicator
                                               (ALL files:                              (when
                                               images + videos                          TotalPages
-                                              + other files)                           > 1: also
-                                                                                      "Page X of Y")
+                                              + other files)                           > 1)
 ```
+
+Note the format after the `//` size segment: the directory count
+uses a single **space** separator (not `·`), then the rest of the
+items use `·`. This was changed in Phase 55 — the size is
+visually marked as "special" by the `//` framing, and the regular
+meta items after it use a single character (`·` or space)
+consistently.
 
 **Meta items, in order:**
 
@@ -466,9 +472,12 @@ the directory's contents. The format (Phase 44/45) is:
    the directory: images + videos + other files. Excludes
    subdirectories. The literal word `total` follows the size
    inside the parens, making the meaning clear. Pre-formatted via
-   the `humanSize()` helper (B / KB / MB / GB).
-5. **Directory count** — `· N directories`. Shown when the user is
-   in a subdir (N = subdirs of the current dir) or when there are
+   the `humanSize()` helper (B / KB / MB / GB). After the closing
+   `//`, the next meta item is separated by a single space
+   (not `·`).
+5. **Directory count** — `N directories` (single space separator
+   after `//`, then the count). Shown when the user is in a
+   subdir (N = subdirs of the current dir) or when there are
    subdirs in the root listing.
 6. **Per page size** — `· 50 per page`. Always shown.
 7. **Page indicator** — `· Page X of Y`. Shown only when
@@ -607,6 +616,125 @@ The poster URL points at the same cached WebP that's used
 for the tile thumbnail, so no extra server work or storage
 is required.
 
+
+## Pagination
+
+The pagination nav is rendered in **two** places (Phase 54):
+
+1. **Top** — after the sort-bar (Name/Type/Modified/Size buttons), before the DIRECTORIES section
+2. **Bottom** — after the IMAGES grid (existing position)
+
+Both pagination navs are identical — same buttons (`Prev`,
+page numbers, `Next`), same styling, same conditional (only
+shown when `TotalPages > 1`). Only the position differs.
+
+**Why mirror:**
+
+- Visitors on a long page don't have to scroll back to the top
+  to switch pages — they can click `Next` at the top.
+- The pagination at the top also serves as a "you are here"
+  indicator when arriving on a non-first page (so the user knows
+  they're not on page 1).
+- Symmetry: the sort-bar is at the top, the pagination at the
+  bottom; having pagination at the top mirrors the bottom.
+
+The same `{{if gt .TotalPages 1}}` conditional guards both
+instances, so single-page galleries don't show any pagination
+at all.
+
+**Pagination item format:** uses the same Google-style pattern
+introduced in Phase 29 — `First` (when far from start),
+`Prev`, page numbers with ellipsis in the middle, `Next`,
+`Last` (when far from end). The `aria-pressed` is set on the
+current page number for accessibility.
+
+## Footer
+
+At the bottom of every gallery page, below the IMAGES grid (and
+below the bottom pagination if multi-page), a small footer credits
+the underlying technologies (Phases 56/58/59):
+
+```
+─────────────────────────────────────────
+           proudly served by caddy + synapticloop // image gallery
+```
+
+- **"caddy"** — links to https://caddyserver.com (the web server)
+- **"synapticloop // image gallery"** — links to
+  https://github.com/synapticloop/caddy_image_gallery (this
+  plugin's repo)
+
+Both links have `rel="noopener" target="_blank"` (security best
+practice for new-tab links).
+
+**Styling:** centered, small text (`0.8rem`), muted color
+(`var(--fg-muted)`), subtle padding. No border-top (removed in
+Phase 58 — the muted color provides enough visual distinction).
+
+**Why these credits:**
+- "caddy" — Caddy is the web server. Without it, this plugin
+  wouldn't exist; credit the underlying tech.
+- "synapticloop // image gallery" — links to this plugin's repo
+  (not just the synapticloop org page) so visitors can read the
+  source, file issues, or fork the project.
+
+The footer text is operator-visible but not configurable — if
+you want to change it, edit the template (`<footer class="site-footer">`
+in the bundled template). Operators who fork the project can
+brand the footer however they like.
+
+## Section heading: "MEDIA" (not "IMAGES")
+
+The gallery renders both **images** AND **videos** (since Phase 25
+when the lightbox got video support). To reflect the broader scope,
+the IMAGES section heading was renamed to **MEDIA** in Phase 60.
+
+In the bundled template:
+
+```html
+<h2 class="section-heading">Media</h2>
+```
+
+If you fork the template and want to revert to "IMAGES" (e.g., you
+have a strictly-photo gallery with no videos), change this line.
+The CSS (`.section-heading`) is unchanged — only the visible text.
+
+The other section headings remain "Directories" and "Other files"
+(unaffected by Phase 60).
+
+## Mobile: video play button fix (Phase 61)
+
+On mobile devices, clicking the play button on a video in the
+lightbox used to advance to the next media file instead of
+starting playback. Root cause: the media click handler always ran
+`show(idx + 1)` regardless of media type. On mobile, tapping the
+video's native play button fires a click event on the `<video>`
+element, and the handler advanced to the next file BEFORE the
+video could play. Fix (Phase 61): check
+`currentEl.tagName === 'VIDEO'` in the handler and bail out so
+the browser's native click handling (play/pause) takes over.
+
+For images, click-to-advance still works (unchanged). For
+videos, click is no longer hijacked — the user can tap the play
+button on mobile to start playback, or click elsewhere on the
+video (e.g. the time bar / volume) for the native controls to
+handle. Navigation is via the prev/next buttons or arrow keys.
+
+## Open-in-new-tab button (Phase 47+52)
+
+The tile-level open-in-new-tab button (the small ↗ in the
+top-right of each tile) is documented separately in its own
+section above. Recent refinements:
+
+- **Phase 47** — added the dark border (`border: 2px solid #000`)
+  so the button stands out more. The light translucent bg
+  (`rgba(255,255,255,0.85)`) stays light over both light and
+  dark page bgs, so a dark border is always visible.
+- **Phase 52** — arrow color fixed at `#111111` (was
+  `var(--fg)`). The user explicitly wanted `--fg` UNCHANGED
+  (still `#111111` light / `#e5e5e5` dark) and used by other
+  elements. The open-btn arrow stays dark in both modes because
+  the button's bg is always light.
 
 ## Building the PDF locally
 
