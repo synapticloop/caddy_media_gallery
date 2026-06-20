@@ -1527,7 +1527,21 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     var href = cards[idx].getAttribute('href') || '';
     if (href) window.open(href, '_blank', 'noopener,noreferrer');
   });
-  media.addEventListener('click', function(e) { e.stopPropagation(); show(idx + 1); });
+  // Click on the media area advances to the next item. EXCEPT
+  // when the current media is a <video>: on mobile, tapping the
+  // video's native play button fires a click event on the
+  // <video> element, and the default click handler advances to
+  // the next file BEFORE the video can play (a really bad UX --
+  // the user taps play, expects the video to start, and instead
+  // sees the next image). Detect this case and bail out so the
+  // browser's native click handling (play / pause) takes over.
+  // The user can still navigate via the prev/next buttons or
+  // the arrow keys.
+  media.addEventListener('click', function(e) {
+    if (currentEl && currentEl.tagName === 'VIDEO') return;
+    e.stopPropagation();
+    show(idx + 1);
+  });
   document.addEventListener('keydown', function(e) {
     if (!overlay.classList.contains('open')) return;
     if (e.key === 'Escape') close();
