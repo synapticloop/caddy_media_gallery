@@ -69,7 +69,15 @@ With this, video tiles show the placeholder gradient + play button (no `<img>` f
 
 The video thumb generation uses `ffmpeg -vframes 1` to extract the first frame, scaled to fit the configured `thumb_width` × `thumb_height` (defaults 320×320). The output is a WebP, written to the same cache dir as image thumbs (`/var/cache/caddy-gallery` by default, override via `GALLERY_THUMB_CACHE_DIR`). Same caching rules as image thumbs (regenerate only when the source video's mtime is newer than the cache file).
 
-If the operator has ffmpeg installed at a non-standard path, set `FFMPEG_PATH` env var (note: not yet implemented — current code uses `exec.LookPath("ffmpeg")` which only checks `$PATH`). All standard install paths (`/usr/bin/ffmpeg`, `/usr/local/bin/ffmpeg`, etc.) are picked up automatically.
+If the operator has ffmpeg installed at a non-standard path (not in `$PATH`), set the `FFMPEG_PATH` env var to the absolute path of the ffmpeg binary. This is checked first (Phase 67); if unset or the file isn't executable, the code falls back to `exec.LookPath("ffmpeg")` which scans `$PATH`.
+
+```
+FFMPEG_PATH=/opt/ffmpeg-7/bin/ffmpeg caddy run
+```
+
+The `FFMPEG_PATH` value is validated at Provision time: it must point to an existing regular file with at least one executable bit set. Bad values (non-existent path, directory, non-executable file) are silently ignored and the code falls back to `$PATH` lookup. This avoids a confusing "exec: not found" error at request time when the env var is mistyped.
+
+All standard install paths (`/usr/bin/ffmpeg`, `/usr/local/bin/ffmpeg`, etc.) are picked up automatically via the `$PATH` fallback.
 Best for: small galleries (< 100 images) where you don't want a thumb cache and the originals aren't huge. Not recommended for large galleries — the page payload goes from ~30 KB (with thumbs) to ~5 MB average (full images) for a 1,000-image dir.
 
 ### Example: change the page size

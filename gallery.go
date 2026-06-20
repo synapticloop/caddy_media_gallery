@@ -79,10 +79,13 @@ type Gallery struct {
 	NoVideoThumbs bool `json:"no_video_thumbs,omitempty"`
 
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
-	// in Provision via exec.LookPath. Empty when ffmpeg is not
-	// installed (or when NoVideoThumbs is true — we skip the lookup
-	// since it would be unused). Thread-safe to read after Provision
-	// returns; written only during Provision.
+	// in Provision. Empty when ffmpeg is not installed (or when
+	// NoVideoThumbs is true — we skip the lookup since it would
+	// be unused). Resolution order:
+	//   1. FFMPEG_PATH env var (if set + points to an executable)
+	//   2. exec.LookPath("ffmpeg") (scans $PATH)
+	// Thread-safe to read after Provision returns; written only
+	// during Provision.
 	ffmpegPath string `json:"-"`
 
 	// PageSize is the number of image entries per page. Default
@@ -175,9 +178,27 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// doesn't change at runtime. If ffmpeg is missing OR
 	// NoVideoThumbs is true, g.ffmpegPath stays empty and the
 	// video-thumb code path falls back to the placeholder.
+	//
+	// Resolution order (Phase 67):
+	//   1. FFMPEG_PATH env var (if set and points to an executable)
+	//   2. exec.LookPath("ffmpeg") (scans $PATH)
+	// If both fail, g.ffmpegPath stays empty and the video-thumb
+	// code path falls back to the placeholder.
 	if !g.NoVideoThumbs {
-		if path, err := exec.LookPath("ffmpeg"); err == nil {
-			g.ffmpegPath = path
+		if path := os.Getenv("FFMPEG_PATH"); path != "" {
+			// Verify the env var actually points to an executable.
+			// (We don't want to silently store a bad path that
+			// would fail at request time with a confusing error.)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				if info.Mode()&0o111 != 0 {
+					g.ffmpegPath = path
+				}
+			}
+		}
+		if g.ffmpegPath == "" {
+			if path, err := exec.LookPath("ffmpeg"); err == nil {
+				g.ffmpegPath = path
+			}
 		}
 	}
 	// Make the bundled templates discoverable on disk for the
