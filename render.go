@@ -168,10 +168,14 @@ func formatType(name string, isDir bool) string {
 // buildFileView converts a FileInfo into a template-friendly
 // FileView. The thumb URL is normally `thumbPrefix/<basename>.webp`;
 // when noThumbs is true, images use the original file URL as the
-// `src` (no thumb generation). The field is still called ThumbURL
 // (for template compatibility) but its value is the original file
 // path in this case.
-func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs bool) FileView {
+//
+// noThumbs applies to IMAGE thumbnails. noVideoThumbs applies to
+// VIDEO thumbnails (independently togglable). A video thumb URL
+// is set only if noVideoThumbs is false; when true, the video card
+// shows the placeholder gradient + play button (no <img>).
+func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideoThumbs bool) FileView {
 	v := FileView{
 		Name: f.Name,
 		Type: formatType(f.Name, f.Kind == KindDir),
@@ -197,6 +201,15 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs bool) Fi
 	case KindVideo:
 		v.IsVideo = true
 		v.Href = pathPrefix + f.Name
+		// Video thumb: set ThumbURL only if video thumb generation
+		// is enabled. (The serveThumb handler will dispatch to
+		// ffmpeg when it sees this URL; if ffmpeg is missing at
+		// the host, the handler returns 404. This is the same
+		// behavior as image thumbs — the URL is set, but the
+		// generator may fail at request time.)
+		if !noVideoThumbs {
+			v.ThumbURL = thumbPrefix + thumbStripExt(f.Name) + ".webp"
+		}
 		v.Size = humanSize(f.Size)
 		v.Date = formatDate(f.ModTime)
 	default:
@@ -440,7 +453,7 @@ func parseIntDefault(s string, def int) (int, error) {
 // as the <img src> instead of `/_thumbs/<name>.webp` (no thumb
 // generation). `pageSize` is the configured page_size — the
 // number of image entries per page. Pass 0 for the default of 50.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs bool, pageSize int, files []FileInfo, query url.Values) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -485,7 +498,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// entry is rendered on its own line (always first when
 	// present); Subdirs is rendered in a tight row with no
 	// gap between chips, per the user's 2026-06-17 spec.
-	subdirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs)
+	subdirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs)
 	var up *FileView
 	if relPath != "" {
 		// Compute the parent directory's basename so the up
@@ -523,8 +536,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		ThumbPrefix:       thumbPrefix,
 		Up:                up,
 		Subdirs:           subdirViews,
-		OtherFiles:        buildFileViews(others, pathPrefix, thumbPrefix, noThumbs),
-		Images:            buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs),
+		OtherFiles:        buildFileViews(others, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
+		Images:            buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
 		Page:              page,
 		PageSize:          pageSize,
 		TotalImages:       totalImages,
@@ -550,10 +563,10 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 }
 
 // buildFileViews maps a []FileInfo to a []FileView.
-func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs bool) []FileView {
+func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideoThumbs bool) []FileView {
 	out := make([]FileView, 0, len(files))
 	for _, f := range files {
-		out = append(out, buildFileView(f, pathPrefix, thumbPrefix, noThumbs))
+		out = append(out, buildFileView(f, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs))
 	}
 	return out
 }
@@ -989,6 +1002,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   justify-content: center;
 }
 .play-overlay {
+  /* Per Phase 62: position: absolute so the play button sits
+     on top of the video thumbnail image (when present) instead
+     of competing with it in the flex layout. Without this,
+     adding an <img> as a sibling would push the play overlay
+     out of center. The parent .thumb has position: relative
+     already, so this anchors to the thumb area. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 64px;
   height: 64px;
   border-radius: 50%;
@@ -1003,7 +1026,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: transform 0.15s, background 0.15s;
 }
 .card.video:hover .play-overlay {
-  transform: scale(1.1);
+  /* Re-centre on hover (override the translate(-50%, -50%) so the
+     scale transform stays centered). */
+  transform: translate(-50%, -50%) scale(1.1);
   background: #fff;
 }
 .tile-name {
@@ -1350,6 +1375,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
+          {{if .ThumbURL}}
+          <!-- Per Phase 62: video has a real thumbnail (extracted
+               from the first frame by ffmpeg on the server). Show
+               the <img> with the play overlay on top. -->
+          <img class="thumb-img" loading="lazy" src="{{.ThumbURL}}" alt="">
+          {{end}}
           <div class="play-overlay">▶</div>
           {{else}}
           <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
@@ -1453,12 +1484,29 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     var isVideo = c.classList.contains('video');
     clear();
     if (isVideo) {
+      // Per user request 2026-06-19: show the video thumbnail
+      // (extracted from the first frame by ffmpeg, served as a
+      // WebP by the server) as the <video poster>. The browser
+      // shows the poster image until the user clicks play, then
+      // swaps to the first video frame and starts playback.
+      //
+      // The poster URL is the same as the <img class="thumb-img">
+      // src that Phase 62 added to the tile card. We extract it
+      // from the DOM rather than duplicating it in a data-*
+      // attribute.
+      var thumbImg = c.querySelector('img.thumb-img');
+      var thumbSrc = thumbImg ? thumbImg.getAttribute('src') : '';
       var v = document.createElement('video');
       v.src = href;
       v.controls = true;
       v.preload = 'metadata';
       v.playsInline = true;
       v.alt = name;
+      // Only set poster if a thumbnail URL is available. If ffmpeg
+      // is missing or no_video_thumbs is set, the <img> won't be
+      // in the card and we just skip poster (browser shows black
+      // frame, same as before Phase 62).
+      if (thumbSrc) v.poster = thumbSrc;
       currentEl = v;
     } else {
       var img = document.createElement('img');

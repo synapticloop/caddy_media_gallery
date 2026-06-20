@@ -587,6 +587,26 @@ lightbox CSS — the lightbox is intentionally theme-independent
 choice as the lightbox bg and counter/caption: focus
 on the content, regardless of page theme.
 
+**Video poster (Phase 63):** when a video tile has a generated
+thumbnail (Phase 62's ffmpeg pipeline), the lightbox video
+element sets its HTML5 `poster` attribute to the thumb URL
+(extracted from the same `<img class="thumb-img">` element
+on the tile). The browser shows the poster image immediately
+when the video opens in the lightbox — the user sees the
+video's first frame as a still image, then on click the video
+swaps to playback. This is the same mechanism YouTube uses
+to show a thumbnail before a video plays.
+
+If `no_video_thumbs` is set OR ffmpeg is missing, the tile
+has no `<img class="thumb-img">` so the JS can't find a
+poster URL — the `poster` attribute is simply not set, and
+the browser shows its default (black frame, or the first
+decoded frame if `preload="metadata"` is enabled).
+
+The poster URL points at the same cached WebP that's used
+for the tile thumbnail, so no extra server work or storage
+is required.
+
 
 ## Building the PDF locally
 

@@ -102,6 +102,54 @@ func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 	})
 }
 
+// TestUnmarshalCaddyfile_NoVideoThumbs verifies the new
+// no_video_thumbs directive (Phase 62):
+//   - `no_video_thumbs` (no arg) → NoVideoThumbs = true
+//   - `no_video_thumbs false`     → NoVideoThumbs = false
+//   - anything else → error
+//
+// Same pattern as no_thumbs, but for the video thumbnail
+// generator (which uses ffmpeg to extract the first frame).
+func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
+	t.Run("no_video_thumbs (no arg) → true", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  no_video_thumbs\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoVideoThumbs {
+			t.Error("expected NoVideoThumbs=true after `no_video_thumbs` directive")
+		}
+	})
+	t.Run("no_video_thumbs false → false", func(t *testing.T) {
+		g := Gallery{NoVideoThumbs: true}
+		d := caddyfile.NewTestDispenser("image_gallery { no_video_thumbs false }")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.NoVideoThumbs {
+			t.Error("expected NoVideoThumbs=false after `no_video_thumbs false` directive")
+		}
+	})
+	t.Run("no_video_thumbs with bogus arg → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery { no_video_thumbs off }")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `no_video_thumbs off` (must be `false`, not `off`)")
+		}
+	})
+	t.Run("no_video_thumbs + no_thumbs together", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("image_gallery {\n  no_thumbs\n  no_video_thumbs\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoThumbs || !g.NoVideoThumbs {
+			t.Error("expected both NoThumbs and NoVideoThumbs to be true")
+		}
+	})
+}
+
 // TestRenderPage_NoThumbs_OriginalImageAsThumb verifies that
 // when no_thumbs is true, the rendered tile <img> uses the
 // original file URL (the Href) as its src, not the thumb URL.
@@ -110,7 +158,7 @@ func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", true, 0, files, nil,
+		"test", "./", "./_thumbs/", "", "", true, false, 0, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -132,7 +180,7 @@ func TestRenderPage_WithThumbs_ThumbURLUsed(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, 0, files, nil,
+		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -423,7 +471,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	}
 	// pageSize=3 → 7 images / 3 per page = 3 pages, "Page 1 of 3"
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, 3, files, nil,
+		"test", "./", "./_thumbs/", "", "", false, false, 3, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -438,7 +486,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	// `if gt .TotalPages 1` block). This is the right behavior:
 	// no point showing "Page 1 of 1" + disabled prev/next buttons.
 	html, err = RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, 0, files, nil,
+		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil,
 	)
 	if err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -301,4 +302,142 @@ func writeTestPNG(t *testing.T, dir string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// TestIsVideoExt verifies that isVideoExt correctly classifies
+// common video container extensions and ignores images /
+// non-media. Per Phase 62 — supports the new video-thumb
+// dispatch logic in serveThumb.
+func TestIsVideoExt(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		// Common video containers we generate thumbnails for.
+		{"clip.mp4", true},
+		{"movie.m4v", true},
+		{"anim.webm", true},
+		{"raw.mov", true},
+		{"episode.mkv", true},
+		{"old.avi", true},
+		{"vp9.webm", true},
+		{"theora.ogv", true},
+		// Case-insensitive (strings.ToLower is applied).
+		{"CLIP.MP4", true},
+		{"Photo.MOV", true},
+		// Images — should NOT be classified as video.
+		{"photo.jpg", false},
+		{"photo.png", false},
+		{"anim.gif", false},
+		{"art.svg", false},
+		{"icon.avif", false},
+		// Other files — also not video.
+		{"readme.txt", false},
+		{"archive.zip", false},
+		// No extension — not a video.
+		{"README", false},
+	}
+	for _, tc := range cases {
+		if got := isVideoExt(tc.path); got != tc.want {
+			t.Errorf("isVideoExt(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}
+
+// TestGenerateOrLoadVideoThumb_EmptyFFmpegPathReturnsError covers
+// the defensive guard: if the caller passes an empty ffmpegPath,
+// the function should fail cleanly rather than exec.Command("")
+// (which on some platforms returns a "no such file" error but
+// is confusing — we want a clear message).
+func TestGenerateOrLoadVideoThumb_EmptyFFmpegPathReturnsError(t *testing.T) {
+	_, err := GenerateOrLoadVideoThumb("/some/video.mp4", t.TempDir(), "", ThumbConfig{Width: 320, Height: 320, Format: "webp"})
+	if err == nil {
+		t.Fatal("expected error when ffmpegPath is empty, got nil")
+	}
+	if !strings.Contains(err.Error(), "ffmpeg") {
+		t.Errorf("error message should mention ffmpeg, got: %v", err)
+	}
+}
+
+// TestGenerateOrLoadVideoThumb_MissingSourceReturnsError covers
+// the stat-the-source guard. Mirrors the existing
+// TestGenerateOrLoadThumb_MissingSourceReturnsError.
+func TestGenerateOrLoadVideoThumb_MissingSourceReturnsError(t *testing.T) {
+	_, err := GenerateOrLoadVideoThumb("/nonexistent/video.mp4", t.TempDir(), "/usr/bin/ffmpeg", ThumbConfig{Width: 320, Height: 320, Format: "webp"})
+	if err == nil {
+		t.Fatal("expected error for missing source file, got nil")
+	}
+	if !strings.Contains(err.Error(), "stat") {
+		t.Errorf("error should mention stat failure, got: %v", err)
+	}
+}
+
+// TestGenerateOrLoadVideoThumb_EndToEndWithRealFFmpeg is gated on
+// ffmpeg being available on the test host. If ffmpeg is not
+// installed (or isn't in PATH), the test is skipped — the
+// production code still handles the "ffmpeg missing" case via
+// serveThumb's 404 fallback.
+//
+// To exercise the real code path on a host with ffmpeg, this
+// test:
+//  1. Synthesizes a 1-second test video with ffmpeg itself
+//     (using the lavfi virtual input — no need for a fixture file)
+//  2. Calls GenerateOrLoadVideoThumb on it
+//  3. Verifies the cache file is created
+//  4. Verifies the cache file is a valid webp image (by checking
+//     the magic bytes: "RIFF????WEBP")
+func TestGenerateOrLoadVideoThumb_EndToEndWithRealFFmpeg(t *testing.T) {
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Skip("ffmpeg not available on this host; skipping end-to-end test")
+	}
+	tmpDir := t.TempDir()
+	srcPath := filepath.Join(tmpDir, "testsrc.mp4")
+	cacheDir := filepath.Join(tmpDir, "cache")
+
+	// Synthesize a 1-second test video: 320x240, solid red,
+	// h264 + aac, mp4 container. The lavfi virtual input
+	// (color=red:size=320x240:duration=1:rate=30) avoids
+	// needing a real fixture file.
+	mkCmd := exec.Command(ffmpegPath,
+		"-y",
+		"-f", "lavfi",
+		"-i", "color=red:size=320x240:duration=1:rate=30",
+		"-c:v", "libx264",
+		"-pix_fmt", "yuv420p",
+		"-c:a", "aac",
+		srcPath,
+	)
+	if mkOut, err := mkCmd.CombinedOutput(); err != nil {
+		t.Skipf("could not synthesize test video with ffmpeg: %v (%s)", err, mkOut)
+	}
+
+	// Now call GenerateOrLoadVideoThumb.
+	cfg := ThumbConfig{Width: 320, Height: 320, Format: "webp"}
+	data, err := GenerateOrLoadVideoThumb(srcPath, cacheDir, ffmpegPath, cfg)
+	if err != nil {
+		t.Fatalf("GenerateOrLoadVideoThumb failed: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("returned empty thumb bytes")
+	}
+	// Verify webp magic bytes: "RIFF????WEBP"
+	if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WEBP" {
+		t.Errorf("output is not a valid webp file; first 12 bytes: % x", data[:min(12, len(data))])
+	}
+	// Verify cache file was written.
+	expectedCacheFile := thumbCachePath(srcPath, cacheDir, "webp")
+	if _, err := os.Stat(expectedCacheFile); err != nil {
+		t.Errorf("cache file not created at %s: %v", expectedCacheFile, err)
+	}
+	// Second call should be a cache hit (no ffmpeg invocation).
+	// We can't directly detect "no ffmpeg invocation" but we can
+	// verify the result is identical (deterministic).
+	data2, err := GenerateOrLoadVideoThumb(srcPath, cacheDir, ffmpegPath, cfg)
+	if err != nil {
+		t.Fatalf("second call failed: %v", err)
+	}
+	if !bytes.Equal(data, data2) {
+		t.Error("second call returned different bytes (cache hit should be deterministic)")
+	}
 }

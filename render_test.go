@@ -38,7 +38,7 @@ func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 		{Name: "gamma.mp4", ModTime: time.Now().UnixNano(), Size: 999999, Kind: KindVideo},
 		{Name: "readme.txt", ModTime: time.Now().UnixNano(), Size: 100, Kind: KindOther},
 	}
-	html, err := RenderPage("Test Gallery", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("Test Gallery", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatalf("RenderPage: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestRenderPage_NoOtherFilesSectionWhenEmpty(t *testing.T) {
 	files := []FileInfo{
 		{Name: "only.jpg", ModTime: time.Now().UnixNano(), Kind: KindImage},
 	}
-	html, err := RenderPage("x", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("x", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestRenderPage_HTMLIsValidish(t *testing.T) {
 	files := []FileInfo{
 		{Name: "a.jpg", ModTime: time.Now().UnixNano(), Kind: KindImage},
 	}
-	html, err := RenderPage("t", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("t", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestRenderPage_DirectoriesAlwaysRendered(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	}
 	// Test page 2
 	q := url.Values{"page": {"2"}}
-	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, q)
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestRenderPage_PerPageTextInHeader(t *testing.T) {
 		{Name: "f.jpg", ModTime: 6, Size: 100, Kind: KindImage},
 		{Name: "g.jpg", ModTime: 7, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 10, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestRenderPage_PerPageTextInHeader(t *testing.T) {
 		t.Errorf("expected '10 per page' to come AFTER '7 images' in the header, got: %q", metaBlock)
 	}
 	// Should also work with a non-default pageSize (e.g. 25)
-	html25, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 25, files, nil)
+	html25, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 25, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestRenderPage_HeaderShowsPageCount(t *testing.T) {
 		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
 		{Name: "c.jpg", ModTime: 3, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 10, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestRenderPage_HeaderShowsPageCount(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files2[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
 	}
-	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 10, files2, nil)
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 10, files2, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,14 +263,14 @@ func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	// Clicking it should go to ?sort=name&order=asc.
 	// (Go's html/template leaves & unescaped in href attributes —
 	// they're valid HTML — so we check for & not &amp;.)
-	html, _ := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, _ := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if !strings.Contains(html, `href="?sort=name&order=asc"`) {
 		t.Error("expected default Name link to be asc (clicking activates sort)")
 	}
 
 	// Now activate by name asc. The link should toggle to desc.
 	q := url.Values{"sort": {"name"}, "order": {"asc"}}
-	html, _ = RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, q)
+	html, _ = RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, q)
 	if !strings.Contains(html, `class="sort-btn active"`) {
 		t.Error("expected the active sort button to have the 'active' class")
 	}
@@ -292,7 +292,7 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: now.UnixNano(), Size: 234567, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 }
 
 func TestRenderPage_EmptyDirShowsEmptyMessage(t *testing.T) {
-	html, err := RenderPage("empty", "./", "./_thumbs/", "", "", false, 0, nil, nil)
+	html, err := RenderPage("empty", "./", "./_thumbs/", "", "", false, false, 0, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 		{Name: "notes.txt", ModTime: 2, Size: 50, Kind: KindOther},
 		{Name: "clip.mp4", ModTime: 3, Size: 9999, Kind: KindVideo},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +411,7 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// Viewing a subdir: relPath = "subdir"
-	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, 0, files, nil)
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ func TestRenderPage_DirsRowNoGap(t *testing.T) {
 		{Name: "dir2", Kind: KindDir},
 		{Name: "dir3", Kind: KindDir},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -536,7 +536,7 @@ func TestRenderPage_NoUpEntryAtRoot(t *testing.T) {
 		{Name: "nested1", Kind: KindDir},
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("root", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("root", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +729,7 @@ func TestSplitFiles_DirsUnaffectedByImageSort(t *testing.T) {
 			q := url.Values{}
 			q.Set("sort", sortSpec)
 			q.Set("order", order)
-			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, q)
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, q)
 			if err != nil {
 				t.Fatalf("sort=%s order=%s: %v", sortSpec, order, err)
 			}
@@ -756,6 +756,75 @@ func gotNames(files []FileInfo) []string {
 	return names
 }
 
+// TestRenderPage_VideoThumbnailRendering verifies the Phase 62
+// behavior: when video thumb generation is enabled (the default
+// — noVideoThumbs=false), videos get a ThumbURL set, and the
+// rendered card contains an <img class="thumb-img"> element
+// pointing at that thumb URL, plus the play overlay. When
+// noVideoThumbs=true, the ThumbURL is empty, no <img class="thumb-img">
+// is rendered, and only the play overlay + placeholder gradient
+// are shown.
+func TestRenderPage_VideoThumbnailRendering(t *testing.T) {
+	files := []FileInfo{
+		{Name: "clip.mp4", ModTime: 3, Size: 9999, Kind: KindVideo},
+	}
+
+	t.Run("video thumb enabled (noVideoThumbs=false) → <img class=\"thumb-img\"> is rendered", func(t *testing.T) {
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(html, `class="thumb-img"`) {
+			t.Error("expected <img class=\"thumb-img\"> for video when noVideoThumbs=false")
+		}
+		if !strings.Contains(html, `src="./_thumbs/clip.webp"`) {
+			t.Error("expected ThumbURL to be set to ./_thumbs/clip.webp for video")
+		}
+		if !strings.Contains(html, `class="play-overlay"`) {
+			t.Error("expected play-overlay to be present alongside the thumb img")
+		}
+	})
+
+	t.Run("video thumb disabled (noVideoThumbs=true) → no <img class=\"thumb-img\">, placeholder shown", func(t *testing.T) {
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, true, 0, files, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(html, `class="thumb-img"`) {
+			t.Error("expected NO <img class=\"thumb-img\"> when noVideoThumbs=true")
+		}
+		if strings.Contains(html, `src="./_thumbs/clip.webp"`) {
+			t.Error("expected ThumbURL to be empty when noVideoThumbs=true")
+		}
+		// The play overlay should still be there (videos still
+		// display, just without a real thumbnail).
+		if !strings.Contains(html, `class="play-overlay"`) {
+			t.Error("expected play-overlay to still be present even when video thumb is disabled")
+		}
+		// The placeholder gradient (.thumb-video background) is
+		// still in the CSS — verifying its presence here is a
+		// sanity check that we didn't accidentally remove it.
+		if !strings.Contains(html, `thumb-video`) {
+			t.Error("expected the .thumb-video class to be present for the placeholder gradient")
+		}
+	})
+
+	t.Run("image (KindImage) is unaffected by noVideoThumbs", func(t *testing.T) {
+		files := []FileInfo{
+			{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		}
+		// With noVideoThumbs=true: images should STILL get their
+		// thumb URL (noVideoThumbs only affects videos).
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, true, 0, files, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(html, `src="./_thumbs/photo.webp"`) {
+			t.Error("image thumb URL should be set regardless of noVideoThumbs (it's an image, not a video)")
+		}
+	})
+}
+
 func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 	// Each image/video tile should have an "open in new tab" button
 	// (a <span class="open-btn" role="button">) positioned in the
@@ -766,7 +835,7 @@ func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 		{Name: "clip.mp4", ModTime: now.UnixNano(), Size: 9999, Kind: KindVideo},
 		{Name: "notes.txt", ModTime: now.UnixNano(), Size: 50, Kind: KindOther},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -861,7 +930,7 @@ func TestRenderPage_GoogleStylePagination(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			q := url.Values{"page": {strconv.Itoa(tc.currentPage)}}
-			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 8, files25, q)
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 8, files25, q)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -901,7 +970,7 @@ func TestRenderPage_GoogleStylePagination(t *testing.T) {
 		files4[i] = FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage}
 	}
 	q := url.Values{"page": {"2"}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 50, files4, q)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 50, files4, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -934,7 +1003,7 @@ func TestRenderPage_HeaderShowsPagePosition(t *testing.T) {
 	}
 	// 200 images, pageSize=50 -> 4 pages. Page 2 of 4.
 	q := url.Values{"page": {"2"}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 50, files, q)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 50, files, q)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1025,7 +1094,7 @@ func TestRenderPage_TotalAllFilesSize(t *testing.T) {
 			for i, s := range tc.otherSizes {
 				files = append(files, FileInfo{Name: fmt.Sprintf("meta-%d.json", i), ModTime: int64(i + 1000), Size: s, Kind: KindOther})
 			}
-			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1191,7 +1260,7 @@ func TestRenderPage_HeaderSeparatesImageAndVideoCounts(t *testing.T) {
 		{Name: "clip1.mp4", ModTime: 6, Size: 1024, Kind: KindVideo},
 		{Name: "clip2.mp4", ModTime: 7, Size: 2048, Kind: KindVideo},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, files, nil)
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1223,7 +1292,7 @@ func TestRenderPage_HeaderSeparatesImageAndVideoCounts(t *testing.T) {
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
 	}
-	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, filesNoVideo, nil)
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, filesNoVideo, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1243,7 +1312,7 @@ func TestRenderPage_HeaderSeparatesImageAndVideoCounts(t *testing.T) {
 		{Name: "v2.mp4", ModTime: 2, Size: 2048, Kind: KindVideo},
 		{Name: "v3.mp4", ModTime: 3, Size: 4096, Kind: KindVideo},
 	}
-	html3, err := RenderPage("test", "./", "./_thumbs/", "", "", false, 0, filesAllVideo, nil)
+	html3, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, filesAllVideo, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1318,7 +1387,7 @@ func TestRenderPage_UpEntryShowsParentDirName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			html, err := RenderPage("test", "./", "./_thumbs/", tc.relPath, "", false, 0, files, nil)
+			html, err := RenderPage("test", "./", "./_thumbs/", tc.relPath, "", false, false, 0, files, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

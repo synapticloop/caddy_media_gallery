@@ -15,7 +15,8 @@ The `image_gallery` directive accepts one inline option:
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
-| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
+| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
+| `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip on-the-fly WebP thumbnail generation for **videos** (extracted from the first frame via ffmpeg). When `true`, videos still display in the gallery (with the placeholder gradient + play button on each tile) but no per-frame thumbnail is generated. When `false` (default), video thumbs ARE generated IF ffmpeg is available on the host. If ffmpeg is missing, video thumbs fall back to the placeholder regardless of this setting (we can't decode a frame without a tool that can). Use `no_video_thumbs` to skip the ffmpeg invocation even when it's available (e.g., on hosts where you don't want the CPU cost of frame extraction). See "Video thumbnails (ffmpeg)" below. |
 | `page_size` | integer &gt;= 1 | `50` | How many image entries to show per page. Must be a positive integer; `page_size 0` is rejected (use no directive, or set the explicit value you want). The pagination nav only renders when total pages > 1, so a 30-image gallery at the default 50 shows all 30 on a single page with no nav. |
 
 Example with a themed subdir:
@@ -51,11 +52,25 @@ With `no_thumbs`:
 - Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
 - No thumb generation, no cache, no CPU cost on first request
 - The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
-- Requests to `~/_thumbs/<name>.webp` fall through to the next handler (file_server), which 404s
 
+Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in).
+
+### Example: disable video thumbnails
+
+Video thumbnails (per the table above) require ffmpeg. If ffmpeg isn't available, the gallery falls back to the placeholder gradient + play button automatically — you don't need to do anything. If ffmpeg IS available and you want to skip frame extraction (e.g., on a low-CPU host or for very large videos), use `no_video_thumbs`:
+
+```
+image_gallery {
+    no_video_thumbs
+}
+```
+
+With this, video tiles show the placeholder gradient + play button (no `<img>` for the frame). The same `no_video_thumbs false` form re-enables frame extraction.
+
+The video thumb generation uses `ffmpeg -vframes 1` to extract the first frame, scaled to fit the configured `thumb_width` × `thumb_height` (defaults 320×320). The output is a WebP, written to the same cache dir as image thumbs (`/var/cache/caddy-gallery` by default, override via `GALLERY_THUMB_CACHE_DIR`). Same caching rules as image thumbs (regenerate only when the source video's mtime is newer than the cache file).
+
+If the operator has ffmpeg installed at a non-standard path, set `FFMPEG_PATH` env var (note: not yet implemented — current code uses `exec.LookPath("ffmpeg")` which only checks `$PATH`). All standard install paths (`/usr/bin/ffmpeg`, `/usr/local/bin/ffmpeg`, etc.) are picked up automatically.
 Best for: small galleries (< 100 images) where you don't want a thumb cache and the originals aren't huge. Not recommended for large galleries — the page payload goes from ~30 KB (with thumbs) to ~5 MB average (full images) for a 1,000-image dir.
-
-Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in). Videos are unaffected either way (they don't have thumbs — they show a play-button overlay).
 
 ### Example: change the page size
 

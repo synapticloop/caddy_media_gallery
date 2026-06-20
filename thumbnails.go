@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -24,6 +25,23 @@ import (
 var imageExtsForThumb = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true,
 	".gif": true, ".webp": true, ".avif": true, ".svg": true,
+}
+
+// videoExtsForThumb is the set of file extensions for which a
+// first-frame thumbnail can be extracted via ffmpeg. Used by
+// findSourceForThumb to detect video sources.
+//
+// Note: webm and mov are container formats; the actual codecs
+// inside them matter to ffmpeg but not to us — ffmpeg will pick
+// up the demuxer from the file's magic bytes regardless of
+// extension. So this list covers all the common video formats
+// visitors are likely to encounter.
+//
+// We don't include every format ffmpeg supports (there are many
+// obscure ones); we cover the realistic set.
+var videoExtsForThumb = map[string]bool{
+	".mp4": true, ".m4v": true, ".webm": true, ".mov": true,
+	".mkv": true, ".avi": true, ".ogv": true, ".ogg": true,
 }
 
 // ThumbConfig holds the runtime configuration for thumb
@@ -184,6 +202,100 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	return out, nil
 }
 
+// isVideoExt returns true if the given file path has a recognized
+// video extension. Used by findSourceForThumb to decide whether
+// to dispatch to GenerateOrLoadVideoThumb (when ffmpeg is
+// available) vs the image-based GenerateOrLoadThumb.
+func isVideoExt(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return videoExtsForThumb[ext]
+}
+
+// GenerateOrLoadVideoThumb extracts the first frame from a video
+// using ffmpeg, saves it as a WebP thumbnail, and returns the
+// thumbnail bytes. Mirrors GenerateOrLoadThumb's caching
+// behavior: if a cache file already exists and is not older than
+// the source video, the cached bytes are returned without
+// invoking ffmpeg.
+//
+// The ffmpegPath argument must be the absolute path to a working
+// ffmpeg binary (use Gallery.ffmpegPath, set in Provision via
+// exec.LookPath). If ffmpegPath is empty, the function returns
+// an error — callers should check gallery.VideoThumbsEnabled()
+// first to know whether to call this function.
+//
+// ffmpeg invocation:
+//
+//	ffmpeg -y -i input.mp4 -vframes 1 -vf "scale=W:H:force_original_aspect_ratio=decrease" output.webp
+//
+// -y: overwrite output without prompting
+// -i: input
+// -vframes 1: extract exactly one frame
+// -vf scale=W:H:force_original_aspect_ratio=decrease: fit-within-bounds
+// output: webp (or other format if cfg.Format is set; we default to webp
+// since that's what the rest of the thumb pipeline uses)
+//
+// Note on seeking: we use -vframes 1 which extracts the FIRST
+// frame. For most videos this is fine. Some videos have an all-
+// black opening frame (the "fade-in" frame); if that becomes a
+// problem we can add -ss 0.5 to seek forward half a second.
+func GenerateOrLoadVideoThumb(src, cacheDir, ffmpegPath string, cfg ThumbConfig) ([]byte, error) {
+	if ffmpegPath == "" {
+		return nil, fmt.Errorf("video thumb: ffmpeg path is empty")
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create cache dir: %w", err)
+	}
+	// Same width/height defaults as GenerateOrLoadThumb.
+	if cfg.Width <= 0 {
+		cfg.Width = 320
+	}
+	if cfg.Height <= 0 {
+		cfg.Height = 320
+	}
+	// We always write webp for video thumbs (regardless of the
+	// configured image thumb format) because ffmpeg writes its
+	// output in the format you specify in the output filename.
+	// The thumb pipeline only knows how to serve .webp files;
+	// jpeg/png would require a different cache path scheme.
+	ext := "webp"
+	cacheFile := thumbCachePath(src, cacheDir, ext)
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return nil, fmt.Errorf("stat source: %w", err)
+	}
+	if cacheInfo, err := os.Stat(cacheFile); err == nil {
+		if !cacheInfo.ModTime().Before(srcInfo.ModTime()) {
+			return os.ReadFile(cacheFile)
+		}
+	}
+	// Build the scale filter. force_original_aspect_ratio=decrease
+	// scales so the longest edge fits in the box (matches the
+	// image thumb behavior).
+	scaleFilter := fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease", cfg.Width, cfg.Height)
+	cmd := exec.Command(ffmpegPath,
+		"-y",      // overwrite output without prompting
+		"-i", src, // input
+		"-vframes", "1", // extract exactly one frame
+		"-vf", scaleFilter,
+		cacheFile, // output (filename determines the format)
+	)
+	// Capture stderr for error messages (ffmpeg logs to stderr
+	// by default).
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ffmpeg failed for %s: %w (stderr: %s)", src, err, stderr.String())
+	}
+	// Confirm the output file exists (ffmpeg can exit 0 but
+	// produce no output if the codec is unrecognized; rare but
+	// possible).
+	if _, err := os.Stat(cacheFile); err != nil {
+		return nil, fmt.Errorf("ffmpeg produced no output for %s: %w", src, err)
+	}
+	return os.ReadFile(cacheFile)
+}
+
 // thumbCachePath returns the on-disk path where the thumbnail for
 // src should be cached, for a specific output extension. The
 // filename is the first 16 bytes of the SHA256 of src's absolute
@@ -210,6 +322,16 @@ func thumbCachePath(src, cacheDir, ext string) string {
 func findSourceForThumb(root, subdir, sourceRel string) string {
 	dir := filepath.Join(root, subdir)
 	for ext := range imageExtsForThumb {
+		candidate := filepath.Join(dir, sourceRel+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	// Try video extensions too (only reached if no image matched).
+	// We check videos AFTER images so an image with the same
+	// basename as a video would win (unlikely but possible; we
+	// follow the existing extension-priority logic).
+	for ext := range videoExtsForThumb {
 		candidate := filepath.Join(dir, sourceRel+ext)
 		if _, err := os.Stat(candidate); err == nil {
 			return candidate
@@ -261,7 +383,21 @@ func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPa
 		http.NotFound(w, r)
 		return true
 	}
-	data, err := GenerateOrLoadThumb(src, g.thumbCacheDir(), g.thumbConfig())
+	// Dispatch to the right thumb generator: image -> GenerateOrLoadThumb,
+	// video -> GenerateOrLoadVideoThumb (only if ffmpeg is available
+	// and not disabled by the directive; otherwise 404 — there's no
+	// frame to serve).
+	var data []byte
+	var err error
+	if isVideoExt(src) {
+		if g.ffmpegPath == "" || g.NoVideoThumbs {
+			http.NotFound(w, r)
+			return true
+		}
+		data, err = GenerateOrLoadVideoThumb(src, g.thumbCacheDir(), g.ffmpegPath, g.thumbConfig())
+	} else {
+		data, err = GenerateOrLoadThumb(src, g.thumbCacheDir(), g.thumbConfig())
+	}
 	if err != nil {
 		http.Error(w, "image_gallery: thumb generation failed: "+err.Error(), http.StatusInternalServerError)
 		return true

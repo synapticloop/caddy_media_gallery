@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -62,6 +63,27 @@ type Gallery struct {
 	// load on dirs of large photos). Useful for small galleries
 	// where the operator doesn't want to maintain a thumb cache.
 	NoThumbs bool `json:"no_thumbs,omitempty"`
+
+	// NoVideoThumbs disables the on-demand WebP thumbnail generation
+	// for VIDEO files (extracted from the first frame via ffmpeg).
+	// When true, videos still display in the gallery (with the
+	// placeholder gradient + play button on each tile) but no
+	// per-frame thumbnail is produced or served. When false (the
+	// default), video thumbnails ARE generated IF ffmpeg is
+	// available on the host — if ffmpeg is missing, video thumbs
+	// fall back to the placeholder regardless of this setting
+	// (there's no way to generate a frame without a tool that can
+	// decode the video).
+	// Caddyfile: `no_video_thumbs` (no arg → true) or
+	//            `no_video_thumbs false` (re-enable).
+	NoVideoThumbs bool `json:"no_video_thumbs,omitempty"`
+
+	// ffmpegPath is the absolute path to the ffmpeg binary, set
+	// in Provision via exec.LookPath. Empty when ffmpeg is not
+	// installed (or when NoVideoThumbs is true — we skip the lookup
+	// since it would be unused). Thread-safe to read after Provision
+	// returns; written only during Provision.
+	ffmpegPath string `json:"-"`
 
 	// PageSize is the number of image entries per page. Default
 	// is 50 (set in Provision if zero). The user can override
@@ -147,6 +169,16 @@ func (g *Gallery) Provision(caddy.Context) error {
 	}
 	if g.ThumbTTLMinutes == 0 {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
+	}
+	// Detect ffmpeg for video thumbnail generation. We do this
+	// once at Provision (not per-scan) since ffmpeg availability
+	// doesn't change at runtime. If ffmpeg is missing OR
+	// NoVideoThumbs is true, g.ffmpegPath stays empty and the
+	// video-thumb code path falls back to the placeholder.
+	if !g.NoVideoThumbs {
+		if path, err := exec.LookPath("ffmpeg"); err == nil {
+			g.ffmpegPath = path
+		}
 	}
 	// Make the bundled templates discoverable on disk for the
 	// operator. writeBundledTemplates is a no-op if the files
@@ -264,7 +296,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.PageSize, files, r.URL.Query())
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query())
 	if err != nil {
 		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -307,6 +339,18 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 						return d.ArgErr()
 					}
 					g.NoThumbs = false
+				}
+			case "no_video_thumbs":
+				// No arg → true (turn off video thumbnail
+				// generation). With "false" arg → false
+				// (back to default; generate video thumbs
+				// when ffmpeg is available).
+				g.NoVideoThumbs = true
+				if d.NextArg() {
+					if d.Val() != "false" {
+						return d.ArgErr()
+					}
+					g.NoVideoThumbs = false
 				}
 			case "page_size":
 				if !d.NextArg() {
