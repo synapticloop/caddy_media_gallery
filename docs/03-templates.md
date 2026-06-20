@@ -540,8 +540,8 @@ The lightbox overlay has 4 buttons + 2 text labels:
 |---|---|---|
 | `.lb-close` (×) | Top-right (inside `.lb-controls` pill) | Closes the lightbox; Esc key |
 | `.lb-open` (↗) | Top-right (inside `.lb-controls` pill, left of close) | Opens the current image/video in a new tab |
-| `.lb-prev` (‹) | Left edge, vertically centered | Previous image; Left-arrow key |
-| `.lb-next` (›) | Right edge, vertically centered | Next image; Right-arrow key |
+| `.lb-prev` (‹) | Full-height hit area on the **left** side (120px wide) | Previous image; Left-arrow key |
+| `.lb-next` (›) | Full-height hit area on the **right** side (120px wide) | Next image; Right-arrow key |
 | `.lb-counter` | Bottom-left (or bottom-center on mobile) | "N / total" text |
 | `.lb-caption` | Bottom-center | The current file's name |
 
@@ -573,10 +573,58 @@ container gives the two related actions (close + open) a visual
 unity — they're both "exit the lightbox" actions (close or
 view-on-its-own), and grouping them makes that clearer.
 
-**The prev/next buttons are NOT in the pill** — they're at
-the left/right edges of the lightbox, vertically centered. These
-are navigation actions (different from exit actions), so they
-get their own positioning.
+**The prev/next buttons are NOT in the pill** — they're at the
+left/right edges of the lightbox. These are navigation actions
+(different from exit actions), so they get their own positioning.
+
+**Prev/next hit areas (Phase 65):** the prev/next buttons are
+**full-window-height × 120px wide** hit areas positioned at
+`left: 0` / `right: 0`. The arrow icon is flex-centered inside
+the hit area. At rest, the hit area is **transparent** (no
+visible button) — only a hover reveals the target.
+
+- **Hover background — theme-aware:**
+  - Dark mode (default; the page bg is dark): the hover bg is
+    `rgba(255, 255, 255, 0.08)` — a subtle whiter tint over the
+    dark lightbox. The user sees a soft "highlight" where they're
+    pointing.
+  - Light mode (page bg is light): the hover bg is
+    `rgba(0, 0, 0, 0.06)` — a subtle darker tint. The lightbox
+    itself is still theme-independent (always dark), but the
+    hover tint adapts so it works for visitors on light pages.
+
+**Why a full-height hit area:**
+- On touch devices (mobile, tablets), the user doesn't have a
+  precise cursor — a small button in the middle of the screen
+  is hard to hit. A full-height strip on each side gives a
+  large, easy target.
+- On desktop, the same hit area means the user can click
+  anywhere in the left or right strip — no need to aim.
+
+**Why 120px wide:** enough to be a comfortable target on touch
+screens (~7mm at typical DPI), small enough to leave the center
+~60% of the screen clear for the image/video content.
+
+**Why transparent at rest:** the lightbox is about the content.
+A visible button on each side would distract from the image.
+The hover reveals the hit area, so the user sees it when they're
+navigating, not when they're viewing.
+
+**JS — `stopPropagation` (Phase 65 fix):** the new hit areas sit
+on top of the media (z-index: 1). The media element has its own
+click handler that advances to the next image (for `<img>`).
+Without `stopPropagation` on the prev/next click handlers, a
+single click in the prev/next area would advance TWICE — once
+from the button, once from the bubbling media click. The fix:
+both prev/next handlers call `e.stopPropagation()` before
+calling `show(idx±1)`.
+
+**Why an alpha-blended hover (rgba) instead of a solid color:**
+the lightbox shows whatever media is loaded. A solid bg color
+would clash with some images (e.g., a green hover on a photo
+of a red rose). An alpha-blended fill mixes with whatever's
+behind, giving a consistent "tint" effect that works on any
+media.
 
 **Why a dark border:** like the tile `.open-btn`, the pill has
 a black 2px border so it stands out clearly against the dark
