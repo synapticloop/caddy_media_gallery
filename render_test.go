@@ -2657,3 +2657,38 @@ func TestRenderPage_Phase82BiggerCloseIcon(t *testing.T) {
 		t.Errorf("expected .lb-close in lb-controls to have font-size: 1.4rem (Phase 82); rule: %q", lbControlsCloseRule)
 	}
 }
+
+// TestRenderPage_Phase83UpRowSameFontWeight verifies Phase 83:
+// the Up directory link has the same text size as the other
+// directory rows (the up-row-table td no longer has
+// font-weight: 500, so it inherits the default font-weight
+// from the .files-table base, matching the other rows).
+func TestRenderPage_Phase83UpRowSameFontWeight(t *testing.T) {
+	files := []FileInfo{
+		{Name: "nested1", Kind: KindDir, ModTime: 100},
+		{Name: "nested2", Kind: KindDir, ModTime: 200},
+	}
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The .up-row-table td rule should NOT have font-weight: 500
+	// (it was removed in Phase 83 so the Up link is the same
+	// size as the other directory rows).
+	upRuleStart := strings.Index(html, ".up-row-table td {")
+	if upRuleStart < 0 {
+		t.Fatal("no .up-row-table td rule")
+	}
+	upRuleEnd := strings.Index(html[upRuleStart:], "}")
+	if upRuleEnd < 0 {
+		t.Fatal("no end of .up-row-table td rule")
+	}
+	upRule := html[upRuleStart : upRuleStart+upRuleEnd+1]
+	if strings.Contains(upRule, "font-weight: 500") {
+		t.Errorf("expected .up-row-table td to NOT have font-weight: 500 (Phase 83: removed for same size as other dirs); rule: %q", upRule)
+	}
+	if strings.Contains(upRule, "font-weight:") {
+		t.Errorf("expected .up-row-table td to NOT have any font-weight (Phase 83: inherit from base); rule: %q", upRule)
+	}
+}

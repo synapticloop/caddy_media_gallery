@@ -996,7 +996,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
-  font-weight: 500;
+  /* Per user request 2026-06-19: removed font-weight: 500.
+     The up-row's text was bolder (and thus appeared bigger)
+     than the other directory rows in the dirs table below.
+     Now both use the default font-weight (inherited from
+     the .files-table / .up-row-table base, which is
+     font-weight: 400 / normal), so the Up link is the
+     same text size as the other directories. */
 }
 .up-row-table a {
   color: var(--fg);
