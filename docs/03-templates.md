@@ -251,7 +251,7 @@ on-disk file is NOT updated automatically.
 
 ```bash
 # 1. Save any local customisations (if you have any)
-diff /etc/caddy/gallery-templates/gallery.tmpl      /home/osmanj/projects/caddy_image_gallery/render.go
+diff /etc/caddy/gallery-templates/gallery.tmpl      /home/osmanj/projects/caddy_media_gallery/render.go
 # 2. Delete the on-disk file
 sudo rm /etc/caddy/gallery-templates/gallery.tmpl
 # 3. Restart Caddy so the next Provision runs writeBundledTemplates
@@ -704,12 +704,12 @@ the underlying technologies (Phases 56/58/59):
 
 ```
 ─────────────────────────────────────────
-           proudly served by caddy + synapticloop // image gallery
+           proudly served by caddy + synapticloop // media gallery
 ```
 
 - **"caddy"** — links to https://caddyserver.com (the web server)
-- **"synapticloop // image gallery"** — links to
-  https://github.com/synapticloop/caddy_image_gallery (this
+- **"synapticloop // media gallery"** — links to
+  https://github.com/synapticloop/caddy_media_gallery (this
   plugin's repo)
 
 Both links have `rel="noopener" target="_blank"` (security best
@@ -722,7 +722,7 @@ Phase 58 — the muted color provides enough visual distinction).
 **Why these credits:**
 - "caddy" — Caddy is the web server. Without it, this plugin
   wouldn't exist; credit the underlying tech.
-- "synapticloop // image gallery" — links to this plugin's repo
+- "synapticloop // media gallery" — links to this plugin's repo
   (not just the synapticloop org page) so visitors can read the
   source, file issues, or fork the project.
 
@@ -786,7 +786,7 @@ section above. Recent refinements:
 
 ## Building the PDF locally
 
-The PDF book (`caddy-image-gallery-book.pdf`) is built from the
+The PDF book (`caddy-media-gallery-book.pdf`) is built from the
 markdown files in `docs/` via pandoc + xelatex. The full command
 is wrapped in a script at the project root: `build-docs.sh`.
 

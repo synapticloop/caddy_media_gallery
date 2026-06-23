@@ -375,7 +375,7 @@ func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPa
 		return true
 	}
 	if root == "" {
-		http.Error(w, "image_gallery: no root configured", http.StatusInternalServerError)
+		http.Error(w, "media_gallery: no root configured", http.StatusInternalServerError)
 		return true
 	}
 	src := findSourceForThumb(root, subdir, sourceRel)
@@ -399,7 +399,7 @@ func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPa
 		data, err = GenerateOrLoadThumb(src, g.thumbCacheDir(), g.thumbConfig())
 	}
 	if err != nil {
-		http.Error(w, "image_gallery: thumb generation failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "media_gallery: thumb generation failed: "+err.Error(), http.StatusInternalServerError)
 		return true
 	}
 	w.Header().Set("Content-Type", "image/webp")

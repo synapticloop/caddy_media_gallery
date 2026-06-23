@@ -1,7 +1,7 @@
-# caddy_image_gallery — Complete configuration reference
+# caddy_media_gallery — Complete configuration reference
 
 A single-page reference for every configuration knob the
-`image_gallery` Caddy handler exposes. Use this as the "what can I
+`media_gallery` Caddy handler exposes. Use this as the "what can I
 configure" reference; for how to use individual features, see the
 per-topic docs linked below.
 
@@ -14,7 +14,7 @@ For per-topic deep dives:
 
 ## 1. Caddyfile subdirectives (the primary way)
 
-Inside an `image_gallery { ... }` block:
+Inside an `media_gallery { ... }` block:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
@@ -33,7 +33,7 @@ Inside an `image_gallery { ... }` block:
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery {
+    media_gallery {
         sort name
         template themes/dark/gallery.tmpl
         no_thumbs false
@@ -103,15 +103,15 @@ See [configuration.md to Environment variables](01-configuration.md#environment-
 
 ---
 
-## 5. Caddyfile handler-level wiring (external, not `image_gallery`-specific)
+## 5. Caddyfile handler-level wiring (external, not `media_gallery`-specific)
 
-These live in the surrounding Caddyfile, not inside the `image_gallery { ... }` block:
+These live in the surrounding Caddyfile, not inside the `media_gallery { ... }` block:
 
 | Caddyfile construct | Purpose | Example |
 |---|---|---|
-| `handle_path` (or `route`) | Strips URL prefix and routes to `image_gallery` | `handle_path /images/* { ... }` |
-| `root *` | Per-request "root" var, read by `image_gallery` to find the directory to scan | `root * /var/www/html/images` |
-| `file_server` | Fallthrough for direct file requests and 404s (must come AFTER `image_gallery`) | `file_server` |
+| `handle_path` (or `route`) | Strips URL prefix and routes to `media_gallery` | `handle_path /images/* { ... }` |
+| `root *` | Per-request "root" var, read by `media_gallery` to find the directory to scan | `root * /var/www/html/images` |
+| `file_server` | Fallthrough for direct file requests and 404s (must come AFTER `media_gallery`) | `file_server` |
 | Auth (Authelia, basic_auth, etc.) | Wraps the route in auth | `(auth)` snippet (or `basicauth { ... }` block) |
 
 ---
@@ -125,7 +125,7 @@ hermes.synapticloop.com {
     import auth
     route /images/* {
         root * /var/www/html/images
-        image_gallery
+        media_gallery
         file_server
     }
 }

@@ -1,7 +1,7 @@
-# caddy_image_gallery
+# caddy_media_gallery
 
 A Caddy v2 HTTP handler module that renders a directory as a light-themed
-image gallery. Replaces Caddy's default `file_server browse` with a
+media gallery. Replaces Caddy's default `file_server browse` with a
 thumbnailed grid, click-to-expand lightbox, sortable + paginated layout,
 and a separate "Other files" strip above the image grid for non-image
 content.
@@ -26,7 +26,7 @@ Build a custom Caddy binary with this module baked in:
 ```bash
 xcaddy build \
     --with github.com/caddyserver/caddy@v2.11.4 \
-    --with github.com/synapticloop/caddy_image_gallery@latest \
+    --with github.com/synapticloop/caddy_media_gallery@latest \
 ```
 
 Or use the included build script (pins Caddy to v2.11.4 and the local module path):
@@ -42,18 +42,18 @@ The build script also restarts Caddy via systemd (you may need to be root or use
 ```caddyfile
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery         # default: mtime desc, 320px WebP thumbs
+    media_gallery         # default: mtime desc, 320px WebP thumbs
     file_server           # serves direct file requests (e.g. /images/foo.jpg)
 }
 
 # Or with explicit sort:
 handle_path /images/crosswords/* {
     root * /var/www/html/images/crosswords
-    image_gallery { sort name }   # alphabetical for curated content
+    media_gallery { sort name }   # alphabetical for curated content
 }
 ```
 
-The `image_gallery` directive MUST come before `file_server` in the handle block — that way it gets a chance to handle the request (gallery HTML, thumbnail requests), and only falls through to `file_server` for direct file access (e.g. `/images/foo.jpg`).
+The `media_gallery` directive MUST come before `file_server` in the handle block — that way it gets a chance to handle the request (gallery HTML, thumbnail requests), and only falls through to `file_server` for direct file access (e.g. `/images/foo.jpg`).
 
 ### Auth
 
@@ -67,7 +67,7 @@ The gallery slots behind any standard Caddy auth layer (basic_auth, forward_auth
 
 Example:
 ```caddyfile
-image_gallery { sort name }
+media_gallery { sort name }
 ```
 
 ## How thumbs work
@@ -104,8 +104,8 @@ Cache invalidation is purely mtime-based — no cron job, no inotify watcher.
 
 ```bash
 # Clone
-git clone https://github.com/synapticloop/caddy_image_gallery
-cd caddy_image_gallery
+git clone https://github.com/synapticloop/caddy_media_gallery
+cd caddy_media_gallery
 
 # Build (requires xcaddy and Go 1.21+)
 go mod download
@@ -124,7 +124,7 @@ go test ./... -race       # race detector
 ## Architecture
 
 ```
-caddy_image_gallery/
+caddy_media_gallery/
 ├── gallery.go          # Module registration, Caddyfile parser, ServeHTTP
 ├── scanner.go          # Directory walker + file classification (image/video/other)
 ├── scancache.go        # mtime-keyed in-memory cache of directory scans
@@ -152,7 +152,7 @@ your.caddy.host:443 {
 
         handle_path /images/* {
             root * /var/www/html/images
-            image_gallery
+            media_gallery
             file_server
         }
     }
@@ -162,7 +162,7 @@ your.caddy.host:443 {
 ## Documentation
 
 The full documentation is also available as a single
-PDF: [caddy-image-gallery-book.pdf](caddy-image-gallery-book.pdf)
+PDF: [caddy-media-gallery-book.pdf](caddy-media-gallery-book.pdf)
 (19 pages, with cover page, table of contents, and the
 Google Fonts typography - Libre Baskerville for body text,
 JetBrains Mono for code).

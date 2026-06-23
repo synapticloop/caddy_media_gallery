@@ -64,7 +64,7 @@ func TestSanitizeTemplateName(t *testing.T) {
 func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 	t.Run("no_thumbs (no arg) → true", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  no_thumbs\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_thumbs\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -74,7 +74,7 @@ func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 	})
 	t.Run("no_thumbs false → false", func(t *testing.T) {
 		g := Gallery{NoThumbs: true}
-		d := caddyfile.NewTestDispenser("image_gallery { no_thumbs false }")
+		d := caddyfile.NewTestDispenser("media_gallery { no_thumbs false }")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -84,14 +84,14 @@ func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 	})
 	t.Run("no_thumbs with bogus arg → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery { no_thumbs off }")
+		d := caddyfile.NewTestDispenser("media_gallery { no_thumbs off }")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `no_thumbs off` (must be `false`, not `off`)")
 		}
 	})
 	t.Run("no_thumbs + template both set", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  template themes/dark/gallery.tmpl\n  no_thumbs\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  template themes/dark/gallery.tmpl\n  no_thumbs\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	t.Run("no_video_thumbs (no arg) → true", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  no_video_thumbs\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_video_thumbs\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +125,7 @@ func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	})
 	t.Run("no_video_thumbs false → false", func(t *testing.T) {
 		g := Gallery{NoVideoThumbs: true}
-		d := caddyfile.NewTestDispenser("image_gallery { no_video_thumbs false }")
+		d := caddyfile.NewTestDispenser("media_gallery { no_video_thumbs false }")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -135,14 +135,14 @@ func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	})
 	t.Run("no_video_thumbs with bogus arg → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery { no_video_thumbs off }")
+		d := caddyfile.NewTestDispenser("media_gallery { no_video_thumbs off }")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `no_video_thumbs off` (must be `false`, not `off`)")
 		}
 	})
 	t.Run("no_video_thumbs + no_thumbs together", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  no_thumbs\n  no_video_thumbs\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_thumbs\n  no_video_thumbs\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -217,7 +217,7 @@ func extractImgSrcs(html string) string {
 func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
 	t.Run("page_size 100", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 100\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 100\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -227,7 +227,7 @@ func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
 	})
 	t.Run("page_size 1 (minimum valid)", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 1\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 1\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -237,28 +237,28 @@ func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
 	})
 	t.Run("page_size 0 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size 0\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 0\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `page_size 0` (must be > 0)")
 		}
 	})
 	t.Run("page_size -5 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size -5\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size -5\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `page_size -5` (must be > 0)")
 		}
 	})
 	t.Run("page_size abc → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size abc\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size abc\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `page_size abc` (must be an integer)")
 		}
 	})
 	t.Run("page_size with no arg → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  page_size\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for `page_size` with no value")
 		}
@@ -296,7 +296,7 @@ func TestProvision_PageSizePreserved(t *testing.T) {
 func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	t.Run("thumb_width 480", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 480\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_width 480\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -306,21 +306,21 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_width 0 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 0\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_width 0\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for thumb_width 0")
 		}
 	})
 	t.Run("thumb_width -1 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width -1\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_width -1\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for thumb_width -1")
 		}
 	})
 	t.Run("thumb_height 240", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_height 240\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_height 240\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -330,7 +330,7 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_format jpeg", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format jpeg\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_format jpeg\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -340,7 +340,7 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_format jpg (alias)", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format jpg\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_format jpg\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -350,7 +350,7 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_format png", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format png\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_format png\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -360,7 +360,7 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_format webp", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format webp\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_format webp\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -370,14 +370,14 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_format avif → error (not in v1)", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_format avif\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_format avif\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for thumb_format avif (not in v1)")
 		}
 	})
 	t.Run("cache_scan 5", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  cache_scan 5\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  cache_scan 5\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -387,14 +387,14 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("cache_scan 0 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  cache_scan 0\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  cache_scan 0\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for cache_scan 0")
 		}
 	})
 	t.Run("thumb_ttl 60", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl 60\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_ttl 60\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -404,21 +404,21 @@ func TestUnmarshalCaddyfile_ThumbConfig(t *testing.T) {
 	})
 	t.Run("thumb_ttl 0 → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl 0\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_ttl 0\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for thumb_ttl 0")
 		}
 	})
 	t.Run("thumb_ttl with abc → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_ttl abc\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_ttl abc\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for thumb_ttl abc")
 		}
 	})
 	t.Run("all 5 directives together", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n  thumb_width 480\n  thumb_height 320\n  thumb_format jpeg\n  cache_scan 5\n  thumb_ttl 60\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  thumb_width 480\n  thumb_height 320\n  thumb_format jpeg\n  cache_scan 5\n  thumb_ttl 60\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -519,7 +519,7 @@ func TestUnmarshalCaddyfile_TemplateDirective(t *testing.T) {
 		// touch a pre-existing Gallery.Template — e.g. one set
 		// via JSON config. This is the no-directive round-trip.
 		g := Gallery{Template: "preserved.tmpl"}
-		d := caddyfile.NewTestDispenser("image_gallery { sort name }")
+		d := caddyfile.NewTestDispenser("media_gallery { sort name }")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -529,7 +529,7 @@ func TestUnmarshalCaddyfile_TemplateDirective(t *testing.T) {
 	})
 	t.Run("template gallery.tmpl", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n	template gallery.tmpl\n}\n")
+		d := caddyfile.NewTestDispenser("media_gallery {\n	template gallery.tmpl\n}\n")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -539,7 +539,7 @@ func TestUnmarshalCaddyfile_TemplateDirective(t *testing.T) {
 	})
 	t.Run("template themes/dark/index.tmpl", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n	template themes/dark/index.tmpl\n}\n")
+		d := caddyfile.NewTestDispenser("media_gallery {\n	template themes/dark/index.tmpl\n}\n")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
@@ -549,7 +549,7 @@ func TestUnmarshalCaddyfile_TemplateDirective(t *testing.T) {
 	})
 	t.Run("template with too many args → error", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("image_gallery {\n	template a.tmpl b.tmpl\n}\n")
+		d := caddyfile.NewTestDispenser("media_gallery {\n	template a.tmpl b.tmpl\n}\n")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
 			t.Error("expected error for too many args to template directive")
 		}
@@ -561,8 +561,8 @@ func TestModuleRegistered(t *testing.T) {
 	// the type is constructable and the ModuleInfo is correct.
 	var g Gallery
 	info := g.CaddyModule()
-	if info.ID != "http.handlers.image_gallery" {
-		t.Errorf("expected module ID %q, got %q", "http.handlers.image_gallery", info.ID)
+	if info.ID != "http.handlers.media_gallery" {
+		t.Errorf("expected module ID %q, got %q", "http.handlers.media_gallery", info.ID)
 	}
 	if info.New == nil {
 		t.Error("expected New constructor to be non-nil")

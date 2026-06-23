@@ -877,7 +877,7 @@ h1 {
   transition: background 0.12s, border-color 0.12s;
 }
 a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: #006ed3; }
-/* Per user request 2026-06-18: arrows in the image gallery
+/* Per user request 2026-06-18: arrows in the media gallery
    should be the same color in both light and dark modes.
    Fixed #006ed3 (the light-mode accent) — a medium blue
    that's visible on both light and dark page backgrounds
@@ -1972,7 +1972,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{end}}
 </main>
 <footer class="site-footer">
-  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_image_gallery" rel="noopener" target="_blank">synapticloop // image gallery</a>
+  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
 </footer>
 <script>
 

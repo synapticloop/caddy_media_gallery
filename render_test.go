@@ -23,7 +23,7 @@ import (
 // loadTemplate() fallback to the bundled galleryTemplate constant
 // is what gets used.
 func TestMain(m *testing.M) {
-	tmp, err := os.MkdirTemp("", "caddy-image-gallery-test-*")
+	tmp, err := os.MkdirTemp("", "caddy-media-gallery-test-*")
 	if err != nil {
 		panic(err)
 	}

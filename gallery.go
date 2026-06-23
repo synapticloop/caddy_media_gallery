@@ -1,6 +1,10 @@
-// Package gallery implements an image-gallery HTTP handler for Caddy v2.
-// It renders a directory as a dark-themed grid of thumbnails with a vanilla
-// JS lightbox for click-to-expand.
+// Package gallery implements a media-gallery HTTP handler for Caddy v2.
+// Supports images (jpg, png, gif, webp, avif, svg) and videos (mp4, webm,
+// mov, mkv, etc.) with on-demand WebP thumbnails for images and
+// ffmpeg-extracted first-frame thumbnails for videos. Replaces Caddy's
+// default `file_server browse` with a richer directory listing that
+// includes a lightbox, on-the-fly image thumbnailing, and video
+// preview generation.
 package gallery
 
 import (
@@ -21,8 +25,8 @@ import (
 
 func init() {
 	caddy.RegisterModule(Gallery{})
-	httpcaddyfile.RegisterHandlerDirective("image_gallery", parseCaddyfile)
-	httpcaddyfile.RegisterDirectiveOrder("image_gallery", httpcaddyfile.Before, "file_server")
+	httpcaddyfile.RegisterHandlerDirective("media_gallery", parseCaddyfile)
+	httpcaddyfile.RegisterDirectiveOrder("media_gallery", httpcaddyfile.Before, "file_server")
 }
 
 func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error) {
@@ -90,7 +94,7 @@ type Gallery struct {
 
 	// PageSize is the number of image entries per page. Default
 	// is 50 (set in Provision if zero). The user can override
-	// per-route via the Caddyfile: `image_gallery { page_size 100 }`.
+	// per-route via the Caddyfile: `media_gallery { page_size 100 }`.
 	// Validation: must be > 0. A zero or negative value is rejected
 	// by UnmarshalCaddyfile (the Caddyfile parser).
 	PageSize int `json:"page_size,omitempty"`
@@ -133,7 +137,7 @@ type Gallery struct {
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
-		ID:  "http.handlers.image_gallery",
+		ID:  "http.handlers.media_gallery",
 		New: func() caddy.Module { return new(Gallery) },
 	}
 }
@@ -149,7 +153,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// startup on a bad value so a misconfiguration is caught at
 	// boot, not at first request.
 	if _, err := sanitizeTemplateName(g.Template); err != nil {
-		return fmt.Errorf("invalid image_gallery template name %q: %w", g.Template, err)
+		return fmt.Errorf("invalid media_gallery template name %q: %w", g.Template, err)
 	}
 	// Apply defaults for the Caddyfile-only fields. Zero or
 	// empty means "use the default" — the UnmarshalCaddyfile
@@ -207,7 +211,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// non-fatal error here doesn't block the module from serving
 	// (the bundled templates still work).
 	if err := writeBundledTemplates(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: caddy-image-gallery: could not write bundled templates to disk: %v\n", err)
+		fmt.Fprintf(os.Stderr, "warning: caddy-media-gallery: could not write bundled templates to disk: %v\n", err)
 	}
 	return nil
 }
@@ -239,7 +243,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		}
 	}
 	if root == "" {
-		http.Error(w, "image_gallery: no root configured (set Gallery.Root in JSON or use `root * /path` in the Caddyfile)", http.StatusInternalServerError)
+		http.Error(w, "media_gallery: no root configured (set Gallery.Root in JSON or use `root * /path` in the Caddyfile)", http.StatusInternalServerError)
 		return nil
 	}
 	// Normalise the path. r.URL.Path may or may not have a leading
@@ -319,7 +323,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query())
 	if err != nil {
-		http.Error(w, "image_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

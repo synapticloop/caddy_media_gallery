@@ -5,26 +5,26 @@
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery
+    media_gallery
     file_server
 }
 ```
 
-The `image_gallery` directive accepts one inline option:
+The `media_gallery` directive accepts one inline option:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
 | `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
 | `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip on-the-fly WebP thumbnail generation for **videos** (extracted from the first frame via ffmpeg). When `true`, videos still display in the gallery (with the placeholder gradient + play button on each tile) but no per-frame thumbnail is generated. When `false` (default), video thumbs ARE generated IF ffmpeg is available on the host. If ffmpeg is missing, video thumbs fall back to the placeholder regardless of this setting (we can't decode a frame without a tool that can). Use `no_video_thumbs` to skip the ffmpeg invocation even when it's available (e.g., on hosts where you don't want the CPU cost of frame extraction). See "Video thumbnails (ffmpeg)" below. |
-| `page_size` | integer &gt;= 1 | `50` | How many image entries to show per page. Must be a positive integer; `page_size 0` is rejected (use no directive, or set the explicit value you want). The pagination nav only renders when total pages > 1, so a 30-image gallery at the default 50 shows all 30 on a single page with no nav. |
+| `page_size` | integer &gt;= 1 | `50` | How many image entries to show per page. Must be a positive integer; `page_size 0` is rejected (use no directive, or set the explicit value you want). The pagination nav only renders when total pages > 1, so a 30-media gallery at the default 50 shows all 30 on a single page with no nav. |
 
 Example with a themed subdir:
 
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery {
+    media_gallery {
         template themes/dark/gallery.tmpl
     }
     file_server
@@ -41,7 +41,7 @@ disk). The path is validated at Provision — an invalid name
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery {
+    media_gallery {
         no_thumbs
     }
     file_server
@@ -60,7 +60,7 @@ Use `no_thumbs false` to turn it back on (the default is off, so the directive i
 Video thumbnails (per the table above) require ffmpeg. If ffmpeg isn't available, the gallery falls back to the placeholder gradient + play button automatically — you don't need to do anything. If ffmpeg IS available and you want to skip frame extraction (e.g., on a low-CPU host or for very large videos), use `no_video_thumbs`:
 
 ```
-image_gallery {
+media_gallery {
     no_video_thumbs
 }
 ```
@@ -85,7 +85,7 @@ Best for: small galleries (< 100 images) where you don't want a thumb cache and 
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
-    image_gallery {
+    media_gallery {
         page_size 100
     }
     file_server
@@ -96,7 +96,7 @@ This shows 100 image entries per page instead of the default 50. Tradeoffs: larg
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
-via the surrounding Caddyfile block, not the `image_gallery`
+via the surrounding Caddyfile block, not the `media_gallery`
 directive. The module reads the on-disk directory from Caddy's
 per-request `root` variable, or from the `Root` JSON field if
 set explicitly.
@@ -124,7 +124,7 @@ The minimum handler block (only `handler` is required):
 
 ```json
 {
-  "handler": "image_gallery",
+  "handler": "media_gallery",
   "root": "/var/www/html/images"
 }
 ```
@@ -137,11 +137,11 @@ request-time root.
 ### Full JSON config (all fields)
 
 Here's a complete JSON config showing every configurable field
-of the `image_gallery` handler, with realistic values:
+of the `media_gallery` handler, with realistic values:
 
 ```json
 {
-  "handler": "image_gallery",
+  "handler": "media_gallery",
   "root": "/var/www/html/images",
   "sort": "name",
   "template": "gallery.tmpl",
@@ -341,7 +341,7 @@ yourself wanting to change one of these, that's a signal that
 the constant should probably be promoted to a config option —
 file an issue and we can discuss.
 
-## What `image_gallery` does NOT do
+## What `media_gallery` does NOT do
 
 - It does **not** generate thumbnails at build time — thumbnails
   are generated on-the-fly on first request and cached in

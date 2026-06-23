@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-docs.sh — Regenerate the operator-facing PDF (caddy-image-gallery-book.pdf)
+# build-docs.sh — Regenerate the operator-facing PDF (caddy-media-gallery-book.pdf)
 # from the docs/*.md sources.
 #
 # Can be run from anywhere (uses BASH_SOURCE to find its own location).
@@ -20,7 +20,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 DOCS_DIR="$PROJECT_ROOT/docs"
-OUTPUT="$PROJECT_ROOT/caddy-image-gallery-book.pdf"
+OUTPUT="$PROJECT_ROOT/caddy-media-gallery-book.pdf"
 
 # Verify prerequisites
 MISSING=()
