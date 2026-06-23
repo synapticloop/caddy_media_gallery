@@ -1588,6 +1588,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s;
 }
+/* Per user request 2026-06-19: the close × was visually
+   smaller than the open ↗ (× is a thin cross at the
+   baseline, ↗ has a bigger visual footprint). The user
+   asked for a bigger close icon. We use a larger X glyph
+   (✕ U+2715 MULTIPLICATION X) and bump its font-size so
+   it visually balances with ↗. */
+#gallery-lightbox .lb-controls .lb-close {
+  font-size: 1.4rem;
+  font-weight: 500;
+}
 #gallery-lightbox .lb-controls .lb-btn:hover {
   background: rgba(0, 0, 0, 0.08);
 }
@@ -1862,7 +1872,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   overlay.innerHTML =
     '<div class="lb-controls">' +
       '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
-      '<button class="lb-btn lb-close" aria-label="Close" title="Close">×</button>' +
+      '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
     '</div>' +
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +

@@ -2611,3 +2611,49 @@ func TestRenderPage_Phase79HeadingCounts(t *testing.T) {
 		t.Error("expected dirs heading 'Directories (0)' when no subdirs but Up entry exists (Phase 79)")
 	}
 }
+
+// TestRenderPage_Phase82BiggerCloseIcon verifies Phase 82:
+// the lightbox close button uses a bigger glyph (✕ U+2715
+// MULTIPLICATION X) and a larger font-size so it visually
+// balances with the open arrow (↗).
+func TestRenderPage_Phase82BiggerCloseIcon(t *testing.T) {
+	files := []FileInfo{
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. The close button should use the ✕ glyph (U+2715), not
+	// the smaller × (U+00D7).
+	if !strings.Contains(html, "✕</button>") {
+		t.Error("expected close button to use ✕ glyph (U+2715) for a bigger close icon (Phase 82)")
+	}
+	if strings.Contains(html, "×</button>") {
+		t.Error("expected close button to NOT use the smaller × glyph (U+00D7) — should be ✕ (U+2715)")
+	}
+
+	// 2. The .lb-close CSS should have a larger font-size
+	// (1.4rem) than the default (.lb-btn is 1.1rem).
+	if !strings.Contains(html, ".lb-close {") {
+		t.Fatal("no .lb-close CSS rule")
+	}
+	start := strings.Index(html, ".lb-close {")
+	// Find the .lb-close rule specifically (in the lb-controls
+	// context, not the original .lb-close top-right rule).
+	// Look for the second occurrence (the lb-controls one).
+	start2 := strings.Index(html[start+1:], ".lb-close {")
+	if start2 < 0 {
+		t.Fatal("only one .lb-close rule (expected 2: top-right + lb-controls)")
+	}
+	start2 += start + 1
+	end := strings.Index(html[start2:], "}")
+	if end < 0 {
+		t.Fatal("no end of .lb-close rule")
+	}
+	lbControlsCloseRule := html[start2 : start2+end+1]
+	if !strings.Contains(lbControlsCloseRule, "font-size: 1.4rem") {
+		t.Errorf("expected .lb-close in lb-controls to have font-size: 1.4rem (Phase 82); rule: %q", lbControlsCloseRule)
+	}
+}
