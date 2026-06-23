@@ -832,6 +832,60 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.08em;
   color: var(--fg-muted);
   margin-bottom: 0.75rem;
+  /* Per Phase 71: the section heading is now a flex container
+     so the title text and the toggle button can sit on the
+     same row. The title text gets the bulk of the space; the
+     toggle sits at the far right. */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+/* Per Phase 71: the section-toggle button lets the visitor
+   collapse the directories + other-files sections. Default
+   state is expanded (the body is shown); clicking the button
+   hides the body. The state is persisted in localStorage
+   (per-section key) so the visitor's choice survives
+   navigations and refreshes. */
+.section-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1;
+  width: 1.5rem;
+  height: 1.5rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+.section-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+.section-toggle:focus {
+  outline: 2px solid #006ed3;
+  outline-offset: 1px;
+}
+/* When the section is collapsed (set via the JS class toggle),
+   the body is hidden and the section has a smaller bottom
+   margin (no point reserving space for hidden content). */
+.dirs-section.collapsed,
+.others-section.collapsed {
+  margin-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+.dirs-section.collapsed .section-body,
+.others-section.collapsed .section-body {
+  display: none;
 }
 .chip-row {
   display: flex;
@@ -1483,8 +1537,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
 
     {{if or .Up (gt (len .Subdirs) 0)}}
-    <section class="dirs-section">
-    <h2 class="section-heading">Directories</h2>
+    <section class="dirs-section" data-section="dirs">
+    <h2 class="section-heading">
+      <span>Directories</span>
+      <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
+    </h2>
+    <div class="section-body" id="dirs-body">
     {{if .Up}}
     <div class="up-chip-row">
       <a class="chip dir-chip up-chip" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a>
@@ -1516,12 +1574,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       </tbody>
     </table>
     {{end}}
+    </div>
   </section>
   {{end}}
 
   {{if .OtherFiles}}
-  <section class="others-section">
-    <h2 class="section-heading">Other files</h2>
+  <section class="others-section" data-section="others">
+    <h2 class="section-heading">
+      <span>Other files</span>
+      <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="Show/hide other files">−</button>
+    </h2>
+    <div class="section-body" id="others-body">
     <!-- Per user request 2026-06-20: same full-width table format
          as the directories table. Adds a Size column (directories
          omitted Size because it's not meaningful for folders). -->
@@ -1545,6 +1608,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
       </tbody>
     </table>
+    </div>
   </section>
   {{end}}
 
@@ -1790,6 +1854,64 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     else if (e.key === 'ArrowLeft') show(idx - 1);
     else if (e.key === 'ArrowRight') show(idx + 1);
   });
+
+    /* === SECTION TOGGLE (Phase 71) ===========================
+       The directories + other-files sections each have a toggle
+       button in the heading. Clicking the button collapses the
+       body (display: none) and updates the button text + aria.
+       The state is persisted in localStorage so the visitor's
+       choice survives navigations and refreshes.
+
+       Why localStorage (not URL query / not page state):
+         - URL query would be bookmarkable, but the toggle is a
+           personal preference, not a content filter
+         - Page state would reset on every refresh
+         - localStorage = persistent + per-visitor, which is the
+           right scope for "show/hide the dirs section"
+
+       The button is rendered as the minus sign when expanded and
+       the plus sign when collapsed -- Unicode characters that
+       are commonly understood as collapse/expand affordances.
+       (Phase 71 note: this used to be line comments with //,
+       but Go html/template strips // from script blocks during
+       parsing. Block comments survive, and JS supports both
+       styles the same way.) */
+    (function() {
+      var STORAGE_PREFIX = 'gallery-section-';
+      var buttons = document.querySelectorAll('.section-toggle');
+      buttons.forEach(function(btn) {
+        var section = btn.getAttribute('data-toggle');
+        var sectionEl = document.querySelector('[data-section="' + section + '"]');
+        if (!sectionEl) return;
+        var key = STORAGE_PREFIX + section;
+        // Apply persisted state on load.
+        try {
+          if (localStorage.getItem(key) === 'collapsed') {
+            sectionEl.classList.add('collapsed');
+            btn.setAttribute('aria-expanded', 'false');
+            btn.textContent = '+';
+          }
+        } catch (e) {
+          // localStorage can be disabled (private mode, etc.).
+          // Fail silently — the toggle just won't persist.
+        }
+        // Toggle on click.
+        btn.addEventListener('click', function() {
+          var isCollapsed = sectionEl.classList.toggle('collapsed');
+          btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+          btn.textContent = isCollapsed ? '+' : '−';
+          try {
+            if (isCollapsed) {
+              localStorage.setItem(key, 'collapsed');
+            } else {
+              localStorage.removeItem(key);
+            }
+          } catch (e) {
+            // Ignore localStorage write errors.
+          }
+        });
+      });
+    })();
 
     // === THEME TOGGLE ========================================
     // 3 states: auto (default, follows OS), light, dark.

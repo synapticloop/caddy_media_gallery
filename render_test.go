@@ -1712,9 +1712,13 @@ func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Debug: print the relevant portion of HTML
-			dirsIdx := strings.Index(html, "section-heading\">Directories")
-			othersIdx := strings.Index(html, "section-heading\">Other")
-			mediaIdx := strings.Index(html, "section-heading\">Media")
+			// (Phase 71: the heading now wraps the title in a <span>
+			// for the flex layout, so we search for "Directories"
+			// and "Other" anywhere in the heading rather than the
+			// old direct match.)
+			dirsIdx := strings.Index(html, ">Directories<")
+			othersIdx := strings.Index(html, ">Other files<")
+			mediaIdx := strings.Index(html, ">Media<")
 			if dirsIdx < 0 || mediaIdx < 0 {
 				t.Fatalf("could not find sections: dirs=%d others=%d media=%d", dirsIdx, othersIdx, mediaIdx)
 			}
@@ -1776,8 +1780,103 @@ func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 			}
 			want := []string{"alpha", "mu", "zeta"}
 			if !reflect.DeepEqual(got, want) {
-				t.Errorf("expected dirs order %v (always alpha), got %v. dirsSection: %q", want, got, dirsSection[:min(500, len(dirsSection))])
+				t.Errorf("expected dirs order %v (always alpha), got %v. dirsSection snippet: %q", want, got, dirsSection[:min(800, len(dirsSection))])
 			}
 		})
+	}
+}
+
+// TestRenderPage_SectionToggleMarkup verifies the Phase 71
+// feature: the directories + other-files sections each have
+// a toggle button in the heading that can collapse the body.
+// We check the rendered HTML for the new structure:
+//   - <section class="dirs-section" data-section="dirs">
+//   - <button class="section-toggle" data-toggle="dirs">
+//   - <div class="section-body" id="dirs-body">
+//
+// Same structure for others.
+func TestRenderPage_SectionToggleMarkup(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha", Kind: KindDir},
+		{Name: "mu", Kind: KindDir},
+		{Name: "readme.txt", ModTime: 100, Size: 100, Kind: KindOther},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Dirs section: data-section attr on <section>
+	if !strings.Contains(html, `<section class="dirs-section" data-section="dirs">`) {
+		t.Error(`expected <section class="dirs-section" data-section="dirs">`)
+	}
+	// Toggle button with the right data-toggle value
+	if !strings.Contains(html, `class="section-toggle" data-toggle="dirs"`) {
+		t.Error(`expected toggle button for dirs section`)
+	}
+	// Initial button text: minus (expanded)
+	if !strings.Contains(html, `data-toggle="dirs" aria-expanded="true"`) {
+		t.Error(`expected toggle button to start with aria-expanded=true (expanded)`)
+	}
+	// Section body wrapper
+	if !strings.Contains(html, `<div class="section-body" id="dirs-body">`) {
+		t.Error(`expected <div class="section-body" id="dirs-body"> wrapper around dirs content`)
+	}
+
+	// Others section: same structure
+	if !strings.Contains(html, `<section class="others-section" data-section="others">`) {
+		t.Error(`expected <section class="others-section" data-section="others">`)
+	}
+	if !strings.Contains(html, `class="section-toggle" data-toggle="others"`) {
+		t.Error(`expected toggle button for others section`)
+	}
+	if !strings.Contains(html, `data-toggle="others" aria-expanded="true"`) {
+		t.Error(`expected toggle button to start with aria-expanded=true (expanded)`)
+	}
+	if !strings.Contains(html, `<div class="section-body" id="others-body">`) {
+		t.Error(`expected <div class="section-body" id="others-body"> wrapper around others content`)
+	}
+}
+
+// TestBundledTemplate_SectionToggleJSValid verifies the Phase 71
+// JS (localStorage + click handler) is included in the
+// bundled template. We use the same Execute-into-buffer
+// pattern as TestBundledTemplate_LightboxJSValidSyntax,
+// then check that the JS contains the expected pieces.
+//
+// Note: we can't search for a comment marker ("// SECTION
+// TOGGLE" or "/* SECTION TOGGLE */") because Go's html/template
+// strips comments from <script> blocks during parsing. So we
+// search for the actual code identifiers: STORAGE_PREFIX,
+// 'gallery-section-' (the localStorage key prefix), and the
+// querySelectorAll selector for .section-toggle buttons.
+func TestBundledTemplate_SectionToggleJSValid(t *testing.T) {
+	tmpl, err := loadTemplate("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, PageData{Title: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	// Check for the section toggle JS pieces.
+	checks := []struct {
+		name   string
+		substr string
+	}{
+		{"localStorage usage", "localStorage"},
+		{"addEventListener usage", "addEventListener"},
+		{"querySelectorAll usage", "querySelectorAll"},
+		{"classList usage", "classList"},
+		{"STORAGE_PREFIX identifier", "STORAGE_PREFIX"},
+		{"section-toggle selector", "querySelectorAll('.section-toggle')"},
+		{"data-section selector pattern", `[data-section="`},
+		{"gallery-section- prefix", "gallery-section-"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(html, c.substr) {
+			t.Errorf("expected %q (%s) in template", c.substr, c.name)
+		}
 	}
 }
