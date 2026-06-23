@@ -1047,6 +1047,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .table-link:hover {
   color: var(--accent); /* hover state: accent color (slight affordance) */
 }
+/* Per user request 2026-06-19: the cell-link wraps the content
+   of the Type/Size/Date cells (so clicking anywhere in the row
+   navigates to the file). It uses display: block + height:
+   100% to make the entire <td> clickable, with padding to match
+   the cell's own padding. The cell-link inherits the cell's
+   text styling (color from .col-type, .col-size, .col-date).
+   tabindex="-1" + aria-hidden="true" in the HTML keep this
+   invisible to screen readers and the keyboard tab order
+   (the only "real" link per row is the Name cell, which is
+   what the screen reader announces). */
+.files-table .cell-link {
+  display: block;
+  /* Negative margin compensates for the cell's own padding
+     so the link's hit area extends to the cell edges. */
+  margin: -0.5rem -0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: inherit; /* inherit the muted color from .col-type / .col-size / .col-date */
+}
 .chip {
   display: inline-flex;
   align-items: center;
@@ -1638,8 +1656,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{range .Subdirs}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
-          <td class="col-type">{{.Type}}</td>
-          <td class="col-date">{{.Date}}</td>
+          <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
+          <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}
       </tbody>
@@ -1672,9 +1690,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{range .OtherFiles}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a></td>
-          <td class="col-type">{{.Type}}</td>
-          <td class="col-size">{{.Size}}</td>
-          <td class="col-date">{{.Date}}</td>
+          <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
+          <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
+          <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}
       </tbody>

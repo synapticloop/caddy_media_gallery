@@ -2048,3 +2048,101 @@ func TestRenderPage_Phase72UIChanges(t *testing.T) {
 		t.Error(`expected the old .sort-btn .arrow rule with #006ed3 to be GONE (replaced by Phase 72 white arrow)`)
 	}
 }
+
+// TestRenderPage_TableRowClickable verifies Phase 73: the
+// complete table row for directories and other files is
+// clickable (not just the Name cell). The Type/Size/Date
+// cells each wrap their content in a <a class="cell-link">
+// with the same href as the Name cell, so clicking anywhere
+// in the row navigates.
+func TestRenderPage_TableRowClickable(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha", Kind: KindDir, ModTime: 100},
+		{Name: "readme.txt", ModTime: 200, Size: 2048, Kind: KindOther},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the dirs table.
+	dirsStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	if dirsStart < 0 {
+		t.Fatal("no dirs-table")
+	}
+	dirsEnd := strings.Index(html[dirsStart:], `</table>`) + dirsStart
+	dirsTable := html[dirsStart:dirsEnd]
+
+	// The dirs row (for "alpha") should have cell-link anchors in
+	// the Type and Date cells (not just the Name cell). We start
+	// the row boundary at the start of the <tr> (searching back
+	// from "alpha/" since the Name link's href="./alpha/" is
+	// positioned BEFORE the "alpha/" text content in the source).
+	alphaIdx := strings.Index(dirsTable, "alpha/")
+	if alphaIdx < 0 {
+		t.Fatal("no alpha row in dirs-table")
+	}
+	alphaTrStart := strings.LastIndex(dirsTable[:alphaIdx], "<tr>")
+	alphaTrStart2 := strings.LastIndex(dirsTable[:alphaIdx], "<tr ")
+	alphaRowStart := alphaTrStart
+	if alphaTrStart2 > alphaRowStart {
+		alphaRowStart = alphaTrStart2
+	}
+	alphaRowEnd := strings.Index(dirsTable[alphaRowStart:], "</tr>") + alphaRowStart
+	alphaRow := dirsTable[alphaRowStart:alphaRowEnd]
+
+	// Count cell-link occurrences in the alpha row.
+	cellLinks := strings.Count(alphaRow, `class="table-link cell-link"`)
+	if cellLinks != 2 {
+		t.Errorf("expected 2 cell-links in the alpha row (Type + Date columns), got %d in row: %q", cellLinks, alphaRow)
+	}
+	// All cell-links should have the same href (./alpha/).
+	hrefCount := strings.Count(alphaRow, `href="./alpha/"`)
+	if hrefCount != 3 {
+		t.Errorf("expected 3 anchors with href=./alpha/ (Name + 2 cell-links), got %d", hrefCount)
+	}
+
+	// Now check the others table.
+	othersStart := strings.Index(html, `<table class="files-table others-table">`)
+	if othersStart < 0 {
+		t.Fatal("no others-table")
+	}
+	othersEnd := strings.Index(html[othersStart:], `</table>`) + othersStart
+	othersTable := html[othersStart:othersEnd]
+
+	readmeRowStart := strings.Index(othersTable, "readme.txt")
+	if readmeRowStart < 0 {
+		t.Fatal("no readme row in others-table")
+	}
+	readmeTrStart := strings.LastIndex(othersTable[:readmeRowStart], "<tr>")
+	readmeTrStart2 := strings.LastIndex(othersTable[:readmeRowStart], "<tr ")
+	readmeStart := readmeTrStart
+	if readmeTrStart2 > readmeStart {
+		readmeStart = readmeTrStart2
+	}
+	readmeRowEnd := strings.Index(othersTable[readmeStart:], "</tr>") + readmeStart
+	readmeRow := othersTable[readmeStart:readmeRowEnd]
+
+	// The readme.txt row should have 3 cell-links (Type + Size + Date).
+	cellLinks = strings.Count(readmeRow, `class="table-link cell-link"`)
+	if cellLinks != 3 {
+		t.Errorf("expected 3 cell-links in the readme.txt row (Type + Size + Date), got %d in row: %q", cellLinks, readmeRow)
+	}
+	// All 4 anchors (Name + 3 cell-links) should have the same href.
+	hrefCount = strings.Count(readmeRow, `href="./readme.txt"`)
+	if hrefCount != 4 {
+		t.Errorf("expected 4 anchors with href=./readme.txt, got %d", hrefCount)
+	}
+
+	// The cell-links should have tabindex="-1" (keyboard
+	// navigation goes to the Name link only, not all 4 per row).
+	if !strings.Contains(alphaRow, `tabindex="-1"`) {
+		t.Error(`expected cell-link to have tabindex="-1" (so keyboard tab goes to Name only)`)
+	}
+
+	// The cell-links should have aria-hidden="true" (screen
+	// readers announce only the Name link, not all 4).
+	if !strings.Contains(alphaRow, `aria-hidden="true"`) {
+		t.Error(`expected cell-link to have aria-hidden="true" (so SR announces Name only)`)
+	}
+}
