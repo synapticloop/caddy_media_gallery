@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -1542,4 +1543,241 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestRenderPage_OtherFilesRespectSort verifies the Phase 70
+// change: other files should respond to the user's sort
+// selection (just like images do), while directories stay
+// alphabetical regardless of the sort.
+//
+// We test by rendering the same files with different sort
+// queries and verifying the ORDER of file names in the
+// rendered HTML changes accordingly.
+func TestRenderPage_OtherFilesRespectSort(t *testing.T) {
+	// Files in a NON-alphabetical order so we can see if
+	// sort took effect. Names: zebra.txt, apple.txt, mango.txt
+	// (alphabetical: apple, mango, zebra)
+	files := []FileInfo{
+		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "zebra.txt", ModTime: 100, Size: 100, Kind: KindOther},
+		{Name: "apple.txt", ModTime: 200, Size: 200, Kind: KindOther},
+		{Name: "mango.txt", ModTime: 300, Size: 300, Kind: KindOther},
+	}
+
+	// Helper: extract the order of other files in the
+	// rendered HTML by finding each <tr> in the others
+	// section and pulling the first .table-link text.
+	extractOrder := func(html string) []string {
+		othersStart := strings.Index(html, "Other files")
+		if othersStart < 0 {
+			return nil
+		}
+		imgStart := strings.Index(html[othersStart:], ">Media<")
+		if imgStart < 0 {
+			return nil
+		}
+		othersSection := html[othersStart : othersStart+imgStart]
+		var order []string
+		// Find each <tr> in the others section.
+		idx := 0
+		for {
+			trStart := strings.Index(othersSection[idx:], "<tr>")
+			if trStart < 0 {
+				break
+			}
+			trStart += idx
+			trEnd := strings.Index(othersSection[trStart:], "</tr>")
+			if trEnd < 0 {
+				break
+			}
+			trEnd += trStart
+			tr := othersSection[trStart:trEnd]
+			// Extract the link text. The link contains an icon
+			// span + the name, e.g.:
+			//   <a class="table-link" href="./notes.txt">
+			//     <span class="chip-icon">📄</span>notes.txt
+			//   </a>
+			// We need to skip past the icon span to get just "notes.txt".
+			aStart := strings.Index(tr, "<a ")
+			if aStart >= 0 {
+				gtStart := strings.Index(tr[aStart:], ">")
+				if gtStart >= 0 {
+					contentStart := aStart + gtStart + 1
+					// Skip past the </span> close of the icon span.
+					spanEnd := strings.Index(tr[contentStart:], "</span>")
+					if spanEnd >= 0 {
+						contentStart += spanEnd + len("</span>")
+					}
+					// Now find the closing </a>.
+					gtEnd := strings.Index(tr[contentStart:], "</a>")
+					if gtEnd >= 0 {
+						linkText := tr[contentStart : contentStart+gtEnd]
+						order = append(order, strings.TrimSpace(linkText))
+					}
+				}
+			}
+			idx = trEnd + 1
+		}
+		return order
+	}
+
+	t.Run("sort=name,asc: others sorted alphabetically (apple, mango, zebra)", func(t *testing.T) {
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files,
+			url.Values{"sort": []string{"name"}, "order": []string{"asc"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := extractOrder(html)
+		want := []string{"apple.txt", "mango.txt", "zebra.txt"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("expected others order %v, got %v", want, got)
+		}
+	})
+
+	t.Run("sort=name,desc: others sorted reverse-alpha (zebra, mango, apple)", func(t *testing.T) {
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files,
+			url.Values{"sort": []string{"name"}, "order": []string{"desc"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := extractOrder(html)
+		want := []string{"zebra.txt", "mango.txt", "apple.txt"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("expected others order %v, got %v", want, got)
+		}
+	})
+
+	t.Run("sort=mtime,asc: others sorted by mtime asc (zebra, apple, mango)", func(t *testing.T) {
+		// mtimes: zebra=100, apple=200, mango=300
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files,
+			url.Values{"sort": []string{"mtime"}, "order": []string{"asc"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := extractOrder(html)
+		want := []string{"zebra.txt", "apple.txt", "mango.txt"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("expected others order %v, got %v", want, got)
+		}
+	})
+
+	t.Run("sort=size,asc: others sorted by size asc (zebra 100, apple 200, mango 300)", func(t *testing.T) {
+		html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files,
+			url.Values{"sort": []string{"size"}, "order": []string{"asc"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := extractOrder(html)
+		want := []string{"zebra.txt", "apple.txt", "mango.txt"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("expected others order %v, got %v", want, got)
+		}
+	})
+}
+
+// TestRenderPage_DirectoriesIgnoreSort verifies the Phase 70
+// behavior: directories stay alphabetical regardless of the
+// sort selection. The user explicitly asked for this (2026-06-14):
+// "the directory list should be in alphabetical order, and if
+// any ordering is applied to the images, this will not affect
+// the directory listing."
+func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
+	// Directories in a NON-alphabetical order so we can see if
+	// sort took effect. Names: zeta, alpha, mu (alphabetical: alpha, mu, zeta)
+	files := []FileInfo{
+		{Name: "zeta", Kind: KindDir},
+		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "alpha", Kind: KindDir},
+		{Name: "mu", Kind: KindDir},
+		{Name: "zebra.txt", ModTime: 200, Size: 200, Kind: KindOther},
+	}
+
+	// Try different sort selections — dirs should always be
+	// alphabetical in the output.
+	sortSelections := []struct{ field, order string }{
+		{"name", "asc"},
+		{"name", "desc"},
+		{"mtime", "asc"},
+		{"mtime", "desc"},
+		{"size", "asc"},
+		{"size", "desc"},
+		{"type", "asc"},
+	}
+
+	for _, s := range sortSelections {
+		t.Run("sort="+s.field+",order="+s.order+": dirs stay alphabetical", func(t *testing.T) {
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files,
+				url.Values{"sort": []string{s.field}, "order": []string{s.order}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Debug: print the relevant portion of HTML
+			dirsIdx := strings.Index(html, "section-heading\">Directories")
+			othersIdx := strings.Index(html, "section-heading\">Other")
+			mediaIdx := strings.Index(html, "section-heading\">Media")
+			if dirsIdx < 0 || mediaIdx < 0 {
+				t.Fatalf("could not find sections: dirs=%d others=%d media=%d", dirsIdx, othersIdx, mediaIdx)
+			}
+			end := othersIdx
+			if end < 0 || mediaIdx < end {
+				end = mediaIdx
+			}
+			dirsSection := html[dirsIdx:end]
+			// Extract <tr>...</tr> blocks; for each, get the link text.
+			var got []string
+			idx := 0
+			for {
+				trStart := strings.Index(dirsSection[idx:], "<tr>")
+				if trStart < 0 {
+					break
+				}
+				trStart += idx
+				trEnd := strings.Index(dirsSection[trStart:], "</tr>")
+				if trEnd < 0 {
+					break
+				}
+				trEnd += trStart
+				tr := dirsSection[trStart:trEnd]
+				// Extract the link text. The link contains an icon
+				// span + the name, e.g.:
+				//   <a class="table-link" href="./alpha/">
+				//     <span class="chip-icon">📁</span>alpha/
+				//   </a>
+				// We need to skip past the icon span and the
+				// surrounding whitespace to get just "alpha/".
+				linkStart := strings.Index(tr, "table-link")
+				if linkStart >= 0 {
+					// Find the END of the <a> opening tag (the first
+					// ">" after "<a ").
+					aStart := strings.Index(tr, "<a ")
+					if aStart >= 0 {
+						gtStart := strings.Index(tr[aStart:], ">")
+						if gtStart >= 0 {
+							contentStart := aStart + gtStart + 1
+							// Skip past the </span> close of the icon span.
+							spanEnd := strings.Index(tr[contentStart:], "</span>")
+							if spanEnd >= 0 {
+								contentStart += spanEnd + len("</span>")
+							}
+							// Now find the closing </a>.
+							gtEnd := strings.Index(tr[contentStart:], "</a>")
+							if gtEnd >= 0 {
+								linkText := tr[contentStart : contentStart+gtEnd]
+								linkText = strings.TrimSpace(linkText)
+								linkText = strings.TrimSuffix(linkText, "/")
+								if linkText != "" {
+									got = append(got, linkText)
+								}
+							}
+						}
+					}
+				}
+				idx = trEnd + 1
+			}
+			want := []string{"alpha", "mu", "zeta"}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("expected dirs order %v (always alpha), got %v. dirsSection: %q", want, got, dirsSection[:min(500, len(dirsSection))])
+			}
+		})
+	}
 }

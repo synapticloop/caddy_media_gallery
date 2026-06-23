@@ -261,6 +261,13 @@ func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 	sort.SliceStable(dirs, func(i, j int) bool {
 		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name)
 	})
+	// Other files are NOT sorted here — they get sorted by
+	// sortFiles() in RenderPage using the user's current sort
+	// selection. Per user request 2026-06-20: "the other files
+	// should respond to the sorting, the directories never
+	// respond to the sorting, they are always in alphabetical
+	// order". So dirs = always alpha (above); others = obey
+	// the user's sort selection (in RenderPage).
 	return
 }
 
@@ -459,6 +466,11 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 
 	dirs, others, allImages := splitFiles(files)
 	sortFiles(allImages, sortSpec)
+	// Per user request 2026-06-20: "other files should respond
+	// to the sorting" — sort them by the same sort spec the
+	// user picked for the image grid. The dirs are NOT sorted
+	// here (splitFiles keeps them alphabetical).
+	sortFiles(others, sortSpec)
 	if pageSize <= 0 {
 		pageSize = 50
 	}
