@@ -1680,7 +1680,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
-      <span>Directories</span>
+      <span>Directories ({{len .Subdirs}})</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
     </h2>
@@ -1741,7 +1741,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{if .OtherFiles}}
   <section class="others-section" data-section="others">
     <h2 class="section-heading">
-      <span>Other files</span>
+      <span>Other files ({{len .OtherFiles}})</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="Show/hide other files">−</button>
     </h2>

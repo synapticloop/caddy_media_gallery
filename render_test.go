@@ -1762,9 +1762,12 @@ func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 			// (Phase 71: the heading now wraps the title in a <span>
 			// for the flex layout, so we search for "Directories"
 			// and "Other" anywhere in the heading rather than the
-			// old direct match.)
-			dirsIdx := strings.Index(html, ">Directories<")
-			othersIdx := strings.Index(html, ">Other files<")
+			// old direct match.
+			// Phase 79: the heading now includes a count in
+			// parens (e.g. ">Directories (3)<"), so we use a
+			// looser match.
+			dirsIdx := strings.Index(html, "Directories (")
+			othersIdx := strings.Index(html, "Other files (")
 			mediaIdx := strings.Index(html, ">Media<")
 			if dirsIdx < 0 || mediaIdx < 0 {
 				t.Fatalf("could not find sections: dirs=%d others=%d media=%d", dirsIdx, othersIdx, mediaIdx)
@@ -2518,5 +2521,63 @@ func TestRenderPage_TotalFilesInMetaLine(t *testing.T) {
 	oneFirstText := oneMeta[oneFirstSpan+oneGt+1 : oneFirstSpan+oneGt+oneLt]
 	if oneFirstText != `1 file` {
 		t.Errorf("expected '1 file' (singular) for 1 file, got %q", oneFirstText)
+	}
+}
+
+// TestRenderPage_Phase79HeadingCounts verifies Phase 79:
+// the section headings now show a count in parens after
+// the title, e.g. "Directories (3)" and "Other files (2)".
+// The count is the number of entries in that section.
+func TestRenderPage_Phase79HeadingCounts(t *testing.T) {
+	// Set up a subdir context so we have a dirs section.
+	files := []FileInfo{
+		{Name: "alpha", Kind: KindDir, ModTime: 100},
+		{Name: "beta", Kind: KindDir, ModTime: 200},
+		{Name: "gamma", Kind: KindDir, ModTime: 300},
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "readme.txt", ModTime: 1, Size: 100, Kind: KindOther},
+		{Name: "notes.md", ModTime: 1, Size: 100, Kind: KindOther},
+	}
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. The dirs heading should show "Directories (3)".
+	if !strings.Contains(html, "Directories (3)") {
+		t.Error("expected dirs heading to be 'Directories (3)' (Phase 79)")
+	}
+	// 2. The others heading should show "Other files (2)".
+	if !strings.Contains(html, "Other files (2)") {
+		t.Error("expected others heading to be 'Other files (2)' (Phase 79)")
+	}
+
+	// 3. With no dirs (gallery root, no up), no dirs heading.
+	rootHTML, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The dirs section only renders if there's an Up entry or
+	// subdirs. With relPath="" and 3 subdirs, it should still
+	// render at the gallery root... but the test was wrong. Let
+	// me think: at the gallery root, "Up" is nil, but subdirs
+	// exist, so the section renders. So rootHTML DOES have the
+	// dirs heading.
+	if !strings.Contains(rootHTML, "Directories (3)") {
+		t.Error("expected dirs heading in gallery root too (3 subdirs, no Up)")
+	}
+
+	// 4. With NO subdirs but an Up (deeper subdir with no children),
+	// the dirs section should render with count (0).
+	deepFiles := []FileInfo{}
+	deepHTML, err := RenderPage("deep", "./", "./_thumbs/", "deep", "", false, false, 0, deepFiles, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The dirs section renders if Up is set OR if there are
+	// subdirs. At "deep" with no subdirs, Up is non-nil (we're
+	// in a subdir), so the section renders with count (0).
+	if !strings.Contains(deepHTML, "Directories (0)") {
+		t.Error("expected dirs heading 'Directories (0)' when no subdirs but Up entry exists (Phase 79)")
 	}
 }
