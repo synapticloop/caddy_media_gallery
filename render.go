@@ -952,33 +952,39 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .dirs-section .up-chip-row {
   margin-bottom: 0.5rem; /* visual separation from the subdirs below */
 }
-/* Per user request 2026-06-19: when the Up entry is rendered
-   as the first row of the dirs table (Phase 72), the up-row
-   gets a special background and the up-spacer row creates
-   visual separation from the directory entries below. */
-.dirs-table .up-row td {
+/* Per user request 2026-06-19: the Up entry is now rendered
+   as a SEPARATE TABLE above the dirs table (not as a row
+   inside the dirs table). This avoids the up-spacer-row that
+   used to highlight on hover. The up-row-table has no
+   <thead> (it's just one row with a colspan=3 cell) and no
+   <tbody> hover behavior (the .files-table tr:hover rule
+   only matches .files-table, not .up-row-table).
+
+   Visual separation comes from:
+   - the up-row-table's own bottom border
+   - the natural margin between the two tables
+
+   The link inside the table cell is styled like the old
+   up-row's link (inherits --fg color, accent on hover). */
+.up-row-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.25rem; /* small gap before the dirs-table */
+}
+.up-row-table td {
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   font-weight: 500;
 }
-.dirs-table .up-spacer td {
-  /* Blank row between the Up entry and the directory list.
-     No visible content; just a height + bottom border to
-     visually separate the two sections. */
-  height: 0.5rem;
-  padding: 0;
-  background: transparent;
-  border-bottom: 1px solid var(--border);
-}
-.dirs-table .up-row a {
+.up-row-table a {
   color: var(--fg);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
 }
-.dirs-table .up-row a:hover {
+.up-row-table a:hover {
   color: var(--accent);
 }
 
@@ -1655,20 +1661,38 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
     </h2>
     <div class="section-body" id="dirs-body">
-    <!-- Per user request 2026-06-20: directory chips replaced
+    <!-- Per user request 2026-06-19: directory chips replaced
          with a full-width table. The Name column is the link
          (clicking navigates into the directory); Type shows
          "DIR"; Date shows the directory's mtime. Size is
          intentionally omitted for directories (meaningless
          — recursive size would require a separate scan).
 
-         Per user request 2026-06-19: the Up chip is now the
-         FIRST row of the table (not a separate chip above it),
-         with a blank <tr class="up-spacer"> row after it as
-         a visual separator. The Up row spans all 3 columns via
-         colspan=3. This way the table is self-contained (no
-         up-chip-row div above it) and the Up entry feels like
-         a natural first row, not a separate UI element. -->
+         Per user request 2026-06-19: the Up row is now a
+         separate <table class="up-row-table"> (no <thead>, no
+         row-spacer) above the subdirs table. This avoids the
+         up-spacer row (which used to highlight on hover because
+         it inherited the tr:hover rule). The visual separation
+         comes from the table's own bottom border + the top of
+         the next table, NOT from an empty row. Each table is
+         self-contained.
+
+         Per user request 2026-06-19: subdirs table has its own
+         <thead> with Name/Type/Modified headers (the user said
+         "no need to repeat headers" -- that means: no separate
+         header row above the up-row, but the subdirs table
+         itself can have its own column headers since it's a
+         different table). -->
+    {{if .Up}}
+    <table class="up-row-table">
+      <tbody>
+        <tr>
+          <td colspan="3"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
+        </tr>
+      </tbody>
+    </table>
+    {{end}}
+    {{if .Subdirs}}
     <table class="files-table dirs-table">
       <thead>
         <tr>
@@ -1678,12 +1702,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         </tr>
       </thead>
       <tbody>
-        {{if .Up}}
-        <tr class="up-row">
-          <td colspan="3"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
-        </tr>
-        <tr class="up-spacer" aria-hidden="true"><td colspan="3"></td></tr>
-        {{end}}
         {{range .Subdirs}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
@@ -1693,6 +1711,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
       </tbody>
     </table>
+    {{end}}
     </div>
   </section>
   {{end}}
