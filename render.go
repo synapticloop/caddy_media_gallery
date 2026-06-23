@@ -50,6 +50,13 @@ type PageData struct {
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
 	TotalVideos int
+	// TotalFiles is the sum of all files in the directory:
+	// ImageCount + TotalVideos + len(OtherFiles). Computed
+	// in RenderPage (not the template) and shown at the start
+	// of the header meta line as "N files" (per user request
+	// 2026-06-19: a quick "how many files are in this dir"
+	// answer at the top of the meta line).
+	TotalFiles int
 	// TotalAllFilesSize is the pre-formatted (via humanSize) total
 	// size of ALL files in the directory: images + videos + other
 	// files. Excludes subdirectories (which don't have a Size
@@ -549,18 +556,24 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	}
 
 	data := PageData{
-		Title:             title,
-		PathPrefix:        pathPrefix,
-		ThumbPrefix:       thumbPrefix,
-		Up:                up,
-		Subdirs:           subdirViews,
-		OtherFiles:        buildFileViews(others, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
-		Images:            buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
-		Page:              page,
-		PageSize:          pageSize,
-		TotalImages:       totalImages,
-		ImageCount:        imageCount,
-		TotalVideos:       videoCount,
+		Title:       title,
+		PathPrefix:  pathPrefix,
+		ThumbPrefix: thumbPrefix,
+		Up:          up,
+		Subdirs:     subdirViews,
+		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
+		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
+		Page:        page,
+		PageSize:    pageSize,
+		TotalImages: totalImages,
+		ImageCount:  imageCount,
+		TotalVideos: videoCount,
+		// Per user request 2026-06-19: pre-compute the total
+		// number of files (images + videos + other files) for
+		// the "N files" label at the start of the meta line.
+		// Doing this in Go (vs in the template) avoids needing
+		// an `add` template function.
+		TotalFiles:        imageCount + videoCount + len(others),
 		TotalAllFilesSize: humanSize(totalAllBytes),
 		TotalPages:        totalPages,
 		HasPrev:           page > 1,
@@ -1595,6 +1608,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <div class="header-main">
         <h1>{{.Title}}</h1>
         <div class="meta">
+          {{/* Per user request 2026-06-19: show the total
+             number of files at the start of the meta line, then
+             the breakdown (images / videos / other files). The
+             total is a quick "how many files are in this dir"
+             answer; the breakdown gives the detail.
+
+             Pluralization: "1 file" vs "N files" (English
+             singular/plural). The split is via a small
+             {{if eq}} check on the .TotalFiles value. */}}
+          <span>{{.TotalFiles}} {{if eq .TotalFiles 1}}file{{else}}files{{end}}</span>
+          <span>//</span>
           <span>{{.ImageCount}} images</span>
           {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}

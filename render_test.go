@@ -2424,3 +2424,99 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 		t.Error(`expected NO colspan="3" in up-row-table td (Phase 77: was 3 columns, now 2)`)
 	}
 }
+
+// TestRenderPage_TotalFilesInMetaLine verifies Phase 78:
+// the meta line now shows the total number of files at the
+// start (as "N files" or "1 file"), followed by the breakdown
+// (images / videos / other files). The total is the sum of
+// ImageCount + TotalVideos + len(OtherFiles).
+func TestRenderPage_TotalFilesInMetaLine(t *testing.T) {
+	files := []FileInfo{
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "img2.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "img3.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "vid1.mp4", ModTime: 1, Size: 100, Kind: KindVideo},
+		{Name: "readme.txt", ModTime: 1, Size: 100, Kind: KindOther},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the meta line. The total is the first <span> after
+	// <div class="meta">.
+	metaStart := strings.Index(html, `<div class="meta">`)
+	if metaStart < 0 {
+		t.Fatal("no meta div")
+	}
+	metaEnd := strings.Index(html[metaStart:], `</div>`) + metaStart
+	meta := html[metaStart:metaEnd]
+
+	// 1. The total "5 files" should be the first <span> in the
+	// meta line (3 images + 1 video + 1 other = 5 files).
+	firstSpan := strings.Index(meta, `<span>`)
+	if firstSpan < 0 {
+		t.Fatal("no first <span> in meta")
+	}
+	// Extract the first span's text.
+	gtIdx := strings.Index(meta[firstSpan:], `>`)
+	ltIdx := strings.Index(meta[firstSpan+gtIdx:], `<`)
+	if gtIdx < 0 || ltIdx < 0 {
+		t.Fatal("malformed first span")
+	}
+	firstSpanText := meta[firstSpan+gtIdx+1 : firstSpan+gtIdx+ltIdx]
+	if firstSpanText != `5 files` {
+		t.Errorf("expected first span to be '5 files', got %q", firstSpanText)
+	}
+
+	// 2. The "3 images" should come next.
+	if !strings.Contains(meta, `<span>3 images</span>`) {
+		t.Error("expected '<span>3 images</span>' in meta line")
+	}
+	// 3. The "1 videos" (videos is grammatically a bit off but
+	// matches the existing style).
+	if !strings.Contains(meta, `<span>1 videos</span>`) {
+		t.Error("expected '<span>1 videos</span>' in meta line")
+	}
+	// 4. The "1 other files" (other files is plural-only even for 1).
+	if !strings.Contains(meta, `<span>1 other files</span>`) {
+		t.Error("expected '<span>1 other files</span>' in meta line")
+	}
+
+	// 5. With NO files, the meta line should show "0 files"
+	// (plural form for 0).
+	noFiles, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noMetaStart := strings.Index(noFiles, `<div class="meta">`)
+	noMetaEnd := strings.Index(noFiles[noMetaStart:], `</div>`) + noMetaStart
+	noMeta := noFiles[noMetaStart:noMetaEnd]
+	noFirstSpan := strings.Index(noMeta, `<span>`)
+	noGt := strings.Index(noMeta[noFirstSpan:], `>`)
+	noLt := strings.Index(noMeta[noFirstSpan+noGt:], `<`)
+	noFirstText := noMeta[noFirstSpan+noGt+1 : noFirstSpan+noGt+noLt]
+	if noFirstText != `0 files` {
+		t.Errorf("expected '0 files' for empty dir, got %q", noFirstText)
+	}
+
+	// 6. With EXACTLY 1 file, the meta line should show "1 file"
+	// (singular form).
+	oneFile := []FileInfo{
+		{Name: "only.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	oneHTML, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, oneFile, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oneMetaStart := strings.Index(oneHTML, `<div class="meta">`)
+	oneMetaEnd := strings.Index(oneHTML[oneMetaStart:], `</div>`) + oneMetaStart
+	oneMeta := oneHTML[oneMetaStart:oneMetaEnd]
+	oneFirstSpan := strings.Index(oneMeta, `<span>`)
+	oneGt := strings.Index(oneMeta[oneFirstSpan:], `>`)
+	oneLt := strings.Index(oneMeta[oneFirstSpan+oneGt:], `<`)
+	oneFirstText := oneMeta[oneFirstSpan+oneGt+1 : oneFirstSpan+oneGt+oneLt]
+	if oneFirstText != `1 file` {
+		t.Errorf("expected '1 file' (singular) for 1 file, got %q", oneFirstText)
+	}
+}
