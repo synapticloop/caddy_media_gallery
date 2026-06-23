@@ -957,7 +957,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   height: 1.5rem;
   cursor: pointer;
   display: inline-flex;
-  align-items: center;
+  /* Per user request 2026-06-19: removed align-items: center.
+     The button is a fixed-size square (1.5rem x 1.5rem) and
+     contains a single character (− or +) with line-height: 1.
+     The center alignment was making the character sit at the
+     vertical middle of the line box, which can look slightly
+     off because the character's optical center isn't always
+     at the line box center. Without align-items: center,
+     the character uses its natural baseline (which is
+     tighter and usually looks better for single-character
+     buttons). */
   justify-content: center;
   padding: 0;
   transition: background 0.12s, color 0.12s, border-color 0.12s;

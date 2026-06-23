@@ -2944,3 +2944,28 @@ func TestRenderPage_Phase89ArrowPaddingLeft(t *testing.T) {
 		t.Errorf("expected .sort-btn .arrow to have padding-left (Phase 89); rule: %q", rule)
 	}
 }
+
+// TestRenderPage_Phase90ToggleNoAlignItems verifies Phase 90:
+// the .section-toggle CSS rule no longer has align-items: center.
+// (Without align-items, the character (− or +) uses its natural
+// baseline instead of being vertically centered, which usually
+// looks better for single-character buttons in a small square.)
+func TestRenderPage_Phase90ToggleNoAlignItems(t *testing.T) {
+	files := []FileInfo{
+		{Name: "nested1", Kind: KindDir, ModTime: 100},
+	}
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(html, ".section-toggle {") {
+		t.Fatal("no .section-toggle rule")
+	}
+	start := strings.Index(html, ".section-toggle {")
+	end := strings.Index(html[start:], "}")
+	rule := html[start : start+end+1]
+	if strings.Contains(rule, "align-items:") {
+		t.Errorf("expected .section-toggle to NOT have align-items (Phase 90: removed); rule: %q", rule)
+	}
+}
