@@ -2918,3 +2918,29 @@ func TestRenderPage_Phase88LabelInsideButton(t *testing.T) {
 		t.Errorf(`expected .lb-controls .lb-btn to have border-radius (Phase 88: rounded pill); rule: %q`, btnRule)
 	}
 }
+
+// TestRenderPage_Phase89ArrowPaddingLeft verifies Phase 89:
+// the sort-by arrow (↑/↓) has padding-left so it sits
+// further from the button label ("Name", "Type", etc.).
+// Without this, the arrow touches the label text.
+func TestRenderPage_Phase89ArrowPaddingLeft(t *testing.T) {
+	files := []FileInfo{
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The .sort-btn .arrow CSS rule should have padding-left
+	// (so the arrow has breathing room from the label).
+	if !strings.Contains(html, ".sort-btn .arrow {") {
+		t.Fatal("no .sort-btn .arrow rule in CSS")
+	}
+	start := strings.Index(html, ".sort-btn .arrow {")
+	end := strings.Index(html[start:], "}")
+	rule := html[start : start+end+1]
+	if !strings.Contains(rule, "padding-left") {
+		t.Errorf("expected .sort-btn .arrow to have padding-left (Phase 89); rule: %q", rule)
+	}
+}

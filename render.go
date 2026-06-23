@@ -1249,6 +1249,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      without changing the fill. */
   border-color: var(--border-strong);
 }
+/* Per user request 2026-06-19: the sort-by arrow (↑/↓) is
+   too close to the button label ("Name", "Type", etc.).
+   Add padding-left to the .arrow span so there's breathing
+   room between the label text and the arrow. The arrow's
+   color is inherited from the button's color (--active-fg
+   on the active button, --fg on inactive buttons). */
+.sort-btn .arrow {
+  padding-left: 0.3rem;
+  font-weight: 600;
+}
 /* Per Phase 85: the sort-by arrow (↑/↓ on the active sort
    button) inherits its color from the active button's text
    color (--active-fg, set by .sort-btn.active above). The
