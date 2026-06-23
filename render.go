@@ -1638,95 +1638,45 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   top: 1rem;
   right: 1.5rem;
   display: flex;
-  gap: 4px;
-  /* Per user request 2026-06-19 (Phase 88): removed the
-     background + border from the .lb-controls pill itself.
-     Each button (with its icon + text label) is now its own
-     grey rounded rectangle. The lb-controls is just a flex
-     container that holds the buttons side-by-side. This way
-     the "Open in new tab" / "Close" text is enclosed in the
-     same grey rounded background as its button. */
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  padding: 0;
-  z-index: 2;
-}
-/* Per user request 2026-06-19: the open + close buttons in
-   the lb-controls pill now have a TEXT LABEL below each
-   button. The label is rotated 90 degrees counter-clockwise
-   (CSS transform: rotate(-90deg)), so it reads bottom-to-top
-   — a vertical label that takes up less horizontal space.
-
-   Each button is wrapped in a .lb-btn-group container with
-   display: flex (column), so the button is on top and the
-   label is below it. The label is a <span> with the label
-   text, rotated -90deg.
-
-   Why rotated -90deg (counter-clockwise): so the text reads
-   from bottom to top, which is the natural reading direction
-   for English when the text is rotated 90 degrees. (Rotating
-   +90deg would make it read top-to-bottom, which feels
-   backwards.)
-
-   The label is positioned with transform-origin: bottom left
-   so the rotation pivots around the bottom-left corner of
-   the text, which keeps the text aligned with the bottom of
-   the button. */
-#gallery-lightbox .lb-controls .lb-btn {
-  /* Per Phase 88: the .lb-btn in the lb-controls pill now has
-     its own grey rounded background (the lb-controls pill no
-     longer has a background; each button is its own pill).
-     The button is a flex column (icon on top, text label
-     below) so the icon and text are both inside the clickable
-     area. The text rotates 90deg CCW (in .lb-btn-label below). */
-  position: static;
+  gap: 0;
+  /* Per user request 2026-06-19 (Phase 91: revert Phase 86
+     + 88): restored the .lb-controls pill's background +
+     border + border-radius + padding. Phases 86 and 88
+     moved the pill styling onto each individual button so
+     the rotated text labels could be inside the same grey
+     rounded background. The user wants the text labels
+     GONE, so we revert to the Phase 82 state: the pill
+     has the background, each button is a transparent
+     28x28 square inside it. */
+  padding: 4px;
   background: rgba(255, 255, 255, 0.92);
   border: 2px solid #000;
   border-radius: 10px;
-  padding: 4px 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
+  z-index: 2;
+}
+/* Per user request 2026-06-19 (Phase 91: revert Phase 86
+   + 88): the buttons are now simple 28x28 transparent
+   squares inside the lb-controls pill. The pill itself
+   has the background + border + border-radius; the
+   buttons are transparent. This is the Phase 82 state
+   (before the text labels were added). */
+#gallery-lightbox .lb-controls .lb-btn {
+  position: static;
+  background: transparent;
+  border: none;
+  width: 28px;
+  height: 28px;
   color: #1a1a26;
-  font-family: inherit;
-  transition: background 0.12s;
-}
-#gallery-lightbox .lb-controls .lb-btn:hover {
-  background: rgba(220, 220, 220, 0.95);
-}
-/* The icon (↗ or ✕) — sits at the top of the button. */
-#gallery-lightbox .lb-controls .lb-btn-icon {
-  display: block;
   font-size: 1.1rem;
   line-height: 1;
-  font-weight: 500;
-}
-/* The big close icon (✕) needs to be slightly bigger so it
-   visually balances with the open arrow (↗). Per Phase 82. */
-#gallery-lightbox .lb-controls .lb-close .lb-btn-icon {
-  font-size: 1.4rem;
-  font-weight: 500;
-}
-/* The text label (rotated 90deg CCW so it reads bottom-to-top).
-   Sits below the icon, inside the same button (so clicking
-   the text triggers the button's click event). */
-#gallery-lightbox .lb-controls .lb-btn-label {
-  display: block;
-  font-size: 0.65rem;
-  font-weight: 500;
-  color: #1a1a26;
-  margin-top: 0.4rem;
-  white-space: nowrap;
-  /* Rotate 90deg counter-clockwise so the text reads from
-     bottom to top (natural reading direction for English
-     when text is rotated 90deg). */
-  transform: rotate(-90deg);
-  transform-origin: center;
-  /* After rotation, the text width becomes its height. We
-     shift it slightly to keep it centered under the icon. */
-  margin-bottom: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 6px;
+  font-family: inherit;
+  transition: background 0.12s;
 }
 /* Per user request 2026-06-19: the close × was visually
    smaller than the open ↗ (× is a thin cross at the
@@ -2011,14 +1961,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   overlay.id = 'gallery-lightbox';
   overlay.innerHTML =
     '<div class="lb-controls">' +
-      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">' +
-        '<span class="lb-btn-icon">↗</span>' +
-        '<span class="lb-btn-label">Open in new tab</span>' +
-      '</button>' +
-      '<button class="lb-btn lb-close" aria-label="Close" title="Close">' +
-        '<span class="lb-btn-icon">✕</span>' +
-        '<span class="lb-btn-label">Close</span>' +
-      '</button>' +
+      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
+      '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
     '</div>' +
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +

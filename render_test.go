@@ -2634,14 +2634,14 @@ func TestRenderPage_Phase82BiggerCloseIcon(t *testing.T) {
 	}
 
 	// 1. The close button should use the ✕ glyph (U+2715), not
-	// the smaller × (U+00D7). Per Phase 88 the icon is
-	// wrapped in a <span class="lb-btn-icon"> so the check is
-	// for the span, not the button directly.
-	if !strings.Contains(html, `<span class="lb-btn-icon">✕</span>`) {
-		t.Error("expected close button icon to use ✕ glyph (U+2715) for a bigger close icon (Phase 82)")
+	// the smaller × (U+00D7). The glyph is directly in the
+	// button (Phase 91 reverted the wrapping in <span
+	// class="lb-btn-icon"> from Phase 88).
+	if !strings.Contains(html, "✕</button>") {
+		t.Error("expected close button to use ✕ glyph (U+2715) for a bigger close icon (Phase 82)")
 	}
-	if strings.Contains(html, `<span class="lb-btn-icon">×</span>`) {
-		t.Error("expected close button icon to NOT use the smaller × glyph (U+00D7) — should be ✕ (U+2715)")
+	if strings.Contains(html, "×</button>") {
+		t.Error("expected close button to NOT use the smaller × glyph (U+00D7) — should be ✕ (U+2715)")
 	}
 
 	// 2. The .lb-close CSS should have a larger font-size
@@ -2664,7 +2664,7 @@ func TestRenderPage_Phase82BiggerCloseIcon(t *testing.T) {
 	}
 	lbControlsCloseRule := html[start2 : start2+end+1]
 	if !strings.Contains(lbControlsCloseRule, "font-size: 1.4rem") {
-		t.Errorf("expected .lb-close in lb-controls to have font-size: 1.4rem (Phase 82, on .lb-btn-icon selector after Phase 88 refactor); rule: %q", lbControlsCloseRule)
+		t.Errorf("expected .lb-close in lb-controls to have font-size: 1.4rem (Phase 82, .lb-btn-icon selector was removed in Phase 91 revert so it's now directly on .lb-close); rule: %q", lbControlsCloseRule)
 	}
 }
 
@@ -2801,12 +2801,23 @@ func TestRenderPage_Phase85ActiveButtonInversion(t *testing.T) {
 	}
 }
 
-// TestRenderPage_Phase86LightboxButtonLabels verifies Phase 86:
-// the open and close buttons in the lightbox lb-controls pill
-// now have text labels below them ("Open in new tab" and
-// "Close" respectively). The labels are rotated 90 degrees
-// counter-clockwise so they read bottom-to-top.
-func TestRenderPage_Phase86LightboxButtonLabels(t *testing.T) {
+// TestRenderPage_Phase86LightboxButtonLabels: REMOVED in
+// Phase 91 (revert of Phase 86 + 88). The text labels under
+// the open/close buttons were removed per user request. The
+// buttons are back to the simple Phase 82 state: just ↗ and
+// ✕ glyphs, no text labels.
+
+// TestRenderPage_Phase88LabelInsideButton: REMOVED in
+// Phase 91 (revert of Phase 86 + 88). The text labels inside
+// the button (in a separate span) were removed per user
+// request. The buttons are back to the simple Phase 82 state.
+
+// TestRenderPage_Phase91LightboxRevertedLabels verifies the
+// revert: the lightbox buttons are simple ↗ and ✕ glyphs, no
+// text labels, and the buttons are 28x28 transparent squares
+// inside the lb-controls pill (which has the grey rounded
+// background).
+func TestRenderPage_Phase91LightboxRevertedLabels(t *testing.T) {
 	files := []FileInfo{
 		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
@@ -2815,107 +2826,38 @@ func TestRenderPage_Phase86LightboxButtonLabels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Each button has an icon + a text label (the icon is
-	// inside a <span class="lb-btn-icon">, the label in a
-	// <span class="lb-btn-label">).
-	if !strings.Contains(html, `<span class="lb-btn-icon">`) {
-		t.Error("expected <span class=\"lb-btn-icon\"> for the icon (Phase 88)")
+	// 1. The buttons have just the glyph (no <span class="lb-btn-icon">
+	// wrapper, no <span class="lb-btn-label">).
+	if !strings.Contains(html, `class="lb-btn lb-open"`) {
+		t.Error(`expected the open button to exist (Phase 91)`)
 	}
-	iconCount := strings.Count(html, `<span class="lb-btn-icon">`)
-	if iconCount != 2 {
-		t.Errorf("expected 2 .lb-btn-icon spans (one per button), got %d", iconCount)
+	if !strings.Contains(html, `class="lb-btn lb-close"`) {
+		t.Error(`expected the close button to exist (Phase 91)`)
 	}
-
-	// 2. The "Open in new tab" label is present.
-	if !strings.Contains(html, `<span class="lb-btn-label">Open in new tab</span>`) {
-		t.Error(`expected '<span class="lb-btn-label">Open in new tab</span>' (Phase 86)`)
+	// 2. The buttons should NOT have the <span class="lb-btn-label">
+	// wrapper (reverted in Phase 91).
+	if strings.Contains(html, `<span class="lb-btn-label">`) {
+		t.Error("expected NO <span class=\"lb-btn-label\"> (Phase 91: labels removed)")
 	}
-
-	// 3. The "Close" label is present.
-	if !strings.Contains(html, `<span class="lb-btn-label">Close</span>`) {
-		t.Error(`expected '<span class="lb-btn-label">Close</span>' (Phase 86)`)
+	// 3. The buttons should NOT have the <span class="lb-btn-icon">
+	// wrapper either (reverted in Phase 91).
+	if strings.Contains(html, `<span class="lb-btn-icon">`) {
+		t.Error("expected NO <span class=\"lb-btn-icon\"> (Phase 91: reverted, icon is directly in button)")
 	}
-
-	// 4. The CSS rule rotates the labels -90deg (counter-clockwise).
-	if !strings.Contains(html, ".lb-btn-label {") {
-		t.Fatal("no .lb-btn-label CSS rule")
-	}
-	start := strings.Index(html, ".lb-btn-label {")
-	end := strings.Index(html[start:], "}")
-	rule := html[start : start+end+1]
-	if !strings.Contains(rule, "rotate(-90deg)") {
-		t.Errorf("expected .lb-btn-label to have rotate(-90deg) for 90deg counter-clockwise rotation (Phase 86); rule: %q", rule)
-	}
-}
-
-// TestRenderPage_Phase88LabelInsideButton verifies Phase 88:
-// the rotated text label is now INSIDE the button (so
-// clicking the text triggers the button's click event),
-// and the button has its own grey rounded background that
-// encloses both the icon and the text.
-func TestRenderPage_Phase88LabelInsideButton(t *testing.T) {
-	files := []FileInfo{
-		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
-	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// 1. The label is INSIDE the button, not in a separate
-	// span. Search for the <button>...</button> containing
-	// the icon AND the label.
-	if !strings.Contains(html, "<button class=\"lb-btn lb-open\"") {
-		t.Error(`expected <button class="lb-btn lb-open"> in the rendered HTML (Phase 88)`)
-	}
-	if !strings.Contains(html, "<button class=\"lb-btn lb-close\"") {
-		t.Error(`expected <button class="lb-btn lb-close"> in the rendered HTML (Phase 88)`)
-	}
-	// Verify the open button has the icon + label inside it
-	// (not in a separate wrapper). The template uses a JS
-	// template literal with newlines, so the rendered HTML
-	// has newlines between the icon span and the label span.
-	if !strings.Contains(html, "lb-btn lb-open") || !strings.Contains(html, "lb-btn-icon") || !strings.Contains(html, "Open in new tab") {
-		t.Error("expected open button to contain BOTH the icon span AND the label span (Phase 88: text is inside the clickable button)")
-	}
-	if !strings.Contains(html, "lb-btn lb-close") || !strings.Contains(html, "Close</span>") {
-		t.Error("expected close button to contain BOTH the icon span AND the label span (Phase 88)")
-	}
-
-	// 2. The .lb-controls pill no longer has a background or
-	// border (each button is its own pill now).
-	controlsStart := strings.Index(html, ".lb-controls {")
-	if controlsStart < 0 {
+	// 4. The .lb-controls pill SHOULD have its background (the
+	// pill's bg was removed in Phase 88; restored in Phase 91
+	// revert).
+	if !strings.Contains(html, ".lb-controls {") {
 		t.Fatal("no .lb-controls rule")
 	}
-	controlsEnd := strings.Index(html[controlsStart:], "}")
-	if controlsEnd < 0 {
-		t.Fatal("no end of .lb-controls rule")
+	start := strings.Index(html, ".lb-controls {")
+	end := strings.Index(html[start:], "}")
+	rule := html[start : start+end+1]
+	if !strings.Contains(rule, "background: rgba(255, 255, 255, 0.92)") {
+		t.Errorf("expected .lb-controls to have its background (Phase 91: pill restored); rule: %q", rule)
 	}
-	controlsRule := html[controlsStart : controlsStart+controlsEnd+1]
-	if strings.Contains(controlsRule, "background:") && !strings.Contains(controlsRule, "background: transparent") {
-		t.Errorf(`expected .lb-controls to NOT have a non-transparent background (Phase 88: removed); rule: %q`, controlsRule)
-	}
-	if strings.Contains(controlsRule, "border:") && !strings.Contains(controlsRule, "border: none") {
-		t.Errorf(`expected .lb-controls to NOT have a non-none border (Phase 88: removed); rule: %q`, controlsRule)
-	}
-
-	// 3. The .lb-btn in lb-controls has its own grey background
-	// (the new pill style).
-	btnRuleStart := strings.Index(html, ".lb-controls .lb-btn {")
-	if btnRuleStart < 0 {
-		t.Fatal("no .lb-controls .lb-btn rule")
-	}
-	btnRuleEnd := strings.Index(html[btnRuleStart:], "}")
-	if btnRuleEnd < 0 {
-		t.Fatal("no end of .lb-controls .lb-btn rule")
-	}
-	btnRule := html[btnRuleStart : btnRuleStart+btnRuleEnd+1]
-	if !strings.Contains(btnRule, "background:") {
-		t.Errorf(`expected .lb-controls .lb-btn to have its own background (Phase 88); rule: %q`, btnRule)
-	}
-	if !strings.Contains(btnRule, "border-radius") {
-		t.Errorf(`expected .lb-controls .lb-btn to have border-radius (Phase 88: rounded pill); rule: %q`, btnRule)
+	if !strings.Contains(rule, "border-radius: 10px") {
+		t.Errorf("expected .lb-controls to have border-radius: 10px (Phase 91: pill restored); rule: %q", rule)
 	}
 }
 
