@@ -184,6 +184,12 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 	case KindDir:
 		v.IsDir = true
 		v.Href = pathPrefix + f.Name + "/"
+		// Per user request 2026-06-19: directories now have a
+		// Modified date in the dirs table. The Size is still
+		// omitted (meaningless — recursive size would require
+		// a separate scan, and the dirs table doesn't have a
+		// Size column).
+		v.Date = formatDate(f.ModTime)
 	case KindImage:
 		v.IsImage = true
 		v.Href = pathPrefix + f.Name
@@ -826,20 +832,40 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .section:last-child { border-bottom: none; }
 .section-heading {
-  font-size: 0.7rem;
+  /* Per user request 2026-06-19: bumped from 0.7rem to 0.85rem —
+     the section headings (DIRECTORIES, OTHER FILES, MEDIA) were
+     too small relative to the body text. 0.85rem matches the
+     meta line size and is more readable. */
+  font-size: 0.85rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--fg-muted);
   margin-bottom: 0.75rem;
-  /* Per Phase 71: the section heading is now a flex container
-     so the title text and the toggle button can sit on the
-     same row. The title text gets the bulk of the space; the
-     toggle sits at the far right. */
+  /* The section heading is a flex container so the title text
+     and the toggle button can sit on the same row. The title
+     text gets the bulk of the space; the toggle sits at the far
+     right. A horizontal rule (per Phase 72) sits between them
+     at ~50% text height, visually connecting the section name
+     to its toggle. */
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+/* Per user request 2026-06-19: a horizontal rule between the
+   section name and the toggle button. The rule sits at roughly
+   50% of the text height (the lowercase x-height) and stretches
+   to fill the gap. It's a thin (1px) line in the muted border
+   color so it doesn't dominate the heading — it's a visual
+   link, not a divider. */
+.section-heading .heading-divider {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  align-self: center;
+  margin: 0 0.25rem;
+  min-width: 1rem;
 }
 /* Per Phase 71: the section-toggle button lets the visitor
    collapse the directories + other-files sections. Default
@@ -904,6 +930,35 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    custom templates don't break — they just don't do anything. */
 .dirs-section .up-chip-row {
   margin-bottom: 0.5rem; /* visual separation from the subdirs below */
+}
+/* Per user request 2026-06-19: when the Up entry is rendered
+   as the first row of the dirs table (Phase 72), the up-row
+   gets a special background and the up-spacer row creates
+   visual separation from the directory entries below. */
+.dirs-table .up-row td {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+}
+.dirs-table .up-spacer td {
+  /* Blank row between the Up entry and the directory list.
+     No visible content; just a height + bottom border to
+     visually separate the two sections. */
+  height: 0.5rem;
+  padding: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border);
+}
+.dirs-table .up-row a {
+  color: var(--fg);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dirs-table .up-row a:hover {
+  color: var(--accent);
 }
 
 /* Full-width tables for directories (Phase 69) and other files.
@@ -1050,7 +1105,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-weight: 500;
 }
 .sort-btn.active:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-.sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; color: #006ed3; }
+/* Per user request 2026-06-19: the sort-by arrow (↑/↓ on the
+   active sort button) is white in BOTH dark and light mode.
+   The button has a dark fill (--accent-bg, which is dark blue
+   in light mode and a slightly darker blue in dark mode), so
+   the arrow needs to be white to stay readable on top. We use
+   the CSS color: white literal so the same color applies
+   regardless of theme. */
+.sort-btn.active .arrow { color: white; }
 .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -1540,21 +1602,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
       <span>Directories</span>
+      <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
     </h2>
     <div class="section-body" id="dirs-body">
-    {{if .Up}}
-    <div class="up-chip-row">
-      <a class="chip dir-chip up-chip" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a>
-    </div>
-    {{end}}
-    {{if .Subdirs}}
     <!-- Per user request 2026-06-20: directory chips replaced
          with a full-width table. The Name column is the link
          (clicking navigates into the directory); Type shows
          "DIR"; Date shows the directory's mtime. Size is
          intentionally omitted for directories (meaningless
-         — recursive size would require a separate scan). -->
+         — recursive size would require a separate scan).
+
+         Per user request 2026-06-19: the Up chip is now the
+         FIRST row of the table (not a separate chip above it),
+         with a blank <tr class="up-spacer"> row after it as
+         a visual separator. The Up row spans all 3 columns via
+         colspan=3. This way the table is self-contained (no
+         up-chip-row div above it) and the Up entry feels like
+         a natural first row, not a separate UI element. -->
     <table class="files-table dirs-table">
       <thead>
         <tr>
@@ -1564,6 +1629,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         </tr>
       </thead>
       <tbody>
+        {{if .Up}}
+        <tr class="up-row">
+          <td colspan="3"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
+        </tr>
+        <tr class="up-spacer" aria-hidden="true"><td colspan="3"></td></tr>
+        {{end}}
         {{range .Subdirs}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
@@ -1573,7 +1644,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
       </tbody>
     </table>
-    {{end}}
     </div>
   </section>
   {{end}}
@@ -1582,6 +1652,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   <section class="others-section" data-section="others">
     <h2 class="section-heading">
       <span>Other files</span>
+      <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="Show/hide other files">−</button>
     </h2>
     <div class="section-body" id="others-body">

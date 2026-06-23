@@ -460,9 +460,16 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	// user's 2026-06-17 spec: "the up directory chip should
 	// always be first and on its own line. remove the spacing
 	// for the rest of the directories".
+	// When viewing a subdirectory, an "Up" entry is rendered as
+	// the first row of the dirs table (Phase 72: moved from a
+	// separate up-chip-row above the table to a <tr class="up-row">
+	// inside the table's <tbody>). The subdirs are then rendered
+	// as separate <tr> rows. Per the user's 2026-06-17 spec: "the
+	// up directory chip should always be first and on its own
+	// line. remove the spacing for the rest of the directories".
 	files := []FileInfo{
-		{Name: "nested1", Kind: KindDir},
-		{Name: "nested2", Kind: KindDir},
+		{Name: "nested1", Kind: KindDir, ModTime: 100},
+		{Name: "nested2", Kind: KindDir, ModTime: 200},
 		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// Viewing a subdir: relPath = "subdir"
@@ -471,16 +478,24 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. The Up entry must be in its own <div class="up-chip-row">
-	upRowStart := strings.Index(html, `<div class="up-chip-row">`)
+	// 1. The Up entry must be the FIRST ROW of the dirs table
+	//    (Phase 72: moved from a separate <div class="up-chip-row">
+	//    above the table to a <tr class="up-row"> inside the
+	//    table's <tbody>).
+	upRowStart := strings.Index(html, `<tr class="up-row">`)
 	if upRowStart < 0 {
-		t.Fatal(`expected a <div class="up-chip-row"> containing the Up entry`)
+		t.Fatal(`expected a <tr class="up-row"> containing the Up entry`)
 	}
-	upRowEnd := strings.Index(html[upRowStart:], `</div>`)
+	upRowEnd := strings.Index(html[upRowStart:], `</tr>`)
 	if upRowEnd < 0 {
-		t.Fatal(`could not find end of up-chip-row div`)
+		t.Fatal(`could not find end of up-row tr`)
 	}
 	upRow := html[upRowStart : upRowStart+upRowEnd]
+	// The Up row should have a single <td colspan="3"> spanning
+	// all 3 columns of the dirs table.
+	if !strings.Contains(upRow, `colspan="3"`) {
+		t.Error("expected up-row to have a single td with colspan=\"3\"")
+	}
 	if !strings.Contains(upRow, `href="../"`) {
 		t.Error("expected Up entry to link to '../'")
 	}
@@ -507,17 +522,25 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if dirsTableStart < 0 {
 		t.Fatal(`expected a <table class="files-table dirs-table"> containing the subdirs`)
 	}
-	if dirsTableStart < upRowStart {
-		t.Error("expected dirs-table to come AFTER up-chip-row")
+	// Per Phase 72: the up-row is now INSIDE the dirs-table
+	// (it's the first <tr> in the <tbody>). The dirsTable
+	// starts before the up-row now.
+	if upRowStart < dirsTableStart {
+		t.Error("expected up-row to be INSIDE the dirs-table (after dirsTableStart)")
 	}
 	dirsTableEnd := strings.Index(html[dirsTableStart:], `</table>`)
 	if dirsTableEnd < 0 {
 		t.Fatal(`could not find end of dirs-table`)
 	}
 	dirsTable := html[dirsTableStart : dirsTableStart+dirsTableEnd]
-	// The dirs-table should contain the subdirs (NOT the up entry)
-	if strings.Contains(dirsTable, `href="../"`) {
-		t.Error(`the up entry should not appear in the dirs-table (it\'s in up-chip-row)`)
+	// Per Phase 72: the Up entry is now a row INSIDE the dirs
+	// table (not a separate chip above it). The dirs-table
+	// starts with the up-row, then the up-spacer (blank) row,
+	// then the actual subdirs. We check that the up entry's
+	// href="../" is in the table (in the up-row), AND that the
+	// subdirs are also in the table.
+	if !strings.Contains(dirsTable, `href="../"`) {
+		t.Error(`expected up entry's href="../" to be in the dirs-table (in the up-row)`)
 	}
 	if !strings.Contains(dirsTable, "nested1/") {
 		t.Error("expected nested1 subdir in dirs-table")
@@ -525,12 +548,19 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if !strings.Contains(dirsTable, "nested2/") {
 		t.Error("expected nested2 subdir in dirs-table")
 	}
+	// The up-spacer row should be present (Phase 72: a blank
+	// row between the Up entry and the directory list).
+	if !strings.Contains(dirsTable, `class="up-spacer"`) {
+		t.Error("expected a <tr class=\"up-spacer\"> in the dirs-table (blank row between Up and subdirs)")
+	}
 	// Each subdir should be in its own <tr> with the directory
 	// name in a Name cell (a .col-name <td>) — verify the
-	// table has at least 2 rows in the tbody (one per subdir).
-	rowCount := strings.Count(dirsTable, "<tr>")
-	if rowCount < 2 {
-		t.Errorf("expected at least 2 <tr> rows (one per subdir), got %d", rowCount)
+	// table has at least 4 rows in the tbody (up-row + spacer +
+	// 2 subdirs). Count any <tr...> (not just bare <tr>) since
+	// the up-spacer row has a class attribute.
+	rowCount := strings.Count(dirsTable, "<tr")
+	if rowCount < 4 {
+		t.Errorf("expected at least 4 <tr...> rows (up-row + spacer + 2 subdirs), got %d", rowCount)
 	}
 
 	// 3. The dirs-row should NOT contain the images (the image
@@ -541,11 +571,18 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		othersIdx = len(html)
 	}
 	dirsSection := html[:othersIdx]
-	if !strings.Contains(dirsSection, `class="up-chip-row"`) {
-		t.Error(`expected dirs section to contain the up-chip-row`)
-	}
+	// Per Phase 72: the up-row is now inside the dirs-table, so
+	// the dirs section should contain the dirs-table (not the
+	// old up-chip-row div).
 	if !strings.Contains(dirsSection, `class="files-table dirs-table"`) {
 		t.Error(`expected dirs section to contain the dirs-table`)
+	}
+	if !strings.Contains(dirsSection, `class="up-row"`) {
+		t.Error(`expected dirs section to contain the up-row (now inside the dirs-table)`)
+	}
+	// Old up-chip-row should be GONE.
+	if strings.Contains(dirsSection, `class="up-chip-row"`) {
+		t.Error(`expected NO up-chip-row in dirs section (replaced by up-row in Phase 72)`)
 	}
 }
 
@@ -1454,19 +1491,23 @@ func TestRenderPage_UpEntryShowsParentDirName(t *testing.T) {
 			}
 			if tc.wantText == "" {
 				// Root view: no up entry at all
+				if strings.Contains(html, `class="up-row"`) {
+					t.Errorf("expected NO up-row at the gallery root, but found one")
+				}
+				// Old up-chip-row should be GONE.
 				if strings.Contains(html, `class="up-chip-row"`) {
-					t.Errorf("expected NO up-chip-row at the gallery root, but found one")
+					t.Errorf("expected NO up-chip-row at the gallery root (replaced by up-row in Phase 72)")
 				}
 				return
 			}
-			upRowStart := strings.Index(html, `<div class="up-chip-row">`)
+			upRowStart := strings.Index(html, `<tr class="up-row">`)
 			if upRowStart < 0 {
-				t.Fatalf("expected an up-chip-row for relPath %q", tc.relPath)
+				t.Fatalf("expected an up-row for relPath %q", tc.relPath)
 			}
-			upRowEnd := strings.Index(html[upRowStart:], `</div>`)
+			upRowEnd := strings.Index(html[upRowStart:], `</tr>`)
 			upRow := html[upRowStart : upRowStart+upRowEnd]
 			if !strings.Contains(upRow, tc.wantText) {
-				t.Errorf("up-chip-row for relPath %q: expected text %q, got: %q", tc.relPath, tc.wantText, upRow)
+				t.Errorf("up-row for relPath %q: expected text %q, got: %q", tc.relPath, tc.wantText, upRow)
 			}
 		})
 	}
@@ -1878,5 +1919,132 @@ func TestBundledTemplate_SectionToggleJSValid(t *testing.T) {
 		if !strings.Contains(html, c.substr) {
 			t.Errorf("expected %q (%s) in template", c.substr, c.name)
 		}
+	}
+}
+
+// TestRenderPage_Phase72UIChanges verifies the Phase 72 set
+// of UI changes:
+//  1. Section heading font-size is 0.85rem (was 0.7rem)
+//  2. Heading has a divider span (the horizontal rule between
+//     title and toggle button)
+//  3. The up-row is the FIRST <tr> in the dirs table (not
+//     a separate up-chip-row above the table)
+//  4. The dirs table has an up-spacer row after the up-row
+//  5. The dirs table has a col-date column with dates populated
+//     (per the user's bug report)
+//  6. The sort-btn.active .arrow is white in both modes
+func TestRenderPage_Phase72UIChanges(t *testing.T) {
+	// Set up a gallery with a dir + an image, in a subdir
+	// (so we have an up-row to render).
+	files := []FileInfo{
+		{Name: "nested1", Kind: KindDir, ModTime: 100},
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Section heading font-size: 0.85rem (was 0.7rem).
+	// Per Phase 72: the section-heading CSS rule was updated to
+	// use 0.85rem. Other rules (thead, page-ellipsis, filetype-chip)
+	// still use 0.7rem, so we check the specific selector.
+	if !strings.Contains(html, `.section-heading {`) || !strings.Contains(html, `font-size: 0.85rem`) {
+		t.Error("expected .section-heading CSS rule to use font-size: 0.85rem (Phase 72: bumped from 0.7rem)")
+	}
+	// And the OLD section-heading rule with 0.7rem should be GONE.
+	if strings.Contains(html, `.section-heading {`) {
+		// Check that the rule doesn't have 0.7rem
+		start := strings.Index(html, `.section-heading {`)
+		end := strings.Index(html[start:], `}`)
+		rule := html[start : start+end]
+		if strings.Contains(rule, `font-size: 0.7rem`) {
+			t.Errorf("expected the .section-heading rule's font-size to NOT be 0.7rem; rule: %q", rule)
+		}
+	}
+
+	// 2. Heading has a divider span (between title and toggle)
+	// The dirs section heading should have <span class="heading-divider">
+	// in addition to the title <span> and the toggle <button>.
+	if !strings.Contains(html, `<span class="heading-divider" aria-hidden="true"></span>`) {
+		t.Error(`expected <span class="heading-divider"> in dirs section heading (Phase 72)`)
+	}
+	// Others section should also have the divider.
+	othersIdx := strings.Index(html, "Other files")
+	if othersIdx < 0 {
+		// no others, that's fine — just check dirs
+	} else {
+		if !strings.Contains(html[othersIdx:],
+			`<span class="heading-divider" aria-hidden="true"></span>`) {
+			t.Error(`expected <span class="heading-divider"> in others section heading (Phase 72)`)
+		}
+	}
+
+	// 3. The up-row is the FIRST <tr> in the dirs-table's <tbody>.
+	// (The thead also has a <tr> for the column headers, so we
+	// skip past the thead to find the tbody's first <tr>.)
+	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	if dirsTableStart < 0 {
+		t.Fatal("no dirs-table found")
+	}
+	upRowStart := strings.Index(html, `<tr class="up-row">`)
+	if upRowStart < 0 {
+		t.Fatal("no up-row found in dirs-table")
+	}
+	if upRowStart < dirsTableStart {
+		t.Error("up-row should be INSIDE dirs-table (after dirsTableStart)")
+	}
+	// The up-row should be the FIRST <tr> AFTER the <tbody> opening
+	// tag (not counting the thead <tr>).
+	dirsTableEnd := strings.Index(html[dirsTableStart:], `</table>`)
+	dirsTable := html[dirsTableStart : dirsTableStart+dirsTableEnd]
+	tbodyStart := strings.Index(html[dirsTableStart:], `<tbody>`)
+	if tbodyStart < 0 {
+		t.Fatal("no <tbody> in dirs-table")
+	}
+	tbodyStart += dirsTableStart
+	// Find the first <tr...> AFTER <tbody>
+	trAfterTbody := strings.Index(html[tbodyStart:], `<tr`)
+	if trAfterTbody < 0 {
+		t.Fatal("no <tr> in tbody")
+	}
+	trAfterTbody += tbodyStart
+	// Check if the up-row is at or near this position
+	upRowInTbody := strings.Index(html[tbodyStart:], `<tr class="up-row">`)
+	if upRowInTbody < 0 {
+		t.Error("no up-row in tbody")
+	}
+	upRowInTbody += tbodyStart
+	// The first <tr> after <tbody> should be the up-row.
+	if trAfterTbody != upRowInTbody {
+		t.Errorf("expected up-row to be the first <tr> in tbody (got offset %d, first <tr at %d)", upRowInTbody, trAfterTbody)
+	}
+
+	// 4. The dirs table has an up-spacer row after the up-row.
+	if !strings.Contains(dirsTable, `<tr class="up-spacer"`) {
+		t.Error(`expected <tr class="up-spacer"> row in dirs-table (Phase 72)`)
+	}
+
+	// 5. The dirs table has a col-date column with dates populated.
+	// Per Phase 72: the test file's ModTime=100 should render as a
+	// non-empty date string.
+	if !strings.Contains(dirsTable, `<td class="col-date">`) {
+		t.Error(`expected <td class="col-date"> column in dirs-table`)
+	}
+	// The date should NOT be empty (was empty when ModTime=0).
+	// Check that at least one <td class="col-date"> has non-empty content.
+	dateCells := strings.Count(dirsTable, `<td class="col-date">`)
+	emptyDates := strings.Count(dirsTable, `<td class="col-date"></td>`)
+	if dateCells == emptyDates {
+		t.Errorf("expected some populated col-date cells; got %d date cells, %d empty", dateCells, emptyDates)
+	}
+
+	// 6. The sort-btn.active .arrow is white in both modes.
+	if !strings.Contains(html, `.sort-btn.active .arrow { color: white; }`) {
+		t.Error(`expected .sort-btn.active .arrow { color: white; } (Phase 72: white in both modes)`)
+	}
+	// And the old hard-coded blue should be gone.
+	if strings.Contains(html, `.sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; color: #006ed3; }`) {
+		t.Error(`expected the old .sort-btn .arrow rule with #006ed3 to be GONE (replaced by Phase 72 white arrow)`)
 	}
 }
