@@ -852,7 +852,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  /* Per user request 2026-06-19: the whole heading row is
+     clickable (not just the small button). The padding +
+     cursor: pointer + hover bg show the user this is
+     interactive. We use cursor: pointer (not a cursor on the
+     button only) because the entire row is the click target. */
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  margin-left: -0.5rem;
+  margin-right: -0.5rem;
+  border-radius: 4px;
+  transition: background 0.12s;
+  user-select: none;
 }
+.section-heading:hover { background: var(--bg-hover); }
 /* Per user request 2026-06-19: a horizontal rule between the
    section name and the toggle button. The rule sits at roughly
    50% of the text height (the lowercase x-height) and stretches
@@ -1944,12 +1957,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     else if (e.key === 'ArrowRight') show(idx + 1);
   });
 
-    /* === SECTION TOGGLE (Phase 71) ===========================
+    /* === SECTION TOGGLE (Phase 71, extended in Phase 74) =========
        The directories + other-files sections each have a toggle
-       button in the heading. Clicking the button collapses the
-       body (display: none) and updates the button text + aria.
-       The state is persisted in localStorage so the visitor's
-       choice survives navigations and refreshes.
+       behavior: clicking the section heading (the whole width)
+       collapses the body (display: none) and updates the
+       button's text + aria. The state is persisted in localStorage
+       so the visitor's choice survives navigations and refreshes.
+
+       Per user request 2026-06-19: the WHOLE WIDTH of the section
+       heading is now clickable, not just the small − / + button.
+       The button is still rendered (and is still keyboard-tabbable
+       + screen-reader-announceable) as a visual affordance +
+       a11y target, but the user can click anywhere on the
+       heading row to toggle.
 
        Why localStorage (not URL query / not page state):
          - URL query would be bookmarkable, but the toggle is a
@@ -1967,38 +1987,65 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        styles the same way.) */
     (function() {
       var STORAGE_PREFIX = 'gallery-section-';
-      var buttons = document.querySelectorAll('.section-toggle');
-      buttons.forEach(function(btn) {
-        var section = btn.getAttribute('data-toggle');
+      function toggleSection(section) {
         var sectionEl = document.querySelector('[data-section="' + section + '"]');
         if (!sectionEl) return;
+        var btn = sectionEl.querySelector('.section-toggle');
         var key = STORAGE_PREFIX + section;
+        var isCollapsed = sectionEl.classList.toggle('collapsed');
+        if (btn) {
+          btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+          btn.textContent = isCollapsed ? '+' : '−';
+        }
+        try {
+          if (isCollapsed) {
+            localStorage.setItem(key, 'collapsed');
+          } else {
+            localStorage.removeItem(key);
+          }
+        } catch (e) {
+          // Ignore localStorage write errors (private mode, etc.)
+        }
+      }
+      // Find all section headings (the toggle target is the
+      // whole <h2> row, not just the small button). We also keep
+      // the click handler on the button for accessibility —
+      // keyboard users tab to the button and press Enter, screen
+      // readers announce "Show/hide directories" via the
+      // button's title + aria-label.
+      var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading');
+      headings.forEach(function(h) {
+        var section = h.parentElement.getAttribute('data-section');
+        if (!section) return;
         // Apply persisted state on load.
+        var key = STORAGE_PREFIX + section;
         try {
           if (localStorage.getItem(key) === 'collapsed') {
-            sectionEl.classList.add('collapsed');
-            btn.setAttribute('aria-expanded', 'false');
-            btn.textContent = '+';
+            h.parentElement.classList.add('collapsed');
+            var btn = h.querySelector('.section-toggle');
+            if (btn) {
+              btn.setAttribute('aria-expanded', 'false');
+              btn.textContent = '+';
+            }
           }
         } catch (e) {
           // localStorage can be disabled (private mode, etc.).
           // Fail silently — the toggle just won't persist.
         }
-        // Toggle on click.
-        btn.addEventListener('click', function() {
-          var isCollapsed = sectionEl.classList.toggle('collapsed');
-          btn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-          btn.textContent = isCollapsed ? '+' : '−';
-          try {
-            if (isCollapsed) {
-              localStorage.setItem(key, 'collapsed');
-            } else {
-              localStorage.removeItem(key);
-            }
-          } catch (e) {
-            // Ignore localStorage write errors.
-          }
+        // Toggle on click of the heading (whole row).
+        h.addEventListener('click', function() {
+          toggleSection(section);
         });
+        // Also keep the click handler on the button — it calls
+        // stopPropagation so the heading handler doesn't run
+        // twice (once for the button, once for the heading).
+        var btn = h.querySelector('.section-toggle');
+        if (btn) {
+          btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleSection(section);
+          });
+        }
       });
     })();
 

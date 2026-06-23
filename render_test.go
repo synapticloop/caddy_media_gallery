@@ -1911,9 +1911,11 @@ func TestBundledTemplate_SectionToggleJSValid(t *testing.T) {
 		{"querySelectorAll usage", "querySelectorAll"},
 		{"classList usage", "classList"},
 		{"STORAGE_PREFIX identifier", "STORAGE_PREFIX"},
-		{"section-toggle selector", "querySelectorAll('.section-toggle')"},
+		{"section-toggle selector", "section-toggle"},
 		{"data-section selector pattern", `[data-section="`},
 		{"gallery-section- prefix", "gallery-section-"},
+		{"section-heading click target (Phase 74)", ".section-heading"},
+		{"toggleSection function (Phase 74)", "toggleSection"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(html, c.substr) {
@@ -2144,5 +2146,56 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 	// readers announce only the Name link, not all 4).
 	if !strings.Contains(alphaRow, `aria-hidden="true"`) {
 		t.Error(`expected cell-link to have aria-hidden="true" (so SR announces Name only)`)
+	}
+}
+
+// TestRenderPage_SectionHeadingClickable verifies Phase 74:
+// the whole section heading row is clickable to toggle
+// show/hide, not just the small − / + button. The check is
+// structural (the JS contains the right click handler) plus
+// CSS (cursor: pointer on the heading + a hover state).
+func TestRenderPage_SectionHeadingClickable(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha", Kind: KindDir, ModTime: 100},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. CSS: cursor: pointer on .section-heading (the whole
+	// heading is clickable, not just the button).
+	if !strings.Contains(html, `.section-heading {`) {
+		t.Fatal("no .section-heading rule found")
+	}
+	start := strings.Index(html, `.section-heading {`)
+	end := strings.Index(html[start:], `}`)
+	rule := html[start : start+end]
+	if !strings.Contains(rule, `cursor: pointer`) {
+		t.Errorf("expected .section-heading to have cursor: pointer (Phase 74); rule: %q", rule)
+	}
+	// 2. CSS: hover state on the heading (the bg-hover token).
+	if !strings.Contains(html, `.section-heading:hover`) {
+		t.Error("expected a .section-heading:hover CSS rule (Phase 74: full-width click affordance)")
+	}
+
+	// 3. JS: the click handler is attached to .section-heading
+	// (not just to .section-toggle).
+	if !strings.Contains(html, `var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading')`) {
+		t.Error("expected the JS to find .section-heading (Phase 74: full-width click target)")
+	}
+	// 4. JS: a click handler is added to each heading.
+	if !strings.Contains(html, `h.addEventListener('click', function()`) {
+		t.Error("expected the JS to addEventListener('click', ...) on each .section-heading (Phase 74)")
+	}
+	// 5. JS: the button still has its own click handler (for
+	// keyboard / screen reader users who tab to the button).
+	if !strings.Contains(html, `btn.addEventListener('click', function(e)`) {
+		t.Error("expected the JS to keep the button's click handler (for keyboard a11y)")
+	}
+	// 6. JS: stopPropagation on the button click (so it doesn't
+	// trigger the heading handler twice when the button is clicked).
+	if !strings.Contains(html, `e.stopPropagation()`) {
+		t.Error("expected the button's click handler to call e.stopPropagation (Phase 74: avoid double-toggle)")
 	}
 }
