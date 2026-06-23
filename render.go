@@ -778,8 +778,16 @@ main {
   overflow: hidden;
 }
 header {
-  padding: 1.25rem 2rem 1rem;
-  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 2rem 0;
+  /* Per user request 2026-06-19: removed border-bottom from the
+     <header>. The line that separates the header content (title +
+     meta + sort-bar) from the rest of the page is now the
+     sort-bar's border-bottom, which extends to the viewport
+     edges via negative horizontal margin (-2rem to escape the
+     header's 2rem padding). This makes the line under the sort
+     buttons the same width as the lines under the section
+     headings and the section content (all extend to the
+     viewport edges). */
 }
 .header-top {
   display: flex;
@@ -1110,8 +1118,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   font-size: 0.85rem;
   flex-wrap: wrap;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
+  /* Per user request 2026-06-19: removed border-top + padding-top.
+     The line under the sort-bar is now the <header>'s border-bottom
+     (a single 1px line that sits between the meta line and the
+     sort buttons, plus extends below the sort-bar). To make all
+     three horizontal lines the same width (header bottom, sort-bar
+     top, section bottom), the <header>'s border-bottom is now
+     removed and replaced with a dedicated border below the sort-bar
+     that extends to the viewport edges. The sort-bar has negative
+     horizontal margin to escape the <header>'s 2rem padding. */
+  margin: 0 -2rem;
+  padding: 0.75rem 2rem 0;
+  border-bottom: 1px solid var(--border);
 }
 .sort-label { color: var(--fg-faint); margin-right: 0.25rem; }
 .sort-btn {

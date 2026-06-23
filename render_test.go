@@ -2199,3 +2199,74 @@ func TestRenderPage_SectionHeadingClickable(t *testing.T) {
 		t.Error("expected the button's click handler to call e.stopPropagation (Phase 74: avoid double-toggle)")
 	}
 }
+
+// TestRenderPage_Phase75HorizontalLinesSameWidth verifies
+// Phase 75: the three horizontal lines (under the sort-bar,
+// under each section, and the header's bottom) are all the
+// same width. The line under the sort-bar is now drawn by
+// .sort-bar's border-bottom (with negative margin to escape
+// the header's 2rem padding), so it extends to the viewport
+// edges like the .section border-bottom.
+//
+// The <header>'s border-bottom has been REMOVED (it used to
+// draw a line at the <header>'s outer edge, which was slightly
+// different width than the section lines because the section
+// has its own padding).
+func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. The <header> rule should NOT have border-bottom anymore.
+	headerStart := strings.Index(html, "header {")
+	if headerStart < 0 {
+		t.Fatal("no header rule")
+	}
+	// Find the matching closing brace (the next "}" — header is
+	// a simple 1-property rule so the closing brace is near).
+	headerEnd := strings.Index(html[headerStart:], "}")
+	if headerEnd < 0 {
+		t.Fatal("no end of header rule")
+	}
+	headerRule := html[headerStart : headerStart+headerEnd+1]
+	if strings.Contains(headerRule, "border-bottom") {
+		t.Errorf("expected <header> rule to NOT have border-bottom (Phase 75: moved to sort-bar); rule: %q", headerRule)
+	}
+
+	// 2. The .sort-bar rule should have border-bottom (not border-top).
+	sortBarStart := strings.Index(html, ".sort-bar {")
+	if sortBarStart < 0 {
+		t.Fatal("no .sort-bar rule")
+	}
+	sortBarEnd := strings.Index(html[sortBarStart:], "}")
+	if sortBarEnd < 0 {
+		t.Fatal("no end of .sort-bar rule")
+	}
+	sortBarRule := html[sortBarStart : sortBarStart+sortBarEnd+1]
+	if !strings.Contains(sortBarRule, "border-bottom") {
+		t.Errorf("expected .sort-bar rule to have border-bottom (Phase 75); rule: %q", sortBarRule)
+	}
+	if strings.Contains(sortBarRule, "border-top") {
+		t.Errorf("expected .sort-bar rule to NOT have border-top (Phase 75: moved to border-bottom); rule: %q", sortBarRule)
+	}
+	// The negative margin is what makes the line extend to the
+	// viewport edges (escapes the <header>'s 2rem padding).
+	if !strings.Contains(sortBarRule, "margin: 0 -2rem") {
+		t.Errorf("expected .sort-bar to have negative horizontal margin (Phase 75: extend line to viewport edges); rule: %q", sortBarRule)
+	}
+
+	// 3. The .section rule should have border-bottom (unchanged).
+	sectionStart := strings.Index(html, ".section {")
+	if sectionStart < 0 {
+		t.Fatal("no .section rule")
+	}
+	sectionEnd := strings.Index(html[sectionStart:], "}")
+	if sectionEnd < 0 {
+		t.Fatal("no end of .section rule")
+	}
+	sectionRule := html[sectionStart : sectionStart+sectionEnd+1]
+	if !strings.Contains(sectionRule, "border-bottom") {
+		t.Errorf("expected .section rule to have border-bottom (unchanged from Phase 75); rule: %q", sectionRule)
+	}
+}
