@@ -807,7 +807,15 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 0.85rem;
+  /* Per user request 2026-06-19: removed margin-bottom: 0.85rem.
+     Added a border-bottom + padding-bottom to create a
+     visible separator between the title/meta row and the
+     sort-bar row below. The 1px line extends the full width
+     of the .header (no negative margin needed because the
+     .header has padding 0 2rem 0, and the .header-top is
+     full-width inside that padding). */
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
 h1 {
@@ -1137,17 +1145,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   font-size: 0.85rem;
   flex-wrap: wrap;
-  /* Per user request 2026-06-19: removed border-top + padding-top.
-     The line under the sort-bar is now the <header>'s border-bottom
-     (a single 1px line that sits between the meta line and the
-     sort buttons, plus extends below the sort-bar). To make all
-     three horizontal lines the same width (header bottom, sort-bar
-     top, section bottom), the <header>'s border-bottom is now
-     removed and replaced with a dedicated border below the sort-bar
-     that extends to the viewport edges. The sort-bar has negative
-     horizontal margin to escape the <header>'s 2rem padding. */
-  margin: 0 -2rem;
-  padding: 0.75rem 2rem 0;
+  /* Per user request 2026-06-19 (Phase 80): removed
+     margin: 0 -2rem (the sort-bar no longer needs to
+     escape the header's 2rem padding because the visual
+     separation above is now handled by .header-top's
+     border-bottom). Changed padding from
+     '0.75rem 2rem 0' (top 0.75, horizontal 2rem, bottom 0)
+     to '0.75rem 0 0.75rem 0' (top 0.75, horizontal 0, bottom
+     0.75). The 2rem horizontal was matching the header's
+     padding; since the header is now full-width, the
+     sort-bar can also be full-width. The bottom padding
+     was added so the border-bottom doesn't sit right next
+     to the sort buttons. */
+  padding: 0.75rem 0 0.75rem 0;
   border-bottom: 1px solid var(--border);
 }
 .sort-label { color: var(--fg-faint); margin-right: 0.25rem; }

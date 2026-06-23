@@ -2248,6 +2248,29 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 		t.Errorf("expected <header> rule to NOT have border-bottom (Phase 75: moved to sort-bar); rule: %q", headerRule)
 	}
 
+	// 1b. Per Phase 80: the .header-top rule should have
+	// border-bottom + padding-bottom (the new visual separator
+	// between the title/meta row and the sort-bar).
+	headerTopStart := strings.Index(html, ".header-top {")
+	if headerTopStart < 0 {
+		t.Fatal("no .header-top rule")
+	}
+	headerTopEnd := strings.Index(html[headerTopStart:], "}")
+	if headerTopEnd < 0 {
+		t.Fatal("no end of .header-top rule")
+	}
+	headerTopRule := html[headerTopStart : headerTopStart+headerTopEnd+1]
+	if !strings.Contains(headerTopRule, "border-bottom: 1px solid var(--border)") {
+		t.Errorf("expected .header-top to have border-bottom (Phase 80); rule: %q", headerTopRule)
+	}
+	if !strings.Contains(headerTopRule, "padding-bottom: 0.75rem") {
+		t.Errorf("expected .header-top to have padding-bottom: 0.75rem (Phase 80); rule: %q", headerTopRule)
+	}
+	// And should NOT have margin-bottom: 0.85rem (removed in Phase 80).
+	if strings.Contains(headerTopRule, "margin-bottom: 0.85rem") {
+		t.Errorf("expected .header-top to NOT have margin-bottom: 0.85rem (Phase 80: removed); rule: %q", headerTopRule)
+	}
+
 	// 2. The .sort-bar rule should have border-bottom (not border-top).
 	sortBarStart := strings.Index(html, ".sort-bar {")
 	if sortBarStart < 0 {
@@ -2266,8 +2289,15 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 	}
 	// The negative margin is what makes the line extend to the
 	// viewport edges (escapes the <header>'s 2rem padding).
-	if !strings.Contains(sortBarRule, "margin: 0 -2rem") {
-		t.Errorf("expected .sort-bar to have negative horizontal margin (Phase 75: extend line to viewport edges); rule: %q", sortBarRule)
+	// Per Phase 80: the sort-bar no longer has negative
+	// horizontal margin (it was margin: 0 -2rem to escape the
+	// header's 2rem padding; the user removed it in Phase 80).
+	if strings.Contains(sortBarRule, "margin: 0 -2rem") {
+		t.Errorf("expected .sort-bar to NOT have margin: 0 -2rem (Phase 80: removed)")
+	}
+	// And the new padding should be 0.75rem 0 0.75rem 0.
+	if !strings.Contains(sortBarRule, "padding: 0.75rem 0 0.75rem 0") {
+		t.Errorf("expected .sort-bar to have padding: 0.75rem 0 0.75rem 0 (Phase 80); rule: %q", sortBarRule)
 	}
 
 	// 3. The .section rule should have border-bottom (unchanged).
