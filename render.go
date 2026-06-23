@@ -1059,9 +1059,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   width: auto;
 }
 .files-table .col-type {
-  /* Type column: narrow, monospace-friendly, fits "DIR" or a
-     3-4 letter extension like "TXT" or "JSON". */
-  width: 6rem;
+  /* Per user request 2026-06-19: changed width from 6rem
+     (fixed narrow) to auto. With the dirs table no longer
+     having a Type column (Phase 77), the col-type only
+     applies to the others table. The 6rem fixed width was
+     fine for short extensions like "TXT" or "PDF" but
+     truncated longer ones like "WEBM" or "MARKDOWN".
+     Using auto lets the column size to its content (max
+     of the header + the data rows). The column will be
+     just wide enough to fit the longest extension without
+     wasted space. */
+  width: auto;
   color: var(--fg-muted);
   font-size: 0.75rem;
   text-transform: uppercase;
