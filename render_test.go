@@ -2798,3 +2798,49 @@ func TestRenderPage_Phase85ActiveButtonInversion(t *testing.T) {
 		t.Errorf("expected --active-bg: #f3f6f7 to appear 2 times (both dark mode blocks), got %d", darkActiveBgCount)
 	}
 }
+
+// TestRenderPage_Phase86LightboxButtonLabels verifies Phase 86:
+// the open and close buttons in the lightbox lb-controls pill
+// now have text labels below them ("Open in new tab" and
+// "Close" respectively). The labels are rotated 90 degrees
+// counter-clockwise so they read bottom-to-top.
+func TestRenderPage_Phase86LightboxButtonLabels(t *testing.T) {
+	files := []FileInfo{
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Each button is now wrapped in a .lb-btn-group div.
+	if !strings.Contains(html, `class="lb-btn-group"`) {
+		t.Error("expected .lb-btn-group wrapper around each button (Phase 86)")
+	}
+	// Two groups (one per button).
+	groupCount := strings.Count(html, `class="lb-btn-group"`)
+	if groupCount != 2 {
+		t.Errorf("expected 2 .lb-btn-group wrappers (one per button), got %d", groupCount)
+	}
+
+	// 2. The "Open in new tab" label is present.
+	if !strings.Contains(html, `<span class="lb-btn-label">Open in new tab</span>`) {
+		t.Error(`expected '<span class="lb-btn-label">Open in new tab</span>' (Phase 86)`)
+	}
+
+	// 3. The "Close" label is present.
+	if !strings.Contains(html, `<span class="lb-btn-label">Close</span>`) {
+		t.Error(`expected '<span class="lb-btn-label">Close</span>' (Phase 86)`)
+	}
+
+	// 4. The CSS rule rotates the labels -90deg (counter-clockwise).
+	if !strings.Contains(html, ".lb-btn-label {") {
+		t.Fatal("no .lb-btn-label CSS rule")
+	}
+	start := strings.Index(html, ".lb-btn-label {")
+	end := strings.Index(html[start:], "}")
+	rule := html[start : start+end+1]
+	if !strings.Contains(rule, "rotate(-90deg)") {
+		t.Errorf("expected .lb-btn-label to have rotate(-90deg) for 90deg counter-clockwise rotation (Phase 86); rule: %q", rule)
+	}
+}

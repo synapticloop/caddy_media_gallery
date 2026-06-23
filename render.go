@@ -1626,6 +1626,57 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-radius: 10px;
   z-index: 2;
 }
+/* Per user request 2026-06-19: the open + close buttons in
+   the lb-controls pill now have a TEXT LABEL below each
+   button. The label is rotated 90 degrees counter-clockwise
+   (CSS transform: rotate(-90deg)), so it reads bottom-to-top
+   — a vertical label that takes up less horizontal space.
+
+   Each button is wrapped in a .lb-btn-group container with
+   display: flex (column), so the button is on top and the
+   label is below it. The label is a <span> with the label
+   text, rotated -90deg.
+
+   Why rotated -90deg (counter-clockwise): so the text reads
+   from bottom to top, which is the natural reading direction
+   for English when the text is rotated 90 degrees. (Rotating
+   +90deg would make it read top-to-bottom, which feels
+   backwards.)
+
+   The label is positioned with transform-origin: bottom left
+   so the rotation pivots around the bottom-left corner of
+   the text, which keeps the text aligned with the bottom of
+   the button. */
+#gallery-lightbox .lb-controls .lb-btn-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+#gallery-lightbox .lb-controls .lb-btn-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #1a1a26;
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  /* Rotate 90deg counter-clockwise. After rotation, the
+     text reads from bottom to top. transform-origin is
+     bottom-left so the rotation pivot is at the bottom-
+     left of the unrotated text (i.e., the top of the
+     rotated text). */
+  transform: rotate(-90deg);
+  transform-origin: top left;
+  /* After rotation, the text width becomes its height in
+     the page layout. We shift it to the left so it sits
+     directly under the button (the unrotated text would
+     extend to the right of the button). */
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 0.5rem;
+  margin-left: -0.5rem;
+}
 #gallery-lightbox .lb-controls .lb-btn {
   /* Override the default .lb-btn positioning — they're now in
      a flex container, so they're laid out by flex not absolute.
@@ -1930,8 +1981,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   overlay.id = 'gallery-lightbox';
   overlay.innerHTML =
     '<div class="lb-controls">' +
-      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
-      '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
+      '<div class="lb-btn-group">' +
+        '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
+        '<span class="lb-btn-label">Open in new tab</span>' +
+      '</div>' +
+      '<div class="lb-btn-group">' +
+        '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
+        '<span class="lb-btn-label">Close</span>' +
+      '</div>' +
     '</div>' +
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
