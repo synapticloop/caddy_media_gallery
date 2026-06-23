@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a custom Caddy binary with the image_gallery module baked in.
+# Build a custom Caddy binary with the media_gallery module baked in.
 # Pins Caddy to v2.11.4 and the local module path.
 #
 # Usage:
@@ -35,23 +35,23 @@ if [ "$CHECK_ONLY" -eq 0 ] && [ ! -f /usr/local/bin/caddy.bak-vanilla-2.11.4 ] &
 fi
 
 # Build the custom Caddy
-echo "==> Building Caddy with image_gallery module (this can take 30-90s on a cold cache)..."
+echo "==> Building Caddy with media_gallery module (this can take 30-90s on a cold cache)..."
 xcaddy build \
     --output "$OUTPUT_BIN" \
     --with github.com/caddyserver/caddy@v2.11.4 \
     --with github.com/mholt/caddy-ratelimit \
-    --with github.com/synapticloop/caddy_image_gallery=. \
+    --with github.com/synapticloop/caddy_media_gallery=. \
 
 chmod +x "$OUTPUT_BIN"
 
 echo ""
 echo "==> Built: $("$OUTPUT_BIN" version)"
 echo "==> Module check:"
-if "$OUTPUT_BIN" list-modules 2>/dev/null | grep -q image_gallery; then
-    "$OUTPUT_BIN" list-modules 2>/dev/null | grep image_gallery
+if "$OUTPUT_BIN" list-modules 2>/dev/null | grep -q media_gallery; then
+    "$OUTPUT_BIN" list-modules 2>/dev/null | grep media_gallery
     echo "    OK — module is baked in"
 else
-    echo "    FAIL — image_gallery module NOT found"
+    echo "    FAIL — media_gallery module NOT found"
     exit 1
 fi
 
