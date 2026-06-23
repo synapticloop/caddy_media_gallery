@@ -397,6 +397,60 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 	}
 }
 
+// TestRenderPage_OtherFilesAsTable verifies the Phase 69
+// change: other files are now rendered as a full-width
+// table (not a chip row). The table has columns Name, Type,
+// Size, Date (Size is included for files because it's
+// meaningful; directories omit Size in the dirs-table).
+func TestRenderPage_OtherFilesAsTable(t *testing.T) {
+	files := []FileInfo{
+		{Name: "readme.txt", ModTime: 100, Size: 1024, Kind: KindOther},
+		{Name: "config.json", ModTime: 200, Size: 2048, Kind: KindOther},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The new structure: a <table class="files-table others-table">.
+	if !strings.Contains(html, `<table class="files-table others-table">`) {
+		t.Error(`expected <table class="files-table others-table"> in the rendered page`)
+	}
+	// Old structure should be GONE: no <div class="chip-row">
+	// for the others section (was used in Phase 24-68).
+	// We grep for the chip-row class — there's a .up-chip-row
+	// that still uses a similar name, but that's a div, not
+	// a "chip-row" exactly.
+	othersStart := strings.Index(html, "Other files")
+	if othersStart < 0 {
+		t.Fatal("could not find 'Other files' section")
+	}
+	othersEnd := len(html)
+	imgStart := strings.Index(html, ">Media<")
+	if imgStart > 0 {
+		othersEnd = imgStart
+	}
+	othersSection := html[othersStart:othersEnd]
+	if strings.Contains(othersSection, `class="chip-row"`) {
+		t.Error(`expected NO <div class="chip-row"> in the others section (replaced by table in Phase 69)`)
+	}
+	// Verify both files appear as table rows.
+	rowCount := strings.Count(othersSection, "<tr>")
+	if rowCount < 2 {
+		t.Errorf("expected at least 2 <tr> rows in others section (one per file), got %d", rowCount)
+	}
+	// Verify Size column is present (only in others table, not dirs).
+	if !strings.Contains(html, `class="col-size"`) {
+		t.Error("expected col-size column in rendered page (others table)")
+	}
+	// Verify each file's name appears as a link in the Name cell.
+	if !strings.Contains(html, "readme.txt") {
+		t.Error("expected 'readme.txt' in the rendered page")
+	}
+	if !strings.Contains(html, "config.json") {
+		t.Error("expected 'config.json' in the rendered page")
+	}
+}
+
 func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	// When viewing a subdirectory, an "Up" entry is rendered on
 	// its OWN LINE (in a separate <div class="up-chip-row">)
@@ -445,38 +499,37 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		t.Error("expected 📁 folder icon for the Up entry")
 	}
 
-	// 2. The subdirs must be in a SEPARATE <div class="dirs-row">,
-	//    AFTER the up-chip-row
-	dirsRowStart := strings.Index(html, `<div class="dirs-row">`)
-	if dirsRowStart < 0 {
-		t.Fatal(`expected a <div class="dirs-row"> containing the subdirs`)
+	// 2. The subdirs must be in a <table class="files-table dirs-table">
+	//    AFTER the up-chip-row. Per Phase 69, the chip-row layout
+	//    was replaced with a full-width table.
+	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	if dirsTableStart < 0 {
+		t.Fatal(`expected a <table class="files-table dirs-table"> containing the subdirs`)
 	}
-	if dirsRowStart < upRowStart {
-		t.Error("expected dirs-row to come AFTER up-chip-row")
+	if dirsTableStart < upRowStart {
+		t.Error("expected dirs-table to come AFTER up-chip-row")
 	}
-	dirsRowEnd := strings.Index(html[dirsRowStart:], `</div>`)
-	if dirsRowEnd < 0 {
-		t.Fatal(`could not find end of dirs-row div`)
+	dirsTableEnd := strings.Index(html[dirsTableStart:], `</table>`)
+	if dirsTableEnd < 0 {
+		t.Fatal(`could not find end of dirs-table`)
 	}
-	dirsRow := html[dirsRowStart : dirsRowStart+dirsRowEnd]
-	// The dirs-row should contain the subdirs (NOT the up entry)
-	if strings.Contains(dirsRow, `href="../"`) {
-		t.Error(`the up entry should not appear in the dirs-row (it\'s in up-chip-row)`)
+	dirsTable := html[dirsTableStart : dirsTableStart+dirsTableEnd]
+	// The dirs-table should contain the subdirs (NOT the up entry)
+	if strings.Contains(dirsTable, `href="../"`) {
+		t.Error(`the up entry should not appear in the dirs-table (it\'s in up-chip-row)`)
 	}
-	if !strings.Contains(dirsRow, "nested1/") {
-		t.Error("expected nested1 subdir in dirs-row")
+	if !strings.Contains(dirsTable, "nested1/") {
+		t.Error("expected nested1 subdir in dirs-table")
 	}
-	if !strings.Contains(dirsRow, "nested2/") {
-		t.Error("expected nested2 subdir in dirs-row")
+	if !strings.Contains(dirsTable, "nested2/") {
+		t.Error("expected nested2 subdir in dirs-table")
 	}
-	// The dirs-row should NOT have any gap between chips
-	// (CSS rule: .dirs-section .dirs-row { gap: 0; }). The
-	// inline style attribute would be the only way to put a
-	// gap on a specific element, so checking for "gap:" or
-	// "gap-" in the dirs-row catches the case where the
-	// template accidentally puts a gap attribute.
-	if strings.Contains(dirsRow, "gap:") || strings.Contains(dirsRow, "gap-") {
-		t.Errorf("expected dirs-row to have no gap (per user spec), but found a gap reference: %q", dirsRow)
+	// Each subdir should be in its own <tr> with the directory
+	// name in a Name cell (a .col-name <td>) — verify the
+	// table has at least 2 rows in the tbody (one per subdir).
+	rowCount := strings.Count(dirsTable, "<tr>")
+	if rowCount < 2 {
+		t.Errorf("expected at least 2 <tr> rows (one per subdir), got %d", rowCount)
 	}
 
 	// 3. The dirs-row should NOT contain the images (the image
@@ -490,8 +543,8 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	if !strings.Contains(dirsSection, `class="up-chip-row"`) {
 		t.Error(`expected dirs section to contain the up-chip-row`)
 	}
-	if !strings.Contains(dirsSection, `class="dirs-row"`) {
-		t.Error(`expected dirs section to contain the dirs-row`)
+	if !strings.Contains(dirsSection, `class="files-table dirs-table"`) {
+		t.Error(`expected dirs section to contain the dirs-table`)
 	}
 }
 
@@ -500,7 +553,13 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 // 2026-06-17 spec. We check by looking for the CSS rule in
 // the rendered page (the CSS is in the <style> block in the
 // <head>).
-func TestRenderPage_DirsRowNoGap(t *testing.T) {
+// TestRenderPage_DirsAsTable verifies the Phase 69 change:
+// subdirs are now rendered as a full-width table (not a
+// chip row). We check the rendered HTML for the
+// <table class="files-table dirs-table"> structure and the
+// CSS rule for .files-table (which controls the new layout).
+// The old .dirs-section .dirs-row rule was removed in Phase 69.
+func TestRenderPage_DirsAsTable(t *testing.T) {
 	files := []FileInfo{
 		{Name: "dir1", Kind: KindDir},
 		{Name: "dir2", Kind: KindDir},
@@ -510,23 +569,24 @@ func TestRenderPage_DirsRowNoGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The dirs-row class should have a gap: 0 rule (overrides
-	// the default .chip-row gap: 0.5rem).
-	if !strings.Contains(html, ".dirs-section .dirs-row") {
-		t.Error("expected .dirs-section .dirs-row CSS rule in the rendered page")
+	// The new structure: a <table class="files-table dirs-table">
+	// with one <tr> per directory.
+	if !strings.Contains(html, `<table class="files-table dirs-table">`) {
+		t.Error("expected <table class=\"files-table dirs-table\"> in the rendered page")
 	}
-	// Find the rule and verify it has gap: 0
-	ruleStart := strings.Index(html, ".dirs-section .dirs-row")
-	if ruleStart < 0 {
-		t.Fatal(`CSS rule not found`)
+	// The CSS rule for .files-table (the new layout).
+	if !strings.Contains(html, ".files-table {") {
+		t.Error("expected .files-table CSS rule in the rendered page")
 	}
-	ruleEnd := strings.Index(html[ruleStart:], "}")
-	if ruleEnd < 0 {
-		t.Fatal("could not find end of CSS rule")
+	// Old structure should be GONE: no <div class="dirs-row">
+	// (the chip-row layout that was replaced in Phase 69).
+	if strings.Contains(html, `<div class="dirs-row">`) {
+		t.Error("expected NO <div class=\"dirs-row\"> in the rendered page (replaced by table in Phase 69)")
 	}
-	rule := html[ruleStart : ruleStart+ruleEnd]
-	if !strings.Contains(rule, "gap: 0") {
-		t.Errorf("expected 'gap: 0' in .dirs-section .dirs-row rule, got: %q", rule)
+	// Each subdir name should appear in a Name cell with a link.
+	rowCount := strings.Count(html, "<tr>")
+	if rowCount < 3 {
+		t.Errorf("expected at least 3 <tr> rows (one per subdir), got %d", rowCount)
 	}
 }
 

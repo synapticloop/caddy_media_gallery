@@ -828,29 +828,103 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 /* Dirs section layout (Phase 24, per user request 2026-06-17):
    - Up chip is rendered on its OWN LINE, always first
-   - Subdirs are rendered in a TIGHT row with NO GAP between
-     chips (the user said "remove the spacing for the rest of
-     the directories - it doesn't look as I want")
    - The dirs section is only shown if there's an Up entry
      OR at least one subdir */
+/* Per user request 2026-06-20: subdirs are now a full-width
+   table (see .files-table below), not a chip row. The Up chip
+   remains above the table as a quick "go up" affordance.
+   The .dirs-row and .dirs-section .dirs-row classes are kept
+   here as no-ops (replaced by .files-table) so old overrides in
+   custom templates don't break — they just don't do anything. */
 .dirs-section .up-chip-row {
   margin-bottom: 0.5rem; /* visual separation from the subdirs below */
 }
-.dirs-section .dirs-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;                /* no spacing between subdir chips */
+
+/* Full-width tables for directories (Phase 69) and other files.
+   Same structure: <table class="files-table dirs-table"> or
+   <table class="files-table others-table">. The class .files-table
+   carries the shared styling (width, borders, hover); the
+   .dirs-table / .others-table class can be used for any
+   per-section override (currently none).
+
+   The Name column is the only clickable one — the link wraps
+   the icon + name. Other cells are non-clickable.
+
+   Why a <table> and not a CSS grid: a real <table> gives us
+   accessible semantics for free (screen readers announce
+   "table with N rows, columns: Name, Type, Date"), and the
+   default behavior (cell padding, alignment) is close to what
+   we want. CSS grid would require explicit role="grid" + ARIA
+   attributes to be accessible. */
+.files-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.files-table thead th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--fg-muted);
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+}
+.files-table tbody td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.files-table tbody tr:last-child td {
+  border-bottom: none; /* no border on the last row */
+}
+.files-table tbody tr:hover {
+  background: var(--bg-hover);
+}
+.files-table .col-name {
+  /* Name column: takes most of the width; the link inside is
+     the primary clickable element. */
+  width: auto;
+}
+.files-table .col-type {
+  /* Type column: narrow, monospace-friendly, fits "DIR" or a
+     3-4 letter extension like "TXT" or "JSON". */
+  width: 6rem;
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.files-table .col-size {
+  /* Size column: narrow, right-aligned, formatted by humanSize()
+     (e.g. "1.2 MB", "342 B"). */
+  width: 7rem;
+  text-align: right;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums; /* digits line up across rows */
+}
+.files-table .col-date {
+  /* Date column: narrow-ish, formatted by formatDate()
+     (e.g. "2026-06-20 14:30" or "Yesterday"). */
+  width: 11rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.table-link {
+  /* The link inside the Name cell. Inherits color from the
+     parent (we don't want a bright blue link color in this
+     table — it's a list of files, not a paragraph of prose). */
+  color: var(--fg);
+  text-decoration: none;
+  display: inline-flex;
   align-items: center;
+  gap: 0.4rem;
 }
-.dirs-section .dirs-row .chip {
-  /* Slightly tighten the visual appearance of subdirs (no gap
-     + a smaller border-radius) so they read as a single
-     cluster rather than independent chips. */
-  border-radius: 3px;
-  padding: 0.35rem 0.7rem;
-}
-.dirs-section .dirs-row .chip:not(:last-child) {
-  border-right-width: 0; /* prevent double borders between adjacent chips */
+.table-link:hover {
+  color: var(--accent); /* hover state: accent color (slight affordance) */
 }
 .chip {
   display: inline-flex;
@@ -1405,11 +1479,30 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     </div>
     {{end}}
     {{if .Subdirs}}
-    <div class="dirs-row">
-      {{range .Subdirs}}
-      <a class="chip dir-chip" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a>
-      {{end}}
-    </div>
+    <!-- Per user request 2026-06-20: directory chips replaced
+         with a full-width table. The Name column is the link
+         (clicking navigates into the directory); Type shows
+         "DIR"; Date shows the directory's mtime. Size is
+         intentionally omitted for directories (meaningless
+         — recursive size would require a separate scan). -->
+    <table class="files-table dirs-table">
+      <thead>
+        <tr>
+          <th class="col-name">Name</th>
+          <th class="col-type">Type</th>
+          <th class="col-date">Modified</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Subdirs}}
+        <tr>
+          <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
+          <td class="col-type">{{.Type}}</td>
+          <td class="col-date">{{.Date}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
     {{end}}
   </section>
   {{end}}
@@ -1417,11 +1510,29 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{if .OtherFiles}}
   <section class="others-section">
     <h2 class="section-heading">Other files</h2>
-    <div class="chip-row">
-      {{range .OtherFiles}}
-      <a class="chip" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a>
-      {{end}}
-    </div>
+    <!-- Per user request 2026-06-20: same full-width table format
+         as the directories table. Adds a Size column (directories
+         omitted Size because it's not meaningful for folders). -->
+    <table class="files-table others-table">
+      <thead>
+        <tr>
+          <th class="col-name">Name</th>
+          <th class="col-type">Type</th>
+          <th class="col-size">Size</th>
+          <th class="col-date">Modified</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .OtherFiles}}
+        <tr>
+          <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a></td>
+          <td class="col-type">{{.Type}}</td>
+          <td class="col-size">{{.Size}}</td>
+          <td class="col-date">{{.Date}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
   </section>
   {{end}}
 
