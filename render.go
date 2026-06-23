@@ -991,6 +991,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 0.25rem; /* small gap before the dirs-table */
+  /* Per user request 2026-06-19: added font-size: 0.85rem to
+     match .files-table. The up-row-table didn't have a
+     font-size override, so it inherited the default
+     (typically 1rem / 16px), which made the Up link text
+     BIGGER than the other directory rows in the dirs
+     table below (which use 0.85rem via .files-table).
+     Now both use 0.85rem, so the text is the same size. */
+  font-size: 0.85rem;
 }
 .up-row-table td {
   background: var(--bg-card);

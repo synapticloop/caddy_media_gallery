@@ -2692,3 +2692,32 @@ func TestRenderPage_Phase83UpRowSameFontWeight(t *testing.T) {
 		t.Errorf("expected .up-row-table td to NOT have any font-weight (Phase 83: inherit from base); rule: %q", upRule)
 	}
 }
+
+// TestRenderPage_Phase84UpRowFontSize verifies Phase 84:
+// the up-row-table now has font-size: 0.85rem (matching
+// .files-table), so the Up link text is the same size as
+// the other directory rows in the dirs table below.
+func TestRenderPage_Phase84UpRowFontSize(t *testing.T) {
+	files := []FileInfo{
+		{Name: "nested1", Kind: KindDir, ModTime: 100},
+	}
+	html, err := RenderPage("subdir", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The .up-row-table rule should have font-size: 0.85rem
+	// (matching .files-table).
+	upRuleStart := strings.Index(html, ".up-row-table {")
+	if upRuleStart < 0 {
+		t.Fatal("no .up-row-table rule")
+	}
+	upRuleEnd := strings.Index(html[upRuleStart:], "}")
+	if upRuleEnd < 0 {
+		t.Fatal("no end of .up-row-table rule")
+	}
+	upRule := html[upRuleStart : upRuleStart+upRuleEnd+1]
+	if !strings.Contains(upRule, "font-size: 0.85rem") {
+		t.Errorf("expected .up-row-table to have font-size: 0.85rem (Phase 84); rule: %q", upRule)
+	}
+}
