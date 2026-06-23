@@ -1687,7 +1687,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <table class="up-row-table">
       <tbody>
         <tr>
-          <td colspan="3"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
+          <td colspan="2"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
         </tr>
       </tbody>
     </table>
@@ -1697,7 +1697,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <thead>
         <tr>
           <th class="col-name">Name</th>
-          <th class="col-type">Type</th>
           <th class="col-date">Modified</th>
         </tr>
       </thead>
@@ -1705,7 +1704,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{range .Subdirs}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
-          <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
           <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}

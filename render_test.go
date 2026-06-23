@@ -491,9 +491,10 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 		t.Fatal(`could not find end of up-row-table`)
 	}
 	upRow := html[upRowStart : upRowStart+upRowEnd]
-	// The Up row should have a single <td colspan="3"> spanning
-	// all 3 columns of the dirs table.
-	if !strings.Contains(upRow, `colspan="3"`) {
+	// The Up row should have a single <td colspan="2"> spanning
+	// all 2 columns of the dirs table (Phase 77: Type column
+	// removed, so the table is now 2 columns instead of 3).
+	if !strings.Contains(upRow, `colspan="2"`) {
 		t.Error("expected up-row to have a single td with colspan=\"3\"")
 	}
 	if !strings.Contains(upRow, `href="../"`) {
@@ -2084,11 +2085,12 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 	dirsEnd := strings.Index(html[dirsStart:], `</table>`) + dirsStart
 	dirsTable := html[dirsStart:dirsEnd]
 
-	// The dirs row (for "alpha") should have cell-link anchors in
-	// the Type and Date cells (not just the Name cell). We start
-	// the row boundary at the start of the <tr> (searching back
-	// from "alpha/" since the Name link's href="./alpha/" is
-	// positioned BEFORE the "alpha/" text content in the source).
+	// Per Phase 77: the dirs table no longer has a Type column
+	// (all entries are DIR, so the column was redundant). The
+	// dirs row (for "alpha") should have cell-link anchors in
+	// the Date cell only (not the Name cell, not the removed
+	// Type cell). We back-search for the <tr> to capture the
+	// Name link's href (which is BEFORE the "alpha/" text).
 	alphaIdx := strings.Index(dirsTable, "alpha/")
 	if alphaIdx < 0 {
 		t.Fatal("no alpha row in dirs-table")
@@ -2104,13 +2106,13 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 
 	// Count cell-link occurrences in the alpha row.
 	cellLinks := strings.Count(alphaRow, `class="table-link cell-link"`)
-	if cellLinks != 2 {
-		t.Errorf("expected 2 cell-links in the alpha row (Type + Date columns), got %d in row: %q", cellLinks, alphaRow)
+	if cellLinks != 1 {
+		t.Errorf("expected 1 cell-link in the alpha row (Date column only, after Phase 77 removed Type), got %d in row: %q", cellLinks, alphaRow)
 	}
-	// All cell-links should have the same href (./alpha/).
+	// All anchors should have the same href (./alpha/).
 	hrefCount := strings.Count(alphaRow, `href="./alpha/"`)
-	if hrefCount != 3 {
-		t.Errorf("expected 3 anchors with href=./alpha/ (Name + 2 cell-links), got %d", hrefCount)
+	if hrefCount != 2 {
+		t.Errorf("expected 2 anchors with href=./alpha/ (Name + 1 cell-link), got %d", hrefCount)
 	}
 
 	// Now check the others table.
@@ -2352,5 +2354,73 @@ func TestRenderPage_Phase76UpRowAsSeparateTable(t *testing.T) {
 	// 9. CSS: the OLD .dirs-table .up-spacer rule should be GONE.
 	if strings.Contains(html, `.dirs-table .up-spacer td {`) {
 		t.Error("expected the OLD .dirs-table .up-spacer CSS rule to be GONE (Phase 76)")
+	}
+}
+
+// TestRenderPage_Phase77DirsTableNoTypeColumn verifies Phase 77:
+// the dirs table no longer has a Type column (since all
+// entries are DIR, the column was redundant). The dirs
+// table now has only Name and Modified columns.
+func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha", Kind: KindDir, ModTime: 100},
+		{Name: "beta", Kind: KindDir, ModTime: 200},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the dirs table.
+	dirsStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	if dirsStart < 0 {
+		t.Fatal("no dirs-table")
+	}
+	dirsEnd := strings.Index(html[dirsStart:], `</table>`) + dirsStart
+	dirsTable := html[dirsStart:dirsEnd]
+
+	// 1. The dirs table's thead should have ONLY Name + Modified
+	// (no Type column). Count the <th> elements.
+	thCount := strings.Count(dirsTable, `<th class="col-`)
+	if thCount != 2 {
+		t.Errorf("expected 2 <th> elements in dirs-table thead (Name + Modified), got %d in: %q", thCount, dirsTable)
+	}
+	// 2. The thead should NOT have a col-type <th>.
+	if strings.Contains(dirsTable, `<th class="col-type">Type</th>`) {
+		t.Error("expected NO <th class=\"col-type\">Type</th> in dirs-table (Phase 77: Type column removed)")
+	}
+	// 3. The Name column should still be there.
+	if !strings.Contains(dirsTable, `<th class="col-name">Name</th>`) {
+		t.Error("expected <th class=\"col-name\">Name</th> in dirs-table")
+	}
+	// 4. The Modified column should still be there.
+	if !strings.Contains(dirsTable, `<th class="col-date">Modified</th>`) {
+		t.Error("expected <th class=\"col-date\">Modified</th> in dirs-table")
+	}
+
+	// 5. The dirs-table body should have NO <td class="col-type"> cells.
+	colTypeCells := strings.Count(dirsTable, `<td class="col-type">`)
+	if colTypeCells != 0 {
+		t.Errorf("expected NO <td class=\"col-type\"> cells in dirs-table, got %d", colTypeCells)
+	}
+
+	// 6. The up-row-table's td should have colspan="2" (was 3).
+	// We need a subdir context to have an up-row-table.
+	// (Re-render with a relPath to enable the up entry.)
+	upHTML, err := RenderPage("test", "./", "./_thumbs/", "subdir", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upRowTableStart := strings.Index(upHTML, `<table class="up-row-table">`)
+	if upRowTableStart < 0 {
+		t.Fatal("no up-row-table in subdir context")
+	}
+	upRowTableEnd := strings.Index(upHTML[upRowTableStart:], `</table>`) + upRowTableStart
+	upRowTable := upHTML[upRowTableStart:upRowTableEnd]
+	if !strings.Contains(upRowTable, `colspan="2"`) {
+		t.Error(`expected colspan="2" in up-row-table td (Phase 77: matches the new 2-column dirs table)`)
+	}
+	if strings.Contains(upRowTable, `colspan="3"`) {
+		t.Error(`expected NO colspan="3" in up-row-table td (Phase 77: was 3 columns, now 2)`)
 	}
 }
