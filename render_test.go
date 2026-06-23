@@ -1943,7 +1943,12 @@ func TestBundledTemplate_SectionToggleJSValid(t *testing.T) {
 //  4. The dirs table has an up-spacer row after the up-row
 //  5. The dirs table has a col-date column with dates populated
 //     (per the user's bug report)
-//  6. The sort-btn.active .arrow is white in both modes
+//  6. Per Phase 85: the sort-btn.active .arrow now inherits
+//     the active button's text color (--active-fg), which
+//     means it can be EITHER light or dark depending on the
+//     theme. The explicit color: white rule was removed in
+//     Phase 85 since the active button is no longer always
+//     dark (it inverts the page colors in each mode).
 func TestRenderPage_Phase72UIChanges(t *testing.T) {
 	// Set up a gallery with a dir + an image, in a subdir
 	// (so we have an up-row to render).
@@ -2054,9 +2059,12 @@ func TestRenderPage_Phase72UIChanges(t *testing.T) {
 		t.Errorf("expected some populated col-date cells; got %d date cells, %d empty", dateCells, emptyDates)
 	}
 
-	// 6. The sort-btn.active .arrow is white in both modes.
-	if !strings.Contains(html, `.sort-btn.active .arrow { color: white; }`) {
-		t.Error(`expected .sort-btn.active .arrow { color: white; } (Phase 72: white in both modes)`)
+	// 6. Per Phase 85: the .sort-btn.active .arrow no longer
+	// has an explicit color: white rule. The arrow inherits
+	// the active button's text color (--active-fg) which is
+	// themed. We verify the rule was removed.
+	if strings.Contains(html, `.sort-btn.active .arrow { color: white; }`) {
+		t.Error(`expected .sort-btn.active .arrow to NOT have color: white (Phase 85: removed — arrow inherits --active-fg)`)
 	}
 	// And the old hard-coded blue should be gone.
 	if strings.Contains(html, `.sort-btn .arrow { margin-left: 0.2rem; font-weight: 600; color: #006ed3; }`) {
@@ -2719,5 +2727,74 @@ func TestRenderPage_Phase84UpRowFontSize(t *testing.T) {
 	upRule := html[upRuleStart : upRuleStart+upRuleEnd+1]
 	if !strings.Contains(upRule, "font-size: 0.85rem") {
 		t.Errorf("expected .up-row-table to have font-size: 0.85rem (Phase 84); rule: %q", upRule)
+	}
+}
+
+// TestRenderPage_Phase85ActiveButtonInversion verifies Phase 85:
+// the active sort + pagination buttons no longer use the
+// blue --accent-bg. They use --active-bg / --active-fg /
+// --active-border which are the OPPOSITE mode's page colors
+// (a color-contrast inversion: dark active button on light
+// page, light active button on dark page).
+func TestRenderPage_Phase85ActiveButtonInversion(t *testing.T) {
+	files := []FileInfo{
+		{Name: "img1.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. The .sort-btn.active rule should use --active-bg, NOT
+	// --accent-bg. (The old blue accent is gone.)
+	if !strings.Contains(html, `.sort-btn.active {`) {
+		t.Fatal("no .sort-btn.active rule")
+	}
+	start := strings.Index(html, `.sort-btn.active {`)
+	end := strings.Index(html[start:], `}`)
+	rule := html[start : start+end+1]
+	if strings.Contains(rule, "var(--accent-bg)") {
+		t.Errorf("expected .sort-btn.active to NOT use var(--accent-bg) (Phase 85: replaced with --active-bg); rule: %q", rule)
+	}
+	if !strings.Contains(rule, "var(--active-bg)") {
+		t.Errorf("expected .sort-btn.active to use var(--active-bg) (Phase 85); rule: %q", rule)
+	}
+	if !strings.Contains(rule, "var(--active-fg)") {
+		t.Errorf("expected .sort-btn.active to use var(--active-fg) (Phase 85); rule: %q", rule)
+	}
+
+	// 2. The .page-btn.active rule should also use --active-bg.
+	if !strings.Contains(html, `.page-btn.active {`) {
+		t.Fatal("no .page-btn.active rule")
+	}
+	start = strings.Index(html, `.page-btn.active {`)
+	end = strings.Index(html[start:], `}`)
+	pageRule := html[start : start+end+1]
+	if strings.Contains(pageRule, "var(--accent-bg)") {
+		t.Errorf("expected .page-btn.active to NOT use var(--accent-bg) (Phase 85); rule: %q", pageRule)
+	}
+	if !strings.Contains(pageRule, "var(--active-bg)") {
+		t.Errorf("expected .page-btn.active to use var(--active-bg) (Phase 85); rule: %q", pageRule)
+	}
+
+	// 3. The new color tokens should be defined in :root with
+	// the dark mode values (the LIGHT mode default — the active
+	// button in light mode uses the dark mode's bg).
+	if !strings.Contains(html, "--active-bg: #1a1a1a") {
+		t.Error("expected --active-bg token defined as #1a1a1a (dark mode's --bg, used by light mode active button)")
+	}
+	if !strings.Contains(html, "--active-fg: #e5e5e5") {
+		t.Error("expected --active-fg token defined as #e5e5e5 (dark mode's --fg, used by light mode active button)")
+	}
+
+	// 4. The dark mode override should set --active-bg to the
+	// LIGHT mode's value (color inversion).
+	// The dark mode blocks contain "--active-bg: #f3f6f7" —
+	// the opposite of the default.
+	darkActiveBgCount := strings.Count(html, "--active-bg: #f3f6f7")
+	if darkActiveBgCount != 2 {
+		// Should appear in BOTH the @media (prefers-color-scheme: dark)
+		// block AND the [data-theme="dark"] block (= 2 places).
+		t.Errorf("expected --active-bg: #f3f6f7 to appear 2 times (both dark mode blocks), got %d", darkActiveBgCount)
 	}
 }

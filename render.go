@@ -670,6 +670,21 @@ const galleryTemplate = `<!DOCTYPE html>
   --accent: #006ed3;         /* accent color (links, card hover border) */
   --accent-hover: #0095e4;   /* accent hover */
   --accent-bg: #006ed3;      /* button-background accent (active sort/page btns); darker in dark mode to fit the aesthetic */
+  /* Per user request 2026-06-19: the active sort + pagination
+     buttons no longer use the blue --accent-bg. Instead they
+     use the OPPOSITE mode's page background (and foreground)
+     for a color-contrast inversion:
+       - Light mode active button: dark bg + light fg (the
+         dark mode's page colors)
+       - Dark mode active button: light bg + dark fg (the
+         light mode's page colors)
+     This makes the active button stand out by being visually
+     inverted from the page, rather than by being blue (which
+     felt too vibrant). The tokens are scoped to the active
+     state, so the rest of the UI is unaffected. */
+  --active-bg: #1a1a1a;      /* active button bg in light mode = dark mode's --bg */
+  --active-fg: #e5e5e5;      /* active button fg in light mode = dark mode's --fg */
+  --active-border: #1a1a1a;  /* active button border in light mode = matches --active-bg */
   --shadow: rgba(0, 0, 0, 0.05);  /* standard shadow */
   --shadow-strong: rgba(0, 0, 0, 0.15); /* strong shadow (lightbox) */
 }
@@ -710,6 +725,15 @@ const galleryTemplate = `<!DOCTYPE html>
        active sort/page buttons use --accent-bg (not --accent)
        for their fill. */
     --accent-bg: #3b6fb6;
+    /* Per Phase 85: the active sort + pagination buttons in
+       dark mode use the LIGHT mode's page bg + fg (color
+       inversion from the page). The user wanted the active
+       button to NOT be blue. The active button in dark mode
+       now stands out by being a light element on a dark page
+       (inversion), rather than by being a colored (blue) accent. */
+    --active-bg: #f3f6f7;      /* active button bg in dark mode = light mode's --bg */
+    --active-fg: #111111;      /* active button fg in dark mode = light mode's --fg */
+    --active-border: #f3f6f7;  /* active button border in dark mode = matches --active-bg */
     --shadow: rgba(0, 0, 0, 0.3);
     --shadow-strong: rgba(0, 0, 0, 0.5);
   }
@@ -735,6 +759,12 @@ const galleryTemplate = `<!DOCTYPE html>
   --accent: #4dabff;
   --accent-hover: #6b9fd8;
   --accent-bg: #3b6fb6;
+  /* Per Phase 85: same as the @media (prefers-color-scheme: dark)
+     block — the active button inverts the page contrast (light
+     bg + dark fg in dark mode). */
+  --active-bg: #f3f6f7;
+  --active-fg: #111111;
+  --active-border: #f3f6f7;
   --shadow: rgba(0, 0, 0, 0.3);
   --shadow-strong: rgba(0, 0, 0, 0.5);
 }
@@ -1196,23 +1226,36 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .sort-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .sort-btn.active {
-  /* Uses --accent-bg (not --accent) for the bg fill so the
-     active sort button is muted/darker in dark mode while
-     --accent stays light blue for text + borders. */
-  background: var(--accent-bg);
-  border-color: var(--accent-bg);
-  color: white;
+  /* Per Phase 85: the active sort button no longer uses
+     --accent-bg (blue). It uses --active-bg / --active-fg
+     / --active-border which are the OPPOSITE mode's page
+     colors. So in light mode the active button is dark
+     (matching dark mode's --bg) with light text; in dark
+     mode it's light (matching light mode's --bg) with dark
+     text. The color contrast inversion makes the active
+     button stand out without using blue. */
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-fg);
   font-weight: 500;
 }
-.sort-btn.active:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-/* Per user request 2026-06-19: the sort-by arrow (↑/↓ on the
-   active sort button) is white in BOTH dark and light mode.
-   The button has a dark fill (--accent-bg, which is dark blue
-   in light mode and a slightly darker blue in dark mode), so
-   the arrow needs to be white to stay readable on top. We use
-   the CSS color: white literal so the same color applies
-   regardless of theme. */
-.sort-btn.active .arrow { color: white; }
+.sort-btn.active:hover {
+  /* Per Phase 85: hover on the active sort button keeps the
+     inverted look. We use --active-bg + a small filter to
+     darken/lighten it slightly, OR we just use a slightly
+     different border. For simplicity we just use the
+     --active-border (slightly darker in light mode, slightly
+     lighter in dark mode) to give a visual feedback on hover
+     without changing the fill. */
+  border-color: var(--border-strong);
+}
+/* Per Phase 85: the sort-by arrow (↑/↓ on the active sort
+   button) inherits its color from the active button's text
+   color (--active-fg, set by .sort-btn.active above). The
+   arrow doesn't need its own color rule — it just inherits
+   the active fg. This means the arrow is dark on a light
+   button (light mode) or light on a dark button (dark mode),
+   which is the correct contrast for each theme. */
 .image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -1390,13 +1433,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .page-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
 .page-btn.active {
-  /* The currently-selected page in the Google-style pagination.
-     Same shape as a normal page-btn but inverted colors so it's
-     distinguishable at a glance (matches the sort-btn.active
-     style). Uses --accent-bg so it's muted/darker in dark mode. */
-  background: var(--accent-bg);
-  border-color: var(--accent-bg);
-  color: white;
+  /* Per Phase 85: same color-contrast inversion as
+     .sort-btn.active (above). The active page button uses
+     --active-bg / --active-fg / --active-border which are the
+     OPPOSITE mode's page colors. In light mode the active
+     page is dark with light text; in dark mode it's light
+     with dark text. */
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-fg);
   cursor: default;
   pointer-events: none;
 }
