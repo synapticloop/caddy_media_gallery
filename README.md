@@ -1,5 +1,7 @@
 # caddy_media_gallery
 
+*The delightful way to serve a directory.*
+
 A Caddy v2 HTTP handler module that renders a directory as a thumbnailed
 media gallery. Replaces Caddy's default `file_server browse` with a
 sortable + paginated grid, click-to-expand lightbox, video support,
