@@ -173,11 +173,12 @@ PDF: [caddy-media-gallery-book.pdf](caddy-media-gallery-book.pdf)
 
 Detailed operator documentation lives in [`docs/`](docs/):
 
-- [docs/00-readme.md](docs/00-readme.md) — index
+- [docs/00-readme.md](docs/00-readme.md) — documentation index + quickstart
 - [docs/01-configuration.md](docs/01-configuration.md) — Caddyfile directive, JSON config, env vars
 - [docs/02-configuration-reference.md](docs/02-configuration-reference.md) — one-page reference of every config knob
 - [docs/03-templates.md](docs/03-templates.md) — template structure, all template variables, how to override
 - [docs/04-sort-and-pagination.md](docs/04-sort-and-pagination.md) — the `?sort=&order=&page=` URL API
+- [docs/06-endplate.md](docs/06-endplate.md) — the back-cover ASCII art (closing plate of the PDF)
 
 ## License
 
