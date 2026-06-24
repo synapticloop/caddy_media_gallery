@@ -1,12 +1,13 @@
 # caddy_media_gallery
 
-A Caddy v2 HTTP handler module that renders a directory as a light-themed
+A Caddy v2 HTTP handler module that renders a directory as a thumbnailed
 media gallery. Replaces Caddy's default `file_server browse` with a
-thumbnailed grid, click-to-expand lightbox, sortable + paginated layout,
-and a separate "Other files" strip above the image grid for non-image
-content.
+sortable + paginated grid, click-to-expand lightbox, video support,
+and a separate "Other files" strip for non-media content. The visitor
+can switch between light and dark mode with the in-page toggle
+(shown in the animated preview below).
 
-![preview](#) <!-- TODO: add a screenshot if you have one handy -->
+![Light theme fading to dark theme](docs/screenshots/synapticloop-caddy_media_gallery_fade.gif)
 
 ## Features
 
@@ -14,7 +15,7 @@ content.
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime.
 - **Vanilla JS lightbox** for click-to-expand, no external JS dependencies.
-- **Light theme** with white card on grey background, blue accent links, Caddy-browse aesthetic.
+- **Light + dark mode** with a visitor-toggleable theme (auto / light / dark), persisted in localStorage. White card on grey background in light mode, dark card on near-black in dark mode. Blue accent links.
 - **Native `loading="lazy"`** on every thumbnail.
 - **Video support** — videos show a play-button overlay and link to the raw file.
 - **"Other files" section** for non-image/non-video content in a directory.
