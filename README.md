@@ -3,9 +3,9 @@
 A Caddy v2 HTTP handler module that renders a directory as a thumbnailed
 media gallery. Replaces Caddy's default `file_server browse` with a
 sortable + paginated grid, click-to-expand lightbox, video support,
-and a separate "Other files" strip for non-media content. The visitor
-can switch between light and dark mode with the in-page toggle
-(shown in the animated preview below).
+and a separate "Directories" and "Other files" listing for non-media content. 
+The visitor can switch between light and dark mode - with automatic system
+defined mode pickup - with the in-page toggle (shown in the animated preview below).
 
 ![Light theme fading to dark theme](docs/screenshots/synapticloop-caddy_media_gallery_fade.gif)
 
@@ -18,11 +18,12 @@ can switch between light and dark mode with the in-page toggle
 
   ![Lightbox view](docs/screenshots/synapticloop-caddy_media_gallery_lightbox.png)
 
-  Click any media tile (image or video) to open it fullscreen. The lightbox supports keyboard navigation (Esc closes, arrow keys go back/forward), a click-outside-to-close behaviour, and a play/pause control for videos. Videos show a poster (the first frame, extracted by ffmpeg if available) before the video plays, so the click area is always meaningful even before playback.
+  Click any media tile (image or video) to open it fullscreen. The lightbox supports keyboard navigation (Esc closes, arrow keys go back/forward), a click-outside-to-close behaviour, and a play/pause control for videos. Videos show a poster (the first frame, extracted by `ffmpeg` if available) before the video plays, so the click area is always meaningful even before playback.
 
 - **Light + dark mode** with a visitor-toggleable theme (auto / light / dark), persisted in localStorage. White card on grey background in light mode, dark card on near-black in dark mode. Blue accent links.
 - **Native `loading="lazy"`** on every thumbnail.
 - **Video support** — videos show a play-button overlay and link to the raw file.
+- **"Directories" section** for sub-directories and a link to the parent directory if available.
 - **"Other files" section** for non-image/non-video content in a directory.
 
 ## Install
@@ -169,9 +170,6 @@ your.caddy.host:443 {
 
 The full documentation is also available as a single
 PDF: [caddy-media-gallery-book.pdf](caddy-media-gallery-book.pdf)
-(19 pages, with cover page, table of contents, and the
-Google Fonts typography - Libre Baskerville for body text,
-JetBrains Mono for code).
 
 Detailed operator documentation lives in [`docs/`](docs/):
 
@@ -183,4 +181,4 @@ Detailed operator documentation lives in [`docs/`](docs/):
 
 ## License
 
-MIT. See [LICENSE](LICENSE) (add one if you haven't — the module code is yours to license).
+MIT. See [LICENSE](LICENSE)
