@@ -1728,6 +1728,139 @@ func TestRenderPage_OtherFilesRespectSort(t *testing.T) {
 // "the directory list should be in alphabetical order, and if
 // any ordering is applied to the images, this will not affect
 // the directory listing."
+// TestLoadTemplate_CachesAcrossCalls verifies Phase 102:
+// the parsed template is cached in a process-wide singleton and
+// reused across calls. The same *template.Template pointer should
+// be returned for repeated calls when the file mtime is unchanged,
+// and a fresh template should be returned when the file mtime
+// changes.
+func TestLoadTemplate_CachesAcrossCalls(t *testing.T) {
+	// Use a fresh tmp dir for the on-disk template (so we don't
+	// pick up the bundled constant or any leftover state from
+	// other tests). Also reset the global cache so this test
+	// starts from a known-empty state.
+	tmpDir := t.TempDir()
+	t.Setenv("GALLERY_TEMPLATES_DIR", tmpDir)
+
+	// Reset the cache for this test only.
+	origCache := globalTemplateCache
+	globalTemplateCache = nil
+	t.Cleanup(func() { globalTemplateCache = origCache })
+
+	tmplPath := tmpDir + "/gallery.tmpl"
+	templateBody := `<html><body>{{.Title}}</body></html>`
+	if err := os.WriteFile(tmplPath, []byte(templateBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// First call: cache miss, parses the file.
+	tmpl1, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("first loadTemplate: %v", err)
+	}
+	if tmpl1 == nil {
+		t.Fatal("first call returned nil template")
+	}
+
+	// Sanity check: the template should be cached now.
+	cached := getCachedTemplate()
+	cached.mu.RLock()
+	hasOnDisk := cached.onDisk != nil && cached.onDisk.path == tmplPath
+	cached.mu.RUnlock()
+	if !hasOnDisk {
+		t.Error("expected on-disk cache to be populated after first call")
+	}
+
+	// Second call: cache hit (same file, same mtime). The returned
+	// *template.Template should be the SAME pointer as the first.
+	tmpl2, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("second loadTemplate: %v", err)
+	}
+	if tmpl2 != tmpl1 {
+		t.Error("expected cache hit (same *template.Template pointer on second call); got a different pointer")
+	}
+
+	// Touch the file (update mtime) and call again. The mtime
+	// change should invalidate the cache and force a re-parse.
+	// We write a new body to ensure the parse result is also
+	// observably different.
+	newBody := `<html><body>{{.Title}} UPDATED</body></html>`
+	// Sleep to ensure the mtime ticks (filesystem mtime resolution
+	// can be coarse on some systems).
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(tmplPath, []byte(newBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tmpl3, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("third loadTemplate: %v", err)
+	}
+	if tmpl3 == tmpl1 {
+		t.Error("expected cache miss after mtime change (new *template.Template pointer); got the old one")
+	}
+
+	// Verify the new template is functional with the new body.
+	var buf bytes.Buffer
+	if err := tmpl3.Execute(&buf, map[string]string{"Title": "hello"}); err != nil {
+		t.Fatalf("execute on new template: %v", err)
+	}
+	if !strings.Contains(buf.String(), "UPDATED") {
+		t.Errorf("expected new template body in output, got %q", buf.String())
+	}
+
+	// Fourth call (no change): cache hit again, same pointer.
+	tmpl4, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("fourth loadTemplate: %v", err)
+	}
+	if tmpl4 != tmpl3 {
+		t.Error("expected cache hit after no change (same *template.Template pointer); got a different pointer")
+	}
+}
+
+// TestLoadTemplate_CachesBundledTemplate verifies the bundled
+// template is also cached: the first call to loadTemplate for a
+// missing on-disk file parses the bundled constant; the second
+// call returns the SAME *template.Template pointer.
+func TestLoadTemplate_CachesBundledTemplate(t *testing.T) {
+	// Point the templates dir at an empty tmp dir so the on-disk
+	// file is guaranteed to NOT exist (forcing the bundled fallback).
+	tmpDir := t.TempDir()
+	t.Setenv("GALLERY_TEMPLATES_DIR", tmpDir)
+
+	origCache := globalTemplateCache
+	globalTemplateCache = nil
+	t.Cleanup(func() { globalTemplateCache = origCache })
+
+	tmpl1, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("first loadTemplate: %v", err)
+	}
+	if tmpl1 == nil {
+		t.Fatal("first call returned nil template")
+	}
+
+	// Verify the bundled cache slot is populated.
+	cached := getCachedTemplate()
+	cached.mu.RLock()
+	hasBundled := cached.bundled != nil
+	cached.mu.RUnlock()
+	if !hasBundled {
+		t.Error("expected bundled cache slot to be populated after first call")
+	}
+
+	// Second call: cache hit (bundled template never changes).
+	tmpl2, err := loadTemplate("")
+	if err != nil {
+		t.Fatalf("second loadTemplate: %v", err)
+	}
+	if tmpl2 != tmpl1 {
+		t.Error("expected cache hit for bundled template; got different *template.Template pointer")
+	}
+}
+
 func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 	// Directories in a NON-alphabetical order so we can see if
 	// sort took effect. Names: zeta, alpha, mu (alphabetical: alpha, mu, zeta)
