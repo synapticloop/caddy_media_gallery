@@ -50,6 +50,7 @@ SOURCES=(
     "$DOCS_DIR/02-configuration-reference.md"
     "$DOCS_DIR/03-templates.md"
     "$DOCS_DIR/04-sort-and-pagination.md"
+    "$DOCS_DIR/06-endplate.md"
 )
 MISSING_SOURCES=()
 for src in "${SOURCES[@]}"; do
@@ -89,6 +90,7 @@ pandoc -t pdf --pdf-engine=xelatex \
     02-configuration-reference.md \
     03-templates.md \
     04-sort-and-pagination.md \
+    06-endplate.md \
     -o "$OUTPUT"
 
 # Clean up intermediate files (already in .gitignore, but good hygiene)

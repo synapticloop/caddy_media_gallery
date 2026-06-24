@@ -7,7 +7,7 @@ geometry: margin=1in
 \begin{center}
 \vspace*{3cm}
 
-{\Huge\bfseries Caddy Image Gallery}\\[1em]
+{\Huge\bfseries Caddy Media Gallery}\\[1em]
 {\Large Operator Documentation}\\[3em]
 
 \includegraphics[width=0.6\textwidth]{cover-image.jpg}\\[2em]

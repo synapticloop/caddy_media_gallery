@@ -1,5 +1,10 @@
-% Preamble for the Caddy Image Gallery docs PDF.
+% Preamble for the Caddy Media Gallery docs PDF.
 % Included via pandoc's --include-in-header=preamble.tex
+%
+% Note: the font paths use `./fonts/` (relative to the docs
+% directory, since pandoc is run from there by build-docs.sh).
+% This keeps the preamble portable — no user-specific absolute
+% paths in the committed file.
 
 \usepackage{graphicx}
 \usepackage{xcolor}
@@ -9,7 +14,7 @@
 % JetBrains Mono for code blocks
 \usepackage{fontspec}
 \setmainfont{LibreBaskerville-VF}[
-  Path = /home/osmanj/projects/caddy_media_gallery/docs/fonts/,
+  Path = ./fonts/,
   Extension = .ttf,
   UprightFont    = LibreBaskerville-VF,
   BoldFont       = LibreBaskerville-VF,
@@ -17,7 +22,7 @@
   BoldItalicFont = LibreBaskerville-Italic-VF
 ]
 \setmonofont{JetBrainsMono-VF}[
-  Path = /home/osmanj/projects/caddy_media_gallery/docs/fonts/,
+  Path = ./fonts/,
   Extension = .ttf,
   UprightFont    = JetBrainsMono-VF,
   BoldFont       = JetBrainsMono-VF,
