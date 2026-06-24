@@ -15,6 +15,11 @@ can switch between light and dark mode with the in-page toggle
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime.
 - **Vanilla JS lightbox** for click-to-expand, no external JS dependencies.
+
+  ![Lightbox view](docs/screenshots/synapticloop-caddy_media_gallery_lightbox.png)
+
+  Click any media tile (image or video) to open it fullscreen. The lightbox supports keyboard navigation (Esc closes, arrow keys go back/forward), a click-outside-to-close behaviour, and a play/pause control for videos. Videos show a poster (the first frame, extracted by ffmpeg if available) before the video plays, so the click area is always meaningful even before playback.
+
 - **Light + dark mode** with a visitor-toggleable theme (auto / light / dark), persisted in localStorage. White card on grey background in light mode, dark card on near-black in dark mode. Blue accent links.
 - **Native `loading="lazy"`** on every thumbnail.
 - **Video support** — videos show a play-button overlay and link to the raw file.
