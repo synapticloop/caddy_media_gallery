@@ -50,11 +50,57 @@ xcaddy build \
     --with github.com/synapticloop/caddy_media_gallery@latest
 ```
 
-Hit it: `https://your-host/images/`. You get a paginated, sortable
-image grid with thumbnails, click-to-expand lightbox, an
-"open in new tab" button per tile, and a directory strip at the
-top for navigation. Direct file requests (`/images/photo.jpg`)
-fall through to `file_server` so the originals serve as-is.
+Or use the included build script (pinned versions, also
+restarts Caddy via systemd):
+
+```bash
+./build.sh            # system install (needs sudo)
+./build.sh --check    # build into ./caddy without installing (CI)
+./build.sh --user     # local install, no sudo; builds to ~/bin/caddy
+./build.sh --help     # full usage
+```
+
+### Local install (no root, no sudo)
+
+If you don't have sudo access (shared host, locked-down
+laptop, etc.), use `--user`. It builds the binary into
+`~/bin/caddy`, generates a starter `Caddyfile.user` in
+the project root, and validates the port (>1024).
+
+```bash
+# Default: build to ~/bin/caddy, listen on port 8080,
+# serve ~/Pictures.
+./build.sh --user
+
+# Custom port and root directory:
+CADDY_USER_PORT=9000 CADDY_USER_ROOT=~/photos ./build.sh --user
+
+# Start it (foreground, Ctrl+C to stop):
+~/bin/caddy run --config Caddyfile.user
+
+# Or in the background:
+nohup ~/bin/caddy run --config Caddyfile.user > ~/caddy.log 2>&1 &
+echo $! > ~/caddy.pid
+```
+
+The auto-generated `Caddyfile.user` uses `admin off`
+and `http://` (no TLS, no ACME) — both would need
+extra setup for a fully no-sudo install, neither is
+needed for local dev. To override the auto-generated
+file, just edit it; subsequent builds leave it alone.
+
+The bundled template (default `gallery.tmpl`) is used
+automatically when no on-disk override is provided
+— no need for `GALLERY_TEMPLATES_DIR` setup either.
+
+Hit it: `https://your-host/images/` (or
+`http://localhost:8080/` for `--user`). You get a
+paginated, sortable image grid with thumbnails,
+click-to-expand lightbox, an "open in new tab" button
+per tile, and a directory strip at the top for
+navigation. Direct file requests (`/images/photo.jpg`)
+fall through to `file_server` so the originals serve
+as-is.
 
 ## What's where
 

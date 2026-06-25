@@ -212,6 +212,14 @@ rebuild the module (`./build.sh`), restart Caddy (`sudo systemctl
 restart caddy`). The on-disk template is written from the new
 constant on the next startup.
 
+For local-install (`./build.sh --user`, no sudo), there's no
+systemd to restart — just kill the old `caddy run` process
+(`kill $(cat ~/caddy.pid)`) and start the new one. The
+bundled template is used automatically when no
+`Caddyfile.user` `template` subdirective is set, so there's
+nothing extra to do for the local case.
+
+
 ## Upgrading from a pre-inlining install (Phase 16 to Phase 17)
 
 If your site was running the old 3-file template split

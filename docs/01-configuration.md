@@ -2,6 +2,9 @@
 
 ## Caddyfile directive
 
+The production setup — Caddy running as a system service,
+serving a site via HTTPS:
+
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
@@ -9,6 +12,11 @@ handle_path /images/* {
     file_server
 }
 ```
+
+For a local-dev setup (no sudo, no TLS), see the "Local
+install" subsection below — the Caddyfile is much
+simpler (just `http://localhost:8080` instead of a TLS
+hostname, no `admin` block needed for the bundled Caddyfile).
 
 The `media_gallery` directive accepts one inline option:
 
@@ -35,6 +43,50 @@ This loads `$GALLERY_TEMPLATES_DIR/themes/dark/gallery.tmpl` (or
 falls back to the bundled template if the file doesn't exist on
 disk). The path is validated at Provision — an invalid name
 (e.g. `../etc/passwd`) fails Caddy startup, not at first request.
+
+### Local install (no root, no sudo)
+
+For users without sudo access (shared host, locked-down
+laptop), use `./build.sh --user`:
+
+```bash
+./build.sh --user           # default port 8080, serve ~/Pictures
+./build.sh --user 9000      # custom port (must be > 1024)
+CADDY_USER_ROOT=~/photos ./build.sh --user
+```
+
+This builds the binary to `~/bin/caddy` and generates
+`Caddyfile.user` in the project root:
+
+```caddy
+{
+    admin off
+}
+
+http://localhost:8080 {
+    root * /home/user/Pictures
+
+    handle_path /* {
+        media_gallery
+        file_server
+    }
+}
+```
+
+Then run:
+
+```bash
+~/bin/caddy run --config Caddyfile.user
+# or backgrounded:
+nohup ~/bin/caddy run --config Caddyfile.user > ~/caddy.log 2>&1 &
+```
+
+The `--user` mode enforces the port (>1024, so it never
+needs root), uses the bundled template automatically
+(no `GALLERY_TEMPLATES_DIR` needed), and leaves any
+existing `Caddyfile.user` alone on subsequent builds.
+
+The full argument matrix is in `./build.sh --help`.
 
 ### Example: skip thumbnail generation
 
