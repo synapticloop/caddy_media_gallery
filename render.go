@@ -933,12 +933,27 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    color so it doesn't dominate the heading — it's a visual
    link, not a divider. */
 .section-heading .heading-divider {
-  flex: 1;
-  height: 1px;
-  background: var(--border);
+  /* Per user request 2026-06-20 (Phase 108): the line between
+     the section name and the toggle button was getting
+     "lost" (effectively invisible) because:
+     (a) the flex container with justify-content: space-between
+         was squeezing it, and
+     (b) the 1px line in --border color is subtle by design.
+     We fix both:
+     - flex: 1 1 0 with a min-width of 6rem so the line
+       always has room to be visible.
+     - 2px height + var(--border-strong) (slightly darker
+       than --border) for better contrast.
+     The result is a clear horizontal rule between the section
+     name (e.g. "DIRECTORIES (3)") and the toggle button
+     (e.g. "−"). */
+  flex: 1 1 0;
+  min-width: 6rem;
+  height: 2px;
+  background: var(--border-strong);
   align-self: center;
-  margin: 0 0.25rem;
-  min-width: 1rem;
+  margin: 0 0.5rem;
+  border-radius: 1px;
 }
 /* Per Phase 71: the section-toggle button lets the visitor
    collapse the directories + other-files sections. Default
@@ -1199,7 +1214,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   margin-right: 6px;
   margin-bottom: 6px;
 }
-.images-section { padding: 1.25rem 2rem 1.5rem; }
+.media-section { padding: 1.25rem 2rem 1.5rem; }
 .dirs-section, .others-section { padding: 1rem 2rem; }
 .sort-bar {
   display: flex;
@@ -1276,7 +1291,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    the active fg. This means the arrow is dark on a light
    button (light mode) or light on a dark button (dark mode),
    which is the correct contrast for each theme. */
-.image-grid {
+.media-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 1rem;
@@ -1439,7 +1454,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  margin: 1.5rem 0; /* both top and bottom — applies to the bottom pagination (between images-section and the end of main) AND the new top pagination (between sort-bar and dirs-section) */
+  margin: 1.5rem 0; /* both top and bottom — applies to the bottom pagination (between media-section and the end of main) AND the new top pagination (between sort-bar and dirs-section) */
   font-size: 0.85rem;
 }
 .page-btn {
@@ -1490,8 +1505,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 @media (max-width: 600px) {
   body { padding: 1rem 0.5rem 3rem; }
-  header, .dirs-section, .others-section, .images-section { padding-left: 1rem; padding-right: 1rem; }
-  .image-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  header, .dirs-section, .others-section, .media-section { padding-left: 1rem; padding-right: 1rem; }
+  .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   /* Per user request 2026-06-18: on small screens, stack the
      .header-top vertically so the meta line wraps onto a new
      line (instead of being squished by the flex parent).
@@ -1893,9 +1908,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{end}}
 
   {{if gt .TotalImages 0}}
-  <section class="images-section">
+  <section class="media-section">
     <h2 class="section-heading">Media</h2>
-    <div class="image-grid">
+    <div class="media-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
