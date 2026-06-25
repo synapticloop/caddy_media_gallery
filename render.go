@@ -1825,16 +1825,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-size: 1rem;
   line-height: 1;
 }
-.breadcrumb-link {
-  color: var(--fg-muted);
-  text-decoration: none;
-  border-bottom: 1px solid transparent;
-  transition: color 0.12s, border-color 0.12s;
-}
-.breadcrumb-link:hover {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
 .breadcrumb-current {
   color: var(--fg);
   font-weight: 500;
