@@ -162,8 +162,7 @@ func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", true, false, 0, files, nil,
-	)
+		"test", "./", "./_thumbs/", "", "", true, false, 0, files, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +183,7 @@ func TestRenderPage_WithThumbs_ThumbURLUsed(t *testing.T) {
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil,
-	)
+		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,8 +473,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	}
 	// pageSize=3 → 7 images / 3 per page = 3 pages, "Page 1 of 3"
 	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 3, files, nil,
-	)
+		"test", "./", "./_thumbs/", "", "", false, false, 3, files, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,8 +487,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	// `if gt .TotalPages 1` block). This is the right behavior:
 	// no point showing "Page 1 of 1" + disabled prev/next buttons.
 	html, err = RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil,
-	)
+		"test", "./", "./_thumbs/", "", "", false, false, 0, files, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

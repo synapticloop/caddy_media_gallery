@@ -369,7 +369,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query())
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil

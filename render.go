@@ -107,6 +107,16 @@ type PageData struct {
 	// filter). Pass through to the filter UI's form action
 	// so the user can re-submit their selection.
 	TypeFilterQuery string
+
+	// FilterImageOptions / FilterVideoOptions / FilterOtherOptions
+	// are the three filter dropdowns (Images / Videos / Other).
+	// Each contains the extensions present in the current
+	// directory, with their counts, marked as Selected if
+	// currently in the active filter. The UI renders these
+	// as three side-by-side dropdowns + an Apply button.
+	FilterImageOptions FilterGroup
+	FilterVideoOptions FilterGroup
+	FilterOtherOptions FilterGroup
 }
 
 // FileView is the template-friendly representation of a single
@@ -516,12 +526,18 @@ func pageFromQuery(q url.Values) int {
 	return page
 }
 
-// parseTypeFilter returns the set of file extensions to show,
-// parsed from the ?type= query param. The value is a comma-
-// separated list of extensions (e.g. "jpg,png" or "mp4"). Each
-// entry is normalised: trimmed, lowercased, and given a
-// leading dot if missing ("jpg" -> ".jpg"). Empty entries
-// (from stray double commas) are silently skipped.
+// parseTypeFilter returns the set of file extensions to show.
+// It accepts TWO formats (the bookmarkable URL and the standard
+// form-submission format):
+//
+//  1. ?type=jpg,png          (comma-separated, bookmarkable)
+//  2. ?ext=jpg&ext=png       (standard form submission)
+//
+// If both are present, ?type= takes precedence (the
+// bookmarkable form is canonical). Each entry is normalised:
+// trimmed, lowercased, given a leading dot if missing
+// ("jpg" -> ".jpg"). Empty entries (from stray double commas)
+// are silently skipped.
 //
 // Returns nil when no filter is active (no ?type= param, or
 // the value is empty / whitespace). A nil return means
@@ -535,7 +551,16 @@ func pageFromQuery(q url.Values) int {
 // set. Kind-level filtering (image / video) is derived from
 // the file's Kind field, not from this set.
 func parseTypeFilter(q url.Values) map[string]bool {
+	// Prefer ?type= (bookmarkable) over ?ext= (form).
 	raw := q.Get("type")
+	if strings.TrimSpace(raw) == "" {
+		// Fall back to ?ext= (form-submission format: ?ext=jpg&ext=png).
+		// url.Values.Get returns the FIRST value of the first key;
+		// we need to enumerate all "ext" entries.
+		if exts, ok := q["ext"]; ok && len(exts) > 0 {
+			raw = strings.Join(exts, ",")
+		}
+	}
 	if strings.TrimSpace(raw) == "" {
 		return nil
 	}
@@ -611,6 +636,122 @@ func parseIntDefault(s string, def int) (int, error) {
 // directive and the JSON `page_size` field). The default of 50
 // is applied in Gallery.Provision when the field is 0.
 
+// FilterOption is one checkbox in the filter UI — represents
+// a single file extension (e.g. ".jpg") within a filter group
+// (Images, Videos, or Other). The count is the number of files
+// in the current directory with this extension; Selected is
+// true if the extension is in the active ?type= filter.
+type FilterOption struct {
+	Ext        string // lowercase, with leading dot, e.g. ".jpg"
+	DisplayExt string // canonical-case form for display, e.g. "JPG" (vs "jpg")
+	Count      int    // files in the current directory with this ext
+	Selected   bool   // currently in the active ?type= filter
+}
+
+// FilterGroup is one dropdown in the filter UI (Images, Videos,
+// or Other). It has a label, the count of selected sub-types
+// vs the total (for the (N/M) chip), and the list of sub-type
+// options.
+type FilterGroup struct {
+	Label    string // "Images", "Videos", "Other"
+	Options  []FilterOption
+	Selected int // number of Options with Selected=true
+	Total    int // len(Options)
+}
+
+// computeFilterGroups scans the file list and groups the
+// extensions into three filter groups (Images, Videos, Other).
+// Each group lists the extensions present in the directory
+// with their counts, marking the ones currently in the active
+// filter as Selected.
+//
+// The imageExts and videoExts maps come from the Gallery's
+// config (defaultImageExts / defaultVideoExts if not
+// overridden). The active filter is the set of extensions
+// currently selected (?type= query param).
+func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter map[string]bool) (images, videos, other FilterGroup) {
+	// Three maps keyed by lowercase ext (with leading dot).
+	// Each maps ext -> (count, displayExt). displayExt is the
+	// canonical-case form — for the first file we see with
+	// that ext, we use whatever case the file actually used
+	// (so the dropdown shows "JPG" if the file is "photo.JPG"
+	// and "jpg" if it's "photo.jpg").
+	imgCounts := map[string]struct {
+		count      int
+		displayExt string
+	}{}
+	vidCounts := map[string]struct {
+		count      int
+		displayExt string
+	}{}
+	otherCounts := map[string]struct {
+		count      int
+		displayExt string
+	}{}
+
+	for _, f := range files {
+		ext := strings.ToLower(filepath.Ext(f.Name))
+		if ext == "" {
+			continue
+		}
+		switch {
+		case imageExts[ext]:
+			e := imgCounts[ext]
+			e.count++
+			if e.displayExt == "" {
+				e.displayExt = filepath.Ext(f.Name)
+			}
+			imgCounts[ext] = e
+		case videoExts[ext]:
+			e := vidCounts[ext]
+			e.count++
+			if e.displayExt == "" {
+				e.displayExt = filepath.Ext(f.Name)
+			}
+			vidCounts[ext] = e
+		default:
+			e := otherCounts[ext]
+			e.count++
+			if e.displayExt == "" {
+				e.displayExt = filepath.Ext(f.Name)
+			}
+			otherCounts[ext] = e
+		}
+	}
+
+	// Convert maps to sorted slices. Sort alphabetically by
+	// displayExt so the dropdown is predictable.
+	images = filterGroupFromMap("Images", imgCounts, activeFilter)
+	videos = filterGroupFromMap("Videos", vidCounts, activeFilter)
+	other = filterGroupFromMap("Other", otherCounts, activeFilter)
+	return
+}
+
+func filterGroupFromMap(label string, counts map[string]struct {
+	count      int
+	displayExt string
+}, activeFilter map[string]bool) FilterGroup {
+	out := FilterGroup{Label: label}
+	for ext, info := range counts {
+		out.Options = append(out.Options, FilterOption{
+			Ext:        ext,
+			DisplayExt: info.displayExt,
+			Count:      info.count,
+			Selected:   activeFilter[ext],
+		})
+	}
+	sort.Slice(out.Options, func(i, j int) bool {
+		return out.Options[i].DisplayExt < out.Options[j].DisplayExt
+	})
+	for _, o := range out.Options {
+		out.Total++
+		if o.Selected {
+			out.Selected++
+		}
+	}
+	return out
+}
+
 // RenderPage renders the gallery page for a directory. The caller
 // provides the raw directory listing (output of Scanner.Scan);
 // RenderPage does the split / sort / paginate / format work.
@@ -642,17 +783,29 @@ func parseIntDefault(s string, def int) (int, error) {
 // as the <img src> instead of `/_thumbs/<name>.webp` (no thumb
 // generation). `pageSize` is the configured page_size — the
 // number of image entries per page. Pass 0 for the default of 50.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values) (string, error) {
+// `imageExts` and `videoExts` are the Gallery's configured
+// extension sets (used to build the filter UI's sub-type
+// groups: Images / Videos / Other).
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
-	// Per user request 2026-06-20: apply the ?type= filter
-	// BEFORE splitFiles. Directories (KindDir) are NOT affected
-	// by the filter — a ?type=jpg filter should still show the
+	// Per user request 2026-06-20: compute the filter UI
+	// data BEFORE applying the filter, so the dropdowns show
+	// all available sub-types (not just the currently-visible
+	// ones). The user might want to switch from "jpg" to "png"
+	// and we should show them "png" exists in the dropdown.
+	typeFilter := parseTypeFilter(query)
+	imgGroup, vidGroup, otherGroup := computeFilterGroups(
+		files, imageExts, videoExts, typeFilter,
+	)
+
+	// Now apply the ?type= filter to the file list BEFORE
+	// splitFiles. Directories (KindDir) are NOT affected by
+	// the filter — a ?type=jpg filter should still show the
 	// user the directories they can navigate to. splitFiles
 	// operates on the Kind field, so directories pass through
 	// unchanged.
-	typeFilter := parseTypeFilter(query)
 	files = applyTypeFilter(files, typeFilter)
 
 	dirs, others, allImages := splitFiles(files)
@@ -762,6 +915,9 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		TypeFilter:         typeFilter,
 		IsTypeFilterActive: typeFilterActive(query),
 		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
+		FilterImageOptions: imgGroup,
+		FilterVideoOptions: vidGroup,
+		FilterOtherOptions: otherGroup,
 	}
 
 	tmpl, err := loadTemplate(tmplName)
@@ -1501,6 +1657,153 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   user-select: none;
 }
 
+/* Per user request 2026-06-20 (Phase 4): the file-type
+   filter UI sits between the breadcrumb and the media
+   section. The row is a single horizontal bar of "pills"
+   (the All button + three dropdown triggers + the Apply
+   button). Each dropdown opens to a vertical list of
+   checkbox options (sub-type + count).
+
+   Implementation: <details>/<summary> for show/hide (no JS,
+   keyboard-accessible, mobile-friendly). The form uses
+   standard browser submission (GET + checkboxes) so the
+   filter is bookmarkable.
+
+   Visual style: matches the existing sort-bar / breadcrumb
+   — small text (0.85rem), muted color for inactive state,
+   accent color for active. The Apply button is a primary
+   CTA (slightly more prominent than the pills). */
+.filter-form {
+  padding: 0.25rem 2rem 0.75rem;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.filter-label {
+  color: var(--fg-faint);
+  margin-right: 0.25rem;
+}
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.filter-pill:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+/* "All" and the dropdown triggers use a different visual
+   treatment when active (currently selected or the dropdown
+   is open). The summary of a <details> element can be styled
+   with [open] to indicate the dropdown is open. */
+.filter-pill-active,
+.filter-dropdown[open] > .filter-pill,
+.filter-pill:active {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.filter-count {
+  color: var(--fg-faint);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.filter-caret {
+  color: var(--fg-faint);
+  font-size: 0.7rem;
+  line-height: 1;
+  /* Make the caret point down when closed, up when open.
+     <details> elements get a [open] attribute when expanded. */
+}
+.filter-dropdown[open] .filter-caret {
+  transform: rotate(180deg);
+}
+/* <details> elements have a default disclosure triangle
+   (the marker) that we don't want — we use the styled .filter-pill
+   as the trigger instead. */
+.filter-dropdown summary::-webkit-details-marker { display: none; }
+.filter-dropdown summary { list-style: none; }
+/* The dropdown body is the panel of checkbox options that
+   appears below the trigger when the dropdown is open.
+   Absolute positioning so it doesn't push the rest of the
+   page down when opening. */
+.filter-dropdown {
+  position: relative;
+}
+.filter-dropdown-body {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 12rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+.filter-option:hover {
+  background: var(--bg-hover);
+}
+.filter-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+.filter-option-name {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.8rem;
+}
+.filter-option-count {
+  color: var(--fg-faint);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.filter-apply {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: var(--bg-card);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.filter-apply:hover {
+  background: var(--bg-hover);
+  color: var(--accent);
+}
+
+
 /* Per Phase 85: the sort-by arrow (↑/↓ on the active sort
    button) inherits its color from the active button's text
    color (--active-fg, set by .sort-btn.active above). The
@@ -2015,6 +2318,94 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
       {{end}}
     </nav>
+    {{end}}
+
+    {{/* Per user request 2026-06-20 (Phase 4): the file-type
+       filter UI. Three side-by-side dropdowns (Images /
+       Videos / Other), each a <details> element that opens
+       to show a list of sub-types with checkboxes + counts.
+       One global "All" button (clears all selections +
+       drops the ?type= param) and one global "Apply"
+       button (submits the form, building the ?ext=ext1&ext=2
+       URL which RenderPage parses via the parseTypeFilter
+       ?ext= fallback added in Phase 4).
+
+       The form is a standard HTML <form method="get"> with
+       checkboxes named "ext". The browser builds the URL as
+       ?ext=jpg&ext=png automatically. RenderPage accepts
+       this format via the ?ext= fallback.
+
+       The "All" button is a link (not a submit) that points
+       to the current URL without any ?type= / ?ext= — the
+       filter UI for "show all files". */}}
+    {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
+    <form class="filter-form" method="get" action="">
+      <div class="filter-row">
+        <span class="filter-label">Filter</span>
+
+        <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
+           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">All</a>
+
+        {{if gt .FilterImageOptions.Total 0}}
+        <details class="filter-dropdown" {{if gt .FilterImageOptions.Selected 0}}open{{end}}>
+          <summary class="filter-pill">
+            {{.FilterImageOptions.Label}}
+            <span class="filter-count">({{.FilterImageOptions.Selected}}/{{.FilterImageOptions.Total}})</span>
+            <span class="filter-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="filter-dropdown-body">
+            {{range .FilterImageOptions.Options}}
+            <label class="filter-option">
+              <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
+              <span class="filter-option-name">{{.DisplayExt}}</span>
+              <span class="filter-option-count">({{.Count}})</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+
+        {{if gt .FilterVideoOptions.Total 0}}
+        <details class="filter-dropdown" {{if gt .FilterVideoOptions.Selected 0}}open{{end}}>
+          <summary class="filter-pill">
+            {{.FilterVideoOptions.Label}}
+            <span class="filter-count">({{.FilterVideoOptions.Selected}}/{{.FilterVideoOptions.Total}})</span>
+            <span class="filter-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="filter-dropdown-body">
+            {{range .FilterVideoOptions.Options}}
+            <label class="filter-option">
+              <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
+              <span class="filter-option-name">{{.DisplayExt}}</span>
+              <span class="filter-option-count">({{.Count}})</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+
+        {{if gt .FilterOtherOptions.Total 0}}
+        <details class="filter-dropdown" {{if gt .FilterOtherOptions.Selected 0}}open{{end}}>
+          <summary class="filter-pill">
+            {{.FilterOtherOptions.Label}}
+            <span class="filter-count">({{.FilterOtherOptions.Selected}}/{{.FilterOtherOptions.Total}})</span>
+            <span class="filter-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="filter-dropdown-body">
+            {{range .FilterOtherOptions.Options}}
+            <label class="filter-option">
+              <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
+              <span class="filter-option-name">{{.DisplayExt}}</span>
+              <span class="filter-option-count">({{.Count}})</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+
+        <button type="submit" class="filter-apply">Apply</button>
+      </div>
+    </form>
     {{end}}
     </header>
 
