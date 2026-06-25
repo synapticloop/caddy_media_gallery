@@ -2512,8 +2512,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
-          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span>
+          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}} <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span></a>
         {{end}}
       {{end}}
     </nav>
