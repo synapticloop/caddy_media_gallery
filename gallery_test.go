@@ -1,6 +1,8 @@
 package gallery
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -686,5 +688,53 @@ func TestProvision_FFmpegPath_SkippedWhenNoVideoThumbs(t *testing.T) {
 	}
 	if g.ffmpegPath != "" {
 		t.Errorf("expected empty ffmpegPath when NoVideoThumbs=true, got %q", g.ffmpegPath)
+	}
+}
+
+// TestProvision_FFmpegPath_LogsResolvedPath verifies Phase 106:
+// Provision() emits a log line to stderr reporting the resolved
+// ffmpeg path. This is the operator's confirmation that the
+// right binary was picked up at startup (important because
+// ffmpeg detection is startup-only — a new ffmpeg install
+// requires a Caddy restart to be picked up).
+func TestProvision_FFmpegPath_LogsResolvedPath(t *testing.T) {
+	// Set up a fake ffmpeg binary in the env var so we can verify
+	// the log line shows THAT path (not the system ffmpeg, which
+	// may or may not exist on the test machine).
+	fakeFFmpeg := filepath.Join(t.TempDir(), "fake-ffmpeg")
+	if err := os.WriteFile(fakeFFmpeg, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FFMPEG_PATH", fakeFFmpeg)
+
+	// Capture stderr.
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = origStderr })
+
+	// Run Provision.
+	g := Gallery{}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close the writer so the reader sees EOF, then read.
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	output := string(out)
+
+	// The log line should mention our fake path.
+	want := fmt.Sprintf("caddy-media-gallery: ffmpeg path: %s", fakeFFmpeg)
+	if !strings.Contains(output, want) {
+		t.Errorf("expected stderr to contain %q, got %q", want, output)
 	}
 }

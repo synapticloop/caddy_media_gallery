@@ -204,6 +204,16 @@ func (g *Gallery) Provision(caddy.Context) error {
 				g.ffmpegPath = path
 			}
 		}
+		// Per Phase 106: log the resolved ffmpeg path so the operator
+		// can confirm the right binary was picked up at startup.
+		// (The path is cached and reused for every video thumb request
+		// thereafter — see docs/01-configuration.md for the
+		// restart-after-install rationale.)
+		if g.ffmpegPath != "" {
+			fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg path: %s\n", g.ffmpegPath)
+		} else if !g.NoVideoThumbs {
+			fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg NOT FOUND (video thumbnails disabled; set FFMPEG_PATH or install ffmpeg and restart Caddy)\n")
+		}
 	}
 	// Make the bundled templates discoverable on disk for the
 	// operator. writeBundledTemplates is a no-op if the files

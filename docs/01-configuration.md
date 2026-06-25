@@ -130,6 +130,27 @@ FFMPEG_PATH=/opt/ffmpeg-7/bin/ffmpeg caddy run
 The `FFMPEG_PATH` value is validated at Provision time: it must point to an existing regular file with at least one executable bit set. Bad values (non-existent path, directory, non-executable file) are silently ignored and the code falls back to `$PATH` lookup. This avoids a confusing "exec: not found" error at request time when the env var is mistyped.
 
 All standard install paths (`/usr/bin/ffmpeg`, `/usr/local/bin/ffmpeg`, etc.) are picked up automatically via the `$PATH` fallback.
+
+### ffmpeg detection is startup-only — restart Caddy after installing it
+
+`FFMPEG_PATH` and the `$PATH` lookup are evaluated exactly once, in the Caddy module's `Provision()` (the startup hook). The resolved path is cached on the `Gallery` struct and reused for every video thumbnail request thereafter. There is no per-request re-scan of `$PATH`, no per-request stat of the binary, and no hot-reload if ffmpeg is installed or upgraded while Caddy is running.
+
+**If you install ffmpeg after Caddy is already running**, video thumbnails will continue to fail (404 from the thumb handler) until you restart Caddy. The restart re-runs `Provision()`, which re-evaluates `FFMPEG_PATH` and `$PATH` and re-caches the resolved path. The same applies if you change `FFMPEG_PATH` — it only takes effect on the next startup.
+
+This is deliberate: the alternative (per-request detection) would mean inconsistent behavior during the transition window — newly-installed ffmpeg would work for some requests but not others, depending on timing — and would add an `exec.LookPath` syscall to every video thumb request for no real benefit.
+
+To pick up a new or upgraded ffmpeg:
+
+```bash
+# System install
+sudo systemctl restart caddy
+
+# Local install (--user)
+kill $(cat ~/caddy.pid) && ~/bin/caddy run --config Caddyfile.user
+```
+
+The Caddy startup log shows the resolved ffmpeg path (or a warning if it wasn't found) so you can verify the right binary was picked up — see the `Provision()` log output when Caddy starts.
+
 Best for: small galleries (< 100 images) where you don't want a thumb cache and the originals aren't huge. Not recommended for large galleries — the page payload goes from ~30 KB (with thumbs) to ~5 MB average (full images) for a 1,000-image dir.
 
 ### Example: change the page size
