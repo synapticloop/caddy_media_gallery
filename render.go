@@ -80,6 +80,13 @@ type PageData struct {
 	// total <= 1 (no pagination needed).
 	PageNumbers []int
 
+	// Breadcrumb is the list of path segments from the
+	// gallery root to the current directory. Each segment has
+	// a Name (human-readable) and an Href (relative URL).
+	// The first segment is the gallery root; the last is the
+	// current directory (rendered as plain text, not a link).
+	Breadcrumb []BreadcrumbSegment
+
 	// Sort
 	Sort SortSpec
 
@@ -130,6 +137,75 @@ type FileView struct {
 	Size string
 	Date string
 	Type string
+}
+
+// BreadcrumbSegment is one segment of the breadcrumb path.
+// Each segment represents a directory level; Name is the
+// human-readable label, Href is the URL to navigate to that
+// level. The last segment (the current directory) is rendered
+// as plain text (not a link) by the template.
+type BreadcrumbSegment struct {
+	Name string
+	Href string
+}
+
+// computeBreadcrumb returns the breadcrumb segments for the
+// current gallery view. The first segment is the gallery root
+// (no path beyond /, links to "./"). Each subsequent segment
+// is one path component deeper; its Href is the relative URL
+// to that level (e.g. "./photos/" for the "photos" subdir).
+//
+// The relPath is the URL path after the leading slash, with
+// the trailing slash preserved (it's already in this format
+// from gallery.go's normalisation). We split on "/" and
+// accumulate the path. A trailing empty string (from the
+// trailing slash) is dropped.
+//
+// Examples:
+//
+//	relPath ""                    -> [{Name: "images", Href: "./"}]
+//	relPath "photos/"             -> [{Name: "images", Href: "./"},
+//	                                  {Name: "photos", Href: "./photos/"}]
+//	relPath "photos/2024/maui/"   -> [{Name: "images", Href: "./"},
+//	                                  {Name: "photos", Href: "./photos/"},
+//	                                  {Name: "2024",   Href: "./photos/2024/"},
+//	                                  {Name: "maui",   Href: "./photos/2024/maui/"}]
+//
+// The first segment's Name comes from the title arg (the
+// gallery's root title, e.g. "images" for /images/ or the
+// basename of the root dir for top-level galleries).
+func computeBreadcrumb(relPath, title, pathPrefix string) []BreadcrumbSegment {
+	root := BreadcrumbSegment{Name: title, Href: pathPrefix}
+	out := []BreadcrumbSegment{root}
+	if relPath == "" {
+		return out
+	}
+	// Strip trailing slash (relPath is normally "foo/bar/" but
+	// we want just "foo/bar" for splitting).
+	trimmed := strings.TrimSuffix(relPath, "/")
+	if trimmed == "" {
+		return out
+	}
+	parts := strings.Split(trimmed, "/")
+	// Build the cumulative path for each segment's Href.
+	// Each segment's Href is "./a/b/c/" where the path
+	// accumulates.
+	acc := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
+		}
+		if acc == "" {
+			acc = p
+		} else {
+			acc = acc + "/" + p
+		}
+		out = append(out, BreadcrumbSegment{
+			Name: p,
+			Href: pathPrefix + acc + "/",
+		})
+	}
+	return out
 }
 
 // SortSpec describes the current sort state. Field is one of
@@ -682,6 +758,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		HasNext:            page < totalPages,
 		PageNumbers:        pageNumbers(page, totalPages),
 		Sort:               sortSpec,
+		Breadcrumb:         computeBreadcrumb(relPath, title, pathPrefix),
 		TypeFilter:         typeFilter,
 		IsTypeFilterActive: typeFilterActive(query),
 		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
@@ -1388,6 +1465,42 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding-left: 0.3rem;
   font-weight: 600;
 }
+/* Per user request 2026-06-20 (Phase 3): the breadcrumb
+   is a small, unobtrusive row of links below the sort-bar.
+   Each segment is a clickable link except the current
+   directory (last segment, plain text). The separator is a
+   single slash with muted color, matching the file-manager
+   convention (rather than the breadcrumb-arrow ">" which
+   would compete visually with the sort buttons). The
+   whole row wraps on narrow viewports (long path names). */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.25rem 2rem 0.5rem;
+  color: var(--fg-faint);
+}
+.breadcrumb-link {
+  color: var(--fg-muted);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+}
+.breadcrumb-link:hover {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.breadcrumb-current {
+  color: var(--fg);
+  font-weight: 500;
+}
+.breadcrumb-sep {
+  color: var(--border);
+  user-select: none;
+}
+
 /* Per Phase 85: the sort-by arrow (↑/↓ on the active sort
    button) inherits its color from the active button's text
    color (--active-fg, set by .sort-btn.active above). The
@@ -1885,6 +1998,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?sort=mtime&order={{if and (eq .Sort.Field "mtime") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
       <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
+    {{/* Per user request 2026-06-20 (Phase 3): breadcrumb
+       below the sort-bar, above the media section. Each
+       segment is a link to that directory level except the
+       last (current dir, plain text). The filter (?type=)
+       is preserved across breadcrumb clicks so the user
+       doesn't lose their filter state when navigating up. */}}
+    {{if gt (len .Breadcrumb) 0}}
+    <nav class="breadcrumb" aria-label="Directory path">
+      {{range $i, $seg := .Breadcrumb}}
+        {{if eq $i (lastIndex $.Breadcrumb)}}
+          <span class="breadcrumb-current">{{$seg.Name}}</span>
+        {{else}}
+          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <span class="breadcrumb-sep" aria-hidden="true">/</span>
+        {{end}}
+      {{end}}
+    </nav>
+    {{end}}
     </header>
 
     {{if gt .TotalPages 1}}
@@ -2423,6 +2554,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 var galleryFuncs = template.FuncMap{
 	"minus1": func(n int) int { return n - 1 },
 	"plus1":  func(n int) int { return n + 1 },
+	// lastIndex returns the index of the last element of a
+	// slice (len(s) - 1). Used by the breadcrumb template to
+	// check whether the current segment is the last one (the
+	// "current directory" segment, rendered as plain text
+	// instead of a link). Go's html/template doesn't have a
+	// built-in "len" function — we use `len .Breadcrumb`
+	// directly. This helper exists purely to make the
+	// "is last segment" check readable in the template.
+	"lastIndex": func(s []BreadcrumbSegment) int { return len(s) - 1 },
 	"sortLabel": func(field string) string {
 		switch field {
 		case "name":

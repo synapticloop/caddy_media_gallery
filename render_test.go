@@ -3226,3 +3226,147 @@ func TestRenderPage_TypeFilter(t *testing.T) {
 		t.Errorf("filtered render should NOT include notes.txt (other-files are also filtered out)")
 	}
 }
+
+// TestComputeBreadcrumb verifies the breadcrumb segment
+// construction for various URL depths.
+func TestComputeBreadcrumb(t *testing.T) {
+	cases := []struct {
+		name       string
+		relPath    string
+		title      string
+		pathPrefix string
+		want       []BreadcrumbSegment
+	}{
+		{
+			name:       "gallery root (no subdir)",
+			relPath:    "",
+			title:      "images",
+			pathPrefix: "./",
+			want:       []BreadcrumbSegment{{Name: "images", Href: "./"}},
+		},
+		{
+			name:       "one level deep",
+			relPath:    "photos/",
+			title:      "images",
+			pathPrefix: "./",
+			want: []BreadcrumbSegment{
+				{Name: "images", Href: "./"},
+				{Name: "photos", Href: "./photos/"},
+			},
+		},
+		{
+			name:       "three levels deep",
+			relPath:    "photos/2024/maui/",
+			title:      "images",
+			pathPrefix: "./",
+			want: []BreadcrumbSegment{
+				{Name: "images", Href: "./"},
+				{Name: "photos", Href: "./photos/"},
+				{Name: "2024", Href: "./photos/2024/"},
+				{Name: "maui", Href: "./photos/2024/maui/"},
+			},
+		},
+		{
+			name:       "root with trailing slash only",
+			relPath:    "/",
+			title:      "images",
+			pathPrefix: "./",
+			want:       []BreadcrumbSegment{{Name: "images", Href: "./"}},
+		},
+		{
+			name:       "custom title (gallery at non-standard path)",
+			relPath:    "albums/family/",
+			title:      "Photo Albums",
+			pathPrefix: "./",
+			want: []BreadcrumbSegment{
+				{Name: "Photo Albums", Href: "./"},
+				{Name: "albums", Href: "./albums/"},
+				{Name: "family", Href: "./albums/family/"},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := computeBreadcrumb(c.relPath, c.title, c.pathPrefix)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("got %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestRenderPage_Breadcrumb verifies the breadcrumb HTML is
+// rendered in the output for a subdirectory. The last segment
+// should be the current dir (rendered as plain text, not a
+// link); intermediate segments should be links to the
+// corresponding levels.
+func TestRenderPage_Breadcrumb(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha.jpg", ModTime: 100, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("images", "./", "./_thumbs/", "photos/2024/", "", false, false, 0, files, url.Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The breadcrumb nav should be present
+	if !strings.Contains(html, `class="breadcrumb"`) {
+		t.Error("expected breadcrumb nav in rendered HTML")
+	}
+	// Each segment should be present
+	for _, name := range []string{"images", "photos", "2024"} {
+		if !strings.Contains(html, name) {
+			t.Errorf("expected breadcrumb segment %q in HTML", name)
+		}
+	}
+	// The "current" segment class should be on the last item
+	if !strings.Contains(html, `class="breadcrumb-current"`) {
+		t.Error("expected the current segment to have class breadcrumb-current")
+	}
+	// The separator should be present
+	if !strings.Contains(html, `class="breadcrumb-sep"`) {
+		t.Error("expected breadcrumb separator in HTML")
+	}
+}
+
+// TestRenderPage_Breadcrumb_PreservesFilter verifies that the
+// breadcrumb links preserve the active ?type= filter. (When the
+// user clicks a breadcrumb segment while a filter is active,
+// the filter should be carried over to the new URL.)
+func TestRenderPage_Breadcrumb_PreservesFilter(t *testing.T) {
+	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
+	html, err := RenderPage("images", "./", "./_thumbs/", "photos/", "", false, false, 0, files, url.Values{
+		"type": {"jpg,png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The breadcrumb link for "images" (the root) should have
+	// ?type=jpg,png appended.
+	// The comma in the filter value is URL-encoded by html/template
+	// (so the URL is parseable). We expect the percent-encoded form.
+	if !strings.Contains(html, `href="./?type=jpg%2cpng"`) {
+		t.Errorf("expected the root breadcrumb link to preserve the ?type= filter (URL-encoded); HTML excerpt: %s",
+			substringAround(html, "breadcrumb", 200))
+	}
+	// The "photos" segment is the CURRENT dir (per relPath
+	// "photos/"), so it should be plain text, not a link.
+}
+
+// substringAround returns 200 chars of s centered on the
+// first occurrence of needle, or s if not found.
+func substringAround(s, needle string, width int) string {
+	idx := strings.Index(s, needle)
+	if idx < 0 {
+		return s
+	}
+	start := idx - width/2
+	if start < 0 {
+		start = 0
+	}
+	end := idx + width/2
+	if end > len(s) {
+		end = len(s)
+	}
+	return s[start:end]
+}
