@@ -57,6 +57,21 @@ type Gallery struct {
 	// operator can only reference files inside it.
 	Template string `json:"template,omitempty"`
 
+	// ImageExts is the set of file extensions the gallery treats
+	// as images. Set from the `image_types` Caddyfile subdirective
+	// (space-separated, case-insensitive, with or without leading
+	// dot). If empty (the default), the plugin uses a built-in list
+	// of common image extensions (jpg, jpeg, png, gif, webp, svg,
+	// avif, heic). Provision() converts this list to a map for the
+	// Scanner to use.
+	ImageExts []string `json:"image_types,omitempty"`
+
+	// VideoExts is the set of file extensions the gallery treats
+	// as videos. Set from the `video_types` Caddyfile subdirective
+	// (same syntax as image_types). Empty (default) uses the
+	// built-in video list (mp4, webm, m4v, mov, mkv, avi, ogv, ogg).
+	VideoExts []string `json:"video_types,omitempty"`
+
 	// NoThumbs disables the on-the-fly WebP thumbnail generation.
 	// When true, the gallery uses the original image as the tile
 	// <img src> instead of `/_thumbs/<name>.webp`. Requests to the
@@ -91,6 +106,17 @@ type Gallery struct {
 	// Thread-safe to read after Provision returns; written only
 	// during Provision.
 	ffmpegPath string `json:"-"`
+
+	// imageExtsMap is the resolved image-extension set (after
+	// lowercasing + dot-normalization in Provision) for fast
+	// lookup in Scanner.Classify. Built from ImageExts (if
+	// non-empty) or defaultImageExts. Set once in Provision;
+	// read-only after that.
+	imageExtsMap map[string]bool `json:"-"`
+
+	// videoExtsMap is the resolved video-extension set, same
+	// shape as imageExtsMap.
+	videoExtsMap map[string]bool `json:"-"`
 
 	// PageSize is the number of image entries per page. Default
 	// is 50 (set in Provision if zero). The user can override
@@ -176,6 +202,18 @@ func (g *Gallery) Provision(caddy.Context) error {
 	}
 	if g.ThumbTTLMinutes == 0 {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
+	}
+	// Resolve the image + video extension sets. If the operator
+	// configured them via the Caddyfile, use their list;
+	// otherwise fall back to the built-in defaults. The resolved
+	// maps are passed to ScanCache.Get and used by Scanner.Classify.
+	g.imageExtsMap = defaultImageExts
+	if len(g.ImageExts) > 0 {
+		g.imageExtsMap = extsToMap(g.ImageExts)
+	}
+	g.videoExtsMap = defaultVideoExts
+	if len(g.VideoExts) > 0 {
+		g.videoExtsMap = extsToMap(g.VideoExts)
 	}
 	// Detect ffmpeg for video thumbnail generation. We do this
 	// once at Provision (not per-scan) since ffmpeg availability
@@ -320,7 +358,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
@@ -364,10 +402,6 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 			case "no_thumbs":
-				// No arg → true (turn off thumbnails). With
-				// "false" arg → false (back to thumb mode).
-				// Any other arg is an error — avoids typos like
-				// `no_thumbs off` silently doing nothing.
 				g.NoThumbs = true
 				if d.NextArg() {
 					if d.Val() != "false" {
@@ -376,10 +410,6 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					g.NoThumbs = false
 				}
 			case "no_video_thumbs":
-				// No arg → true (turn off video thumbnail
-				// generation). With "false" arg → false
-				// (back to default; generate video thumbs
-				// when ffmpeg is available).
 				g.NoVideoThumbs = true
 				if d.NextArg() {
 					if d.Val() != "false" {
@@ -461,6 +491,25 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				g.ThumbTTLMinutes = n
 				if d.NextArg() {
 					return d.ArgErr()
+				}
+			case "image_types":
+				// Space-separated list of image extensions. Empty
+				// args are silently skipped; entries are normalized
+				// to ".ext" + lowercase by extsToMap() in Provision.
+				// Examples:
+				//   image_types jpg jpeg png
+				//   image_types .jpg .png .heic   (leading dot allowed)
+				//   image_types JPG JPEG PNG      (case-insensitive)
+				g.ImageExts = nil
+				for d.NextArg() {
+					g.ImageExts = append(g.ImageExts, d.Val())
+				}
+			case "video_types":
+				// Same shape as image_types. Empty args skipped.
+				//   video_types mp4 webm mov
+				g.VideoExts = nil
+				for d.NextArg() {
+					g.VideoExts = append(g.VideoExts, d.Val())
 				}
 			}
 		}

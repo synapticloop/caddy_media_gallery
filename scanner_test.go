@@ -40,7 +40,7 @@ func TestClassify(t *testing.T) {
 		{"noext", KindOther},
 	}
 	for _, c := range cases {
-		if got := Classify(c.name); got != c.want {
+		if got := Classify(c.name, defaultImageExts, defaultVideoExts); got != c.want {
 			t.Errorf("Classify(%q) = %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -109,7 +109,7 @@ func TestScanner_SortByName(t *testing.T) {
 		"Apple.jpg":  "x", // case-insensitive: A < b
 		"cherry.jpg": "x",
 	})
-	s := &Scanner{Root: dir, Sort: "name"}
+	s := &Scanner{Root: dir, Sort: "name", ImageExts: defaultImageExts, VideoExts: defaultVideoExts}
 	got, err := s.Scan()
 	if err != nil {
 		t.Fatal(err)

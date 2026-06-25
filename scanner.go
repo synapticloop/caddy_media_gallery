@@ -25,15 +25,44 @@ const (
 	KindOther FileKind = "other"
 )
 
-// imageExts are file extensions that the gallery treats as images.
-var imageExts = map[string]bool{
+// Default image and video extension sets. Used when the
+// operator has not customised them via the Caddyfile
+// (`media_gallery { image_types ... video_types ... }`).
+//
+// Each set is a map of lowercased extension (including the
+// leading dot) → true. Lookup in Classify() is case-insensitive
+// because the scanner lowercases the file's extension before
+// the lookup.
+var defaultImageExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true,
 	".gif": true, ".webp": true, ".svg": true, ".avif": true,
+	".heic": true,
 }
 
-// videoExts are file extensions that the gallery treats as videos.
-var videoExts = map[string]bool{
+var defaultVideoExts = map[string]bool{
 	".mp4": true, ".webm": true,
+	".m4v": true, ".mov": true, ".mkv": true,
+	".avi": true, ".ogv": true, ".ogg": true,
+}
+
+// extsToMap is a small helper used by Provision() to convert
+// a Caddyfile list (e.g. "jpg jpeg png") into a map for
+// Classify() to look up in. Each entry is lowercased and
+// dotted before insertion ("jpg" → ".jpg"). Empty entries
+// (e.g. a stray double-space) are silently skipped.
+func extsToMap(list []string) map[string]bool {
+	out := make(map[string]bool, len(list))
+	for _, e := range list {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		out[strings.ToLower(e)] = true
+	}
+	return out
 }
 
 // FileInfo describes a single entry in a gallery directory. This is
@@ -53,20 +82,33 @@ type FileInfo struct {
 // Both directories and files are included; the Kind field tells
 // them apart.
 type Scanner struct {
-	Root string
-	Sort string // "mtime" (default) or "name"
+	Root      string
+	Sort      string // "mtime" (default) or "name"
+	ImageExts map[string]bool
+	VideoExts map[string]bool
 }
 
 // NewScanner returns a Scanner for the given root directory with
-// default sort order (mtime desc — newest first).
+// default sort order (mtime desc — newest first) and the default
+// image / video extension sets.
 func NewScanner(root string) *Scanner {
-	return &Scanner{Root: root, Sort: "mtime"}
+	return &Scanner{
+		Root:      root,
+		Sort:      "mtime",
+		ImageExts: defaultImageExts,
+		VideoExts: defaultVideoExts,
+	}
 }
 
 // Classify returns the FileKind for a filename based on its
 // extension. Directories are not classified by name; the scanner
 // uses the entry's IsDir() to set KindDir directly.
-func Classify(name string) FileKind {
+//
+// The image and video extension sets come from the Gallery
+// (operator-configurable via the Caddyfile). If neither set is
+// provided, the defaults are used (jpg/png/gif/webp/svg/avif/heic
+// for images; mp4/webm/m4v/mov/mkv/avi/ogv/ogg for videos).
+func Classify(name string, imageExts, videoExts map[string]bool) FileKind {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch {
 	case imageExts[ext]:
@@ -121,7 +163,7 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		if info.IsDir() {
 			kind = KindDir
 		} else {
-			kind = Classify(e.Name())
+			kind = Classify(e.Name(), s.ImageExts, s.VideoExts)
 		}
 		out = append(out, FileInfo{
 			Name:    e.Name(),

@@ -738,3 +738,100 @@ func TestProvision_FFmpegPath_LogsResolvedPath(t *testing.T) {
 		t.Errorf("expected stderr to contain %q, got %q", want, output)
 	}
 }
+
+// TestProvision_ImageTypesCustomConfig verifies that the
+// image_types Caddyfile directive overrides the default
+// image extension set. After Provision, the resolved
+// imageExtsMap should match the configured extensions
+// (lowercased + dot-prefixed).
+func TestProvision_ImageTypesCustomConfig(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		image_types JPG .heic RAW
+	}`)
+
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3 entries: JPG, .heic, RAW
+	if len(g.ImageExts) != 3 {
+		t.Errorf("expected 3 entries in g.ImageExts, got %d: %v", len(g.ImageExts), g.ImageExts)
+	}
+
+	// Check the resolved map (lowercased, dot-prefixed).
+	wantIn := map[string]bool{".jpg": true, ".heic": true, ".raw": true}
+	for k := range wantIn {
+		if !g.imageExtsMap[k] {
+			t.Errorf("expected imageExtsMap[%q] = true, got false (map: %v)", k, g.imageExtsMap)
+		}
+	}
+	// Default extensions should NOT be present (we overrode).
+	if g.imageExtsMap[".png"] {
+		t.Error("default .png should NOT be in imageExtsMap when image_types is configured")
+	}
+}
+
+// TestProvision_VideoTypesCustomConfig verifies the same for
+// video_types. Also verifies that omitting BOTH directives
+// gives the defaults.
+func TestProvision_VideoTypesCustomConfig(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		video_types mp4 MOV
+	}`)
+
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+
+	wantIn := map[string]bool{".mp4": true, ".mov": true}
+	for k := range wantIn {
+		if !g.videoExtsMap[k] {
+			t.Errorf("expected videoExtsMap[%q] = true, got false (map: %v)", k, g.videoExtsMap)
+		}
+	}
+	if g.videoExtsMap[".webm"] {
+		t.Error("default .webm should NOT be in videoExtsMap when video_types is configured")
+	}
+	// Image types should still be the defaults (we only overrode video_types).
+	if !g.imageExtsMap[".jpg"] {
+		t.Error("imageExtsMap should still have the default .jpg (we only overrode video_types)")
+	}
+}
+
+// TestProvision_DefaultsWhenNoCustomExtTypes verifies that an
+// empty Caddyfile (no image_types or video_types) gives the
+// built-in defaults for both maps.
+func TestProvision_DefaultsWhenNoCustomExtTypes(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		page_size 100
+	}`)
+
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Image defaults
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif", ".heic"} {
+		if !g.imageExtsMap[ext] {
+			t.Errorf("expected default imageExtsMap[%q] = true, got false", ext)
+		}
+	}
+	// Video defaults
+	for _, ext := range []string{".mp4", ".webm"} {
+		if !g.videoExtsMap[ext] {
+			t.Errorf("expected default videoExtsMap[%q] = true, got false", ext)
+		}
+	}
+}

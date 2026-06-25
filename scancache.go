@@ -2,6 +2,8 @@ package gallery
 
 import (
 	"os"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,10 +29,14 @@ type ScanCache struct {
 }
 
 type scanCacheEntry struct {
-	files    []FileInfo
-	dirMtime time.Time
-	expires  time.Time
-	sort     string // Sort mode used for this entry — different sorts cache separately
+	files      []FileInfo
+	dirMtime   time.Time
+	expires    time.Time
+	sort       string // Sort mode used for this entry — different sorts cache separately
+	extSetsKey string // Hash of (imageExts + videoExts) at scan time; if the Gallery's
+	//               ext sets change, the cache is invalidated (otherwise
+	//               the Gallery would re-classify files but the cached
+	//               FileInfo would still have the OLD Kind).
 }
 
 // NewScanCache returns a cache with the given TTL. A TTL of 1 minute
@@ -46,7 +52,12 @@ func NewScanCache(ttl time.Duration) *ScanCache {
 // Get returns the cached []FileInfo for dir, or runs a fresh scan if
 // the cache is empty/expired/stale. The sortMode is part of the cache
 // key — sorting by name vs mtime gives different results.
-func (c *ScanCache) Get(dir, sortMode string) ([]FileInfo, error) {
+//
+// imageExts and videoExts are the Gallery's configured extension
+// sets (used by Scanner.Classify to decide KindImage vs KindVideo vs
+// KindOther). They are part of the cache key because a Gallery
+// reconfigured to recognise a new extension should re-scan.
+func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool) ([]FileInfo, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -58,7 +69,8 @@ func (c *ScanCache) Get(dir, sortMode string) ([]FileInfo, error) {
 	c.mu.RLock()
 	entry, ok := c.items[dir]
 	c.mu.RUnlock()
-	if ok && entry.sort == sortMode && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
+	extKey := extSetsKey(imageExts, videoExts)
+	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
 		// Return a copy so callers can't mutate the cached slice.
 		out := make([]FileInfo, len(entry.files))
 		copy(out, entry.files)
@@ -70,25 +82,54 @@ func (c *ScanCache) Get(dir, sortMode string) ([]FileInfo, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	entry, ok = c.items[dir]
-	if ok && entry.sort == sortMode && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
+	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
 		out := make([]FileInfo, len(entry.files))
 		copy(out, entry.files)
 		return out, nil
 	}
 
-	scanner := &Scanner{Root: dir, Sort: sortMode}
+	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts}
 	files, err := scanner.Scan()
 	if err != nil {
 		return nil, err
 	}
 	c.items[dir] = scanCacheEntry{
-		files:    files,
-		dirMtime: dirMtime,
-		expires:  now.Add(c.ttl),
-		sort:     sortMode,
+		files:      files,
+		dirMtime:   dirMtime,
+		expires:    now.Add(c.ttl),
+		sort:       sortMode,
+		extSetsKey: extKey,
 	}
 	// Return a copy of the slice we just stored (so callers can't mutate cache).
 	out := make([]FileInfo, len(files))
 	copy(out, files)
 	return out, nil
+}
+
+// extSetsKey returns a short string that uniquely identifies the
+// pair of extension sets (imageExts + videoExts). Used as part
+// of the scan cache key so a Gallery reconfigured to recognise
+// new extensions invalidates its cached scans (otherwise the
+// Gallery would re-classify files but the cached FileInfo entries
+// would still have the OLD Kind).
+//
+// The key is a simple concatenation of the sorted extension
+// lists — not a cryptographic hash, just a string-compare-
+// equality. Two galleries with the same image+video sets get the
+// same key (which is what we want: they CAN share a cache entry).
+//
+// Cheap to compute (one sort + one string concat per cache lookup)
+// and cheap to compare (one string compare).
+func extSetsKey(imageExts, videoExts map[string]bool) string {
+	imgKeys := make([]string, 0, len(imageExts))
+	for k := range imageExts {
+		imgKeys = append(imgKeys, k)
+	}
+	sort.Strings(imgKeys)
+	vidKeys := make([]string, 0, len(videoExts))
+	for k := range videoExts {
+		vidKeys = append(vidKeys, k)
+	}
+	sort.Strings(vidKeys)
+	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",")
 }
