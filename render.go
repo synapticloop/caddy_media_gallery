@@ -1758,6 +1758,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      breadcrumb to separate it from the sort-bar below. */
   border-bottom: 1px solid var(--border);
 }
+/* Per user request 2026-06-20: the FIRST chevron has
+   margin-right: 0 (set via :first-child), so its right-
+   pointing tip is fully visible. Subsequent chevrons have
+   margin-right: -6px to overlap with the next one (creating
+   the "ribbon" effect). The text is padded on the right so it
+   doesn't crowd the chevron tip. */
 .breadcrumb-link {
   display: inline-flex;
   align-items: center;
@@ -1779,20 +1785,32 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: background 0.12s, color 0.12s;
   border: 1px solid var(--border);
 }
+/* Per user request 2026-06-20: the first chevron has no
+   left overlap (it's the start of the breadcrumb), so we
+   reset its margin-right to 0 so its right-pointing tip is
+   fully visible. */
+.breadcrumb-link:first-child {
+  margin-right: 0;
+}
 .breadcrumb-link:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
+/* Per user request 2026-06-20: the current chevron uses a
+   softer colour (--border-strong + --fg) instead of the
+   almost-black --active-bg that was too dark to read.
+   --border-strong is #d0d4d6 in light mode (#444444 in dark
+   mode), which gives a medium-grey "you are here" indicator
+   that's visible but not jarring. The text uses --fg for
+   readability in both modes. */
 .breadcrumb-current {
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 1.3rem 0.3rem 0.75rem;
-  background: var(--active-bg);
-  color: var(--active-fg);
+  background: var(--border-strong);
+  color: var(--fg);
   font-weight: 500;
-  /* Same chevron shape as the links but with the active
-     color scheme (matches the active sort button + active
-     pagination button). */
+  /* Same chevron shape as the links */
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
 }
 .breadcrumb-sep {
@@ -2581,19 +2599,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <button type="submit" class="filter-apply">Apply</button>
       </div>
     </form>
-    {{end}}
-
-        {{if gt (len .Breadcrumb) 0}}
-    <nav class="breadcrumb" aria-label="Directory path">
-      {{range $i, $seg := .Breadcrumb}}
-        {{if eq $i (lastIndex $.Breadcrumb)}}
-          <span class="breadcrumb-current">{{$seg.Name}}</span>
-        {{else}}
-          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">›</span>
-        {{end}}
-      {{end}}
-    </nav>
     {{end}}
     </header>
 
