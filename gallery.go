@@ -42,6 +42,18 @@ type Gallery struct {
 	// Caddy's `root` directive (via Provision), or can be set in JSON
 	// config.
 	Root string `json:"root,omitempty"`
+	// PathPrefix is the URL mount prefix for the gallery
+	// (e.g. "images" if the gallery is mounted at /images/*
+	// in the Caddyfile). It is used by the breadcrumb so
+	// the first segment matches what the user sees in the
+	// URL. Defaults to filepath.Base(Root) if empty.
+	PathPrefix string `json:"path_prefix,omitempty"`
+
+	// pathPrefix is the resolved path prefix (after Provision
+	// applies the default of filepath.Base(Root) if PathPrefix
+	// is empty). This is what gets passed to RenderPage as the
+	// breadcrumb's root label.
+	pathPrefix string
 
 	// Sort is the field used to order the gallery. Valid values:
 	//   "mtime" (default) — newest first
@@ -207,6 +219,18 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// configured them via the Caddyfile, use their list;
 	// otherwise fall back to the built-in defaults. The resolved
 	// maps are passed to ScanCache.Get and used by Scanner.Classify.
+	// Resolve the path prefix. If PathPrefix is set in the
+	// Caddyfile, use it; otherwise default to the basename
+	// of the gallery's root directory. For example, if the
+	// Caddyfile mounts the gallery at /images/* with root
+	// /var/www/html/images, the default pathPrefix is "images".
+	// This is what gets passed to RenderPage as the breadcrumb's
+	// root label.
+	g.pathPrefix = g.PathPrefix
+	if g.pathPrefix == "" {
+		g.pathPrefix = filepath.Base(g.Root)
+	}
+
 	g.imageExtsMap = defaultImageExts
 	if len(g.ImageExts) > 0 {
 		g.imageExtsMap = extsToMap(g.ImageExts)
@@ -369,7 +393,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.pathPrefix)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -510,6 +534,21 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				g.VideoExts = nil
 				for d.NextArg() {
 					g.VideoExts = append(g.VideoExts, d.Val())
+				}
+			case "path_prefix":
+				// URL mount prefix for the gallery, used by the
+				// breadcrumb. Example: if the gallery is mounted
+				// at /images/* in the Caddyfile, set
+				//   path_prefix images
+				// so the breadcrumb's first segment is "images".
+				// If empty (default), the breadcrumb uses
+				// filepath.Base(Root) as the first segment.
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				g.PathPrefix = d.Val()
+				if d.NextArg() {
+					return d.ArgErr()
 				}
 			}
 		}

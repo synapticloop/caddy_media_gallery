@@ -217,42 +217,68 @@ type BreadcrumbSegment struct {
 //	                                {Name: "photos", Href: "./photos/"},
 //	                                {Name: "2024",   Href: "./photos/2024/"},
 //	                                {Name: "maui",   Href: "./photos/2024/maui/"}]
-func computeBreadcrumb(relPath, title, pathPrefix string) []BreadcrumbSegment {
+// computeBreadcrumb returns the breadcrumb segments for the
+// current gallery view. The first segment is the gallery's
+// URL mount (passed in as breadcrumbRoot, e.g. "images" for a
+// gallery mounted at /images/*). Each subsequent segment is
+// one path component deeper; the last is the current directory
+// (rendered as plain text, not a link).
+//
+// The relPath is the URL path AFTER the leading slash, with
+// the trailing slash preserved. Caddy's `handle_path /images/*`
+// strips the mount prefix BEFORE the handler runs, so relPath
+// no longer contains the mount segment. The breadcrumbRoot
+// argument is the only way the breadcrumb knows what the mount
+// prefix is — that's why RenderPage passes it explicitly.
+//
+// Per user request 2026-06-20: the previous version used
+// the FIRST segment of relPath as the root, but that was
+// wrong because the mount prefix is stripped before
+// relPath is computed. The new version uses the breadcrumbRoot
+// argument (which is the basename of the gallery's filesystem
+// root, e.g. "images" for /var/www/html/images) so the
+// breadcrumb's first segment matches what the user sees in
+// the URL.
+//
+// Examples:
+//
+//	breadcrumbRoot="images", relPath ""
+//	                          -> [{Name: "images", Href: "./"}]
+//	breadcrumbRoot="images", relPath "photos/"
+//	                          -> [{Name: "images", Href: "./"},
+//	                              {Name: "photos", Href: "./photos/"}]
+//	breadcrumbRoot="images", relPath "media_gallery/animals/"
+//	                          -> [{Name: "images", Href: "./"},
+//	                              {Name: "media_gallery", Href: "./media_gallery/"},
+//	                              {Name: "animals", Href: "./media_gallery/animals/"}]
+func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot string) []BreadcrumbSegment {
+	// Root: the breadcrumbRoot argument (the gallery's URL
+	// mount prefix, e.g. "images"). If it's empty for some
+	// reason, fall back to the title.
+	rootName := breadcrumbRoot
+	if rootName == "" {
+		rootName = title
+	}
 	out := []BreadcrumbSegment{}
+	out = append(out, BreadcrumbSegment{Name: rootName, Href: pathPrefix})
 	if relPath == "" {
-		// No subdirs; the gallery is at the root. Use the
-		// title (passed in from RenderPage) as the root label.
-		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
 		return out
 	}
 	// Strip trailing slash for splitting.
 	trimmed := strings.TrimSuffix(relPath, "/")
 	if trimmed == "" {
-		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
 		return out
 	}
 	parts := strings.Split(trimmed, "/")
 	if len(parts) == 0 {
-		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
 		return out
 	}
-	// Root: the FIRST segment of relPath (e.g. "images" for
-	// /images/photos/animals/). Href is pathPrefix (which is
-	// typically "./" — the relative root of the gallery).
-	out = append(out, BreadcrumbSegment{Name: parts[0], Href: pathPrefix})
-	// Remaining segments: build cumulative Href RELATIVE to
-	// the gallery root (not absolute URL path). For example,
-	// with relPath "images/photos/2024/", the root is "images"
-	// and the cumulative path after the root is "photos/2024" —
-	// so the Hrefs are "./photos/", "./photos/2024/", etc.
-	// (pathPrefix is "./" by convention, which puts the segments
-	// at the gallery root, not at the gallery's mount point
-	// in the URL).
+	// Build cumulative Href RELATIVE to the gallery root.
+	// For example, with relPath "media_gallery/animals/",
+	// the segments are "media_gallery" and "animals" with
+	// Hrefs "./media_gallery/" and "./media_gallery/animals/".
 	acc := ""
-	for i, p := range parts {
-		if i == 0 {
-			continue // first segment is the root, already added
-		}
+	for _, p := range parts {
 		if p == "" {
 			continue
 		}
@@ -836,8 +862,10 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // number of image entries per page. Pass 0 for the default of 50.
 // `imageExts` and `videoExts` are the Gallery's configured
 // extension sets (used to build the filter UI's sub-type
-// groups: Images / Videos / Other).
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool) (string, error) {
+// groups: Images / Videos / Other). `breadcrumbRoot` is the
+// gallery's URL mount prefix (e.g. "images" for /images/*) —
+// used as the first segment of the breadcrumb.
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -962,7 +990,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		HasNext:            page < totalPages,
 		PageNumbers:        pageNumbers(page, totalPages),
 		Sort:               sortSpec,
-		Breadcrumb:         computeBreadcrumb(relPath, title, pathPrefix),
+		Breadcrumb:         computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot),
 		TypeFilter:         typeFilter,
 		IsTypeFilterActive: typeFilterActive(query),
 		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
@@ -1692,11 +1720,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   font-size: 0.85rem;
-  /* Per user request 2026-06-20: padding-left reduced from
-     2rem to 0.5rem to match the filter form (the two rows
-     are now visually aligned at the same left edge). */
-  padding: 0.25rem 0.5rem 0.5rem;
+  /* Per user request 2026-06-20: padding now matches .sort-bar
+     (0.75rem 0 0.75rem 0 — no horizontal padding). All three
+     header rows align to the page edge at the same left. */
+  padding: 0.75rem 0;
   color: var(--fg-faint);
+  /* Per user request 2026-06-20: a horizontal line under the
+     breadcrumb to separate it from the sort-bar below. */
+  border-bottom: 1px solid var(--border);
+}
+.breadcrumb-sep {
+  /* Per user request 2026-06-20: chevron separator instead of
+     a slash. The Unicode "›" character (single right-pointing
+     angle quotation mark) reads as a chevron and is the
+     standard "next level" symbol in file browsers. */
+  color: var(--border-strong);
+  user-select: none;
+  font-size: 1rem;
+  line-height: 1;
 }
 .breadcrumb-link {
   color: var(--fg-muted);
@@ -1711,10 +1752,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .breadcrumb-current {
   color: var(--fg);
   font-weight: 500;
-}
-.breadcrumb-sep {
-  color: var(--border);
-  user-select: none;
 }
 
 /* Per user request 2026-06-20 (Phase 4): the file-type
@@ -1734,14 +1771,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    accent color for active. The Apply button is a primary
    CTA (slightly more prominent than the pills). */
 .filter-form {
-  /* Per user request 2026-06-20: padding-left
-     reduced from 2rem to 0.5rem. The filter row was indented
-     like the breadcrumb/sort-bar, which made it visually
-     disconnected from the dropdown contents (the dropdowns
-     are at the left edge of the page). Now the filter row
-     starts close to the page edge, with the dropdowns
-     opening to the right of the trigger — better alignment. */
-  padding: 0.25rem 0.5rem 0.75rem;
+  /* Per user request 2026-06-20: padding now matches .sort-bar
+     (0.75rem 0 0.75rem 0 — no horizontal padding). All three
+     header rows (filter, breadcrumb, sort-bar) now have the
+     same vertical padding and align to the page edge, so the
+     left edge of the row aligns with the rest of the page
+     content. */
+  padding: 0.75rem 0 0.75rem 0;
 }
 .filter-row {
   display: flex;
@@ -1852,22 +1888,36 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
+/* Per user request 2026-06-20: the Apply button uses the
+   --active-bg / --active-fg / --active-border colour scheme,
+   which is the OPPOSITE mode's page colour (light mode =
+   dark with light text; dark mode = light with dark text).
+   This matches the active sort button and active pagination
+   button — the three "primary action" elements across the
+   gallery share the same visual treatment, in both light
+   and dark mode.
+
+   The previous version used --accent (blue) which stood out
+   but didn't match the rest of the action buttons. Now the
+   Apply button looks like the other active buttons, which
+   is consistent and works in both colour schemes. */
 .filter-apply {
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.85rem;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--active-border);
   border-radius: 4px;
-  background: var(--accent);
-  color: var(--bg-card);
+  background: var(--active-bg);
+  color: var(--active-fg);
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .filter-apply:hover {
   background: var(--bg-hover);
-  color: var(--accent);
+  color: var(--active-fg);
+  border-color: var(--active-border);
 }
 
 
@@ -2451,7 +2501,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
           <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">/</span>
+          <span class="breadcrumb-sep" aria-hidden="true">›</span>
         {{end}}
       {{end}}
     </nav>
