@@ -1731,20 +1731,79 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    convention (rather than the breadcrumb-arrow ">" which
    would compete visually with the sort buttons). The
    whole row wraps on narrow viewports (long path names). */
+/* Per user request 2026-06-20: the breadcrumb is now
+   rendered as a series of chevron-shaped pills (each segment
+   has a pointed right edge, like the "next" arrow in a slide
+   deck). The chevrons use the gallery's existing color tokens
+   (--bg-card for inactive segments, --active-bg/--active-fg
+   for the current segment) so they match the rest of the UI
+   in both light and dark mode.
+
+   The chevron shape is made with clip-path: each pill has a
+   pointed right edge (12px protrusion) and the next pill
+   overlaps it by ~6px so the segments look like a connected
+   ribbon rather than separate buttons. The whole row is
+   centered for the "navigation flow" feel. */
 .breadcrumb {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
+  gap: 0;
   font-size: 0.85rem;
   /* Per user request 2026-06-20: padding now matches .sort-bar
      (0.75rem 0 0.75rem 0 — no horizontal padding). All three
      header rows align to the page edge at the same left. */
   padding: 0.75rem 0;
-  color: var(--fg-faint);
   /* Per user request 2026-06-20: a horizontal line under the
      breadcrumb to separate it from the sort-bar below. */
   border-bottom: 1px solid var(--border);
+}
+.breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+  /* 14px right padding + ~14px extra for the chevron point
+     so the text doesn't crowd the right edge */
+  padding: 0.3rem 1.3rem 0.3rem 0.75rem;
+  margin-right: -6px; /* overlap with the next chevron */
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  text-decoration: none;
+  /* Chevron shape: pointed right edge (12px protrusion).
+     The 5 vertices are:
+       0 0              - top-left
+       calc(100% - 12px) 0  - top-right (where the point starts)
+       100% 50%         - right tip
+       calc(100% - 12px) 100% - bottom-right
+       0 100%           - bottom-left */
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+  transition: background 0.12s, color 0.12s;
+  border: 1px solid var(--border);
+}
+.breadcrumb-link:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.breadcrumb-current {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 1.3rem 0.3rem 0.75rem;
+  background: var(--active-bg);
+  color: var(--active-fg);
+  font-weight: 500;
+  /* Same chevron shape as the links but with the active
+     color scheme (matches the active sort button + active
+     pagination button). */
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+}
+.breadcrumb-sep {
+  /* Per user request 2026-06-20: the chevron shape IS the
+     separator (no separate separator element needed). The
+     clip-path on .breadcrumb-link + .breadcrumb-current
+     creates the chevron points, and the overlap (margin-right:
+     -6px) makes the segments flow into each other. We keep
+     .breadcrumb-sep as a no-op for backwards-compatibility
+     (the template still renders it but it's invisible). */
+  display: none;
 }
 .breadcrumb-sep {
   /* Per user request 2026-06-20: chevron separator instead of
@@ -2441,7 +2500,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        last (current dir, plain text). The filter (?type=)
        is preserved across breadcrumb clicks so the user
        doesn't lose their filter state when navigating up. */}}
-    {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
+    {{if gt (len .Breadcrumb) 0}}
+    <nav class="breadcrumb" aria-label="Directory path">
+      {{range $i, $seg := .Breadcrumb}}
+        {{if eq $i (lastIndex $.Breadcrumb)}}
+          <span class="breadcrumb-current">{{$seg.Name}}</span>
+        {{else}}
+          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <span class="breadcrumb-sep" aria-hidden="true">›</span>
+        {{end}}
+      {{end}}
+    </nav>
+    {{end}}
+
+        {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       <div class="filter-row">
         <span class="filter-label">Filter</span>
