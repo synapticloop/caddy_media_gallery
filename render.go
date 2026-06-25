@@ -1770,7 +1770,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-card);
   color: var(--fg-muted);
   text-decoration: none;
-  border: 1px solid var(--border);
+  /* Per user request 2026-06-20: border-bottom removed.
+     The 4-sided border made the link look too heavy and
+     competed with the current segment's chevron shape. Now
+     only border-top + left + right, with the bottom edge
+     "floating" (no border, so it visually merges with the
+     background). */
+  border-top: 1px solid var(--border);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   border-radius: 3px;
   transition: background 0.12s, color 0.12s;
 }
@@ -2509,7 +2517,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
           <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span>
         {{end}}
       {{end}}
     </nav>

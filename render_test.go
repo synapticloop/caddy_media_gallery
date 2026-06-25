@@ -3372,10 +3372,6 @@ func TestRenderPage_Breadcrumb(t *testing.T) {
 	if !strings.Contains(html, `class="breadcrumb-current"`) {
 		t.Error("expected the current segment to have class breadcrumb-current")
 	}
-	// The separator should be present
-	if !strings.Contains(html, `class="breadcrumb-sep"`) {
-		t.Error("expected breadcrumb separator in HTML")
-	}
 }
 
 // TestRenderPage_Breadcrumb_PreservesFilter verifies that the

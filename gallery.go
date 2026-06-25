@@ -49,6 +49,12 @@ type Gallery struct {
 	// the first segment matches what the user sees in the
 	// URL. Defaults to filepath.Base(Root) if empty.
 	PathPrefix string `json:"path_prefix,omitempty"`
+	// RootName is the operator-configurable display name for
+	// the first breadcrumb segment (the gallery's root). Set
+	// in the Caddyfile via `root_name "My Gallery"`. If empty,
+	// the resolved rootName (set in Provision) defaults to
+	// "media root" — a generic name that works for any gallery.
+	RootName string `json:"root_name,omitempty"`
 
 	// pathPrefix is the resolved path prefix (after Provision
 	// applies the default of filepath.Base(Root) if PathPrefix
@@ -400,7 +406,12 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, filepath.Base(g.Root), g.PathPrefix)
+	// TEMP DEBUG: log breadcrumb inputs to /tmp/breadcrumb-debug.txt
+	if dbg, _ := os.Create("/tmp/breadcrumb-debug.txt"); dbg != nil {
+		fmt.Fprintf(dbg, "BREADCRUMB DEBUG: relPath=%q title=%q g.Root=%q g.PathPrefix=%q g.rootName=%q g.RootName=%q\n", relPath, title, g.Root, g.PathPrefix, g.rootName, g.RootName)
+		dbg.Close()
+	}
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
