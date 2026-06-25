@@ -82,6 +82,24 @@ type PageData struct {
 
 	// Sort
 	Sort SortSpec
+
+	// TypeFilter is the parsed ?type= query param (set of
+	// file extensions to show). nil = no filter (show all
+	// files). An empty (non-nil) map = "show nothing"
+	// (the filter UI shows the empty state). Use
+	// IsTypeFilterActive to distinguish "no filter" from
+	// "filter that selects nothing" in the UI.
+	TypeFilter map[string]bool
+
+	// IsTypeFilterActive is true if the URL has a non-empty
+	// ?type= query param. This is the source of truth for
+	// whether the filter UI should show the "filtered" state.
+	IsTypeFilterActive bool
+
+	// TypeFilterQuery is the raw ?type= value (or "" if no
+	// filter). Pass through to the filter UI's form action
+	// so the user can re-submit their selection.
+	TypeFilterQuery string
 }
 
 // FileView is the template-friendly representation of a single
@@ -422,6 +440,80 @@ func pageFromQuery(q url.Values) int {
 	return page
 }
 
+// parseTypeFilter returns the set of file extensions to show,
+// parsed from the ?type= query param. The value is a comma-
+// separated list of extensions (e.g. "jpg,png" or "mp4"). Each
+// entry is normalised: trimmed, lowercased, and given a
+// leading dot if missing ("jpg" -> ".jpg"). Empty entries
+// (from stray double commas) are silently skipped.
+//
+// Returns nil when no filter is active (no ?type= param, or
+// the value is empty / whitespace). A nil return means
+// "show all files"; an empty-but-non-nil map (all entries
+// filtered out) means "show nothing" (the filter UI will show
+// the empty state).
+//
+// The returned map has no inherent meaning of "image" vs
+// "video" — it's just a set of extensions. Callers use it
+// with a []FileInfo to keep only files whose ext is in the
+// set. Kind-level filtering (image / video) is derived from
+// the file's Kind field, not from this set.
+func parseTypeFilter(q url.Values) map[string]bool {
+	raw := q.Get("type")
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make(map[string]bool, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		p = strings.ToLower(p)
+		if !strings.HasPrefix(p, ".") {
+			p = "." + p
+		}
+		out[p] = true
+	}
+	return out
+}
+
+// typeFilterActive returns true if the query has a ?type= param
+// that is non-empty (so a UI can show the "filtered" badge).
+// It's a separate helper from parseTypeFilter so the template
+// (or other UI code) can check the active state without
+// inspecting the parsed map.
+func typeFilterActive(q url.Values) bool {
+	return strings.TrimSpace(q.Get("type")) != ""
+}
+
+// applyTypeFilter returns a copy of files with only the entries
+// whose extension is in filter. If filter is nil, the original
+// slice is returned unchanged. Empty filter (non-nil but no
+// entries) returns an empty slice.
+//
+// The returned slice shares the underlying FileInfo structs
+// with the input — we don't deep-copy. (Callers don't mutate
+// the structs after this point, and the cache re-creates them
+// from disk each time anyway.)
+func applyTypeFilter(files []FileInfo, filter map[string]bool) []FileInfo {
+	if filter == nil {
+		return files
+	}
+	if len(filter) == 0 {
+		return files[:0]
+	}
+	out := make([]FileInfo, 0, len(files))
+	for _, f := range files {
+		ext := strings.ToLower(filepath.Ext(f.Name))
+		if filter[ext] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // parseIntDefault is a tiny strconv helper that returns the default
 // on parse failure.
 func parseIntDefault(s string, def int) (int, error) {
@@ -477,6 +569,15 @@ func parseIntDefault(s string, def int) (int, error) {
 func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
+
+	// Per user request 2026-06-20: apply the ?type= filter
+	// BEFORE splitFiles. Directories (KindDir) are NOT affected
+	// by the filter — a ?type=jpg filter should still show the
+	// user the directories they can navigate to. splitFiles
+	// operates on the Kind field, so directories pass through
+	// unchanged.
+	typeFilter := parseTypeFilter(query)
+	files = applyTypeFilter(files, typeFilter)
 
 	dirs, others, allImages := splitFiles(files)
 	sortFiles(allImages, sortSpec)
@@ -574,13 +675,16 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		// the "N files" label at the start of the meta line.
 		// Doing this in Go (vs in the template) avoids needing
 		// an `add` template function.
-		TotalFiles:        imageCount + videoCount + len(others),
-		TotalAllFilesSize: humanSize(totalAllBytes),
-		TotalPages:        totalPages,
-		HasPrev:           page > 1,
-		HasNext:           page < totalPages,
-		PageNumbers:       pageNumbers(page, totalPages),
-		Sort:              sortSpec,
+		TotalFiles:         imageCount + videoCount + len(others),
+		TotalAllFilesSize:  humanSize(totalAllBytes),
+		TotalPages:         totalPages,
+		HasPrev:            page > 1,
+		HasNext:            page < totalPages,
+		PageNumbers:        pageNumbers(page, totalPages),
+		Sort:               sortSpec,
+		TypeFilter:         typeFilter,
+		IsTypeFilterActive: typeFilterActive(query),
+		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
 	}
 
 	tmpl, err := loadTemplate(tmplName)

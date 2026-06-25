@@ -3044,3 +3044,185 @@ func TestRenderPage_Phase90ToggleNoAlignItems(t *testing.T) {
 		t.Errorf("expected .section-toggle to NOT have align-items (Phase 90: removed); rule: %q", rule)
 	}
 }
+
+// TestParseTypeFilter_EmptyAndNil verifies that:
+//   - no ?type= param => nil map
+//   - ?type= (empty) => nil map
+//   - ?type=   (whitespace) => nil map
+func TestParseTypeFilter_EmptyAndNil(t *testing.T) {
+	cases := []struct {
+		name  string
+		query url.Values
+	}{
+		{"no type param", url.Values{}},
+		{"empty type param", url.Values{"type": {""}}},
+		{"whitespace only", url.Values{"type": {"   "}}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := parseTypeFilter(c.query)
+			if got != nil {
+				t.Errorf("expected nil for %q, got %v", c.query.Get("type"), got)
+			}
+		})
+	}
+}
+
+// TestParseTypeFilter_Normalisation verifies the parser:
+//   - lowercase: "JPG" -> ".jpg"
+//   - dot prefix added: "jpg" -> ".jpg", ".jpg" -> ".jpg"
+//   - whitespace trimmed: " jpg " -> ".jpg"
+//   - empty entries skipped: ",,jpg,," -> {".jpg"}
+//   - single entry: "jpg" -> {".jpg"}
+//   - multiple entries: "jpg,png" -> {".jpg":true, ".png":true}
+func TestParseTypeFilter_Normalisation(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  map[string]bool
+	}{
+		{"single, no dot, lowercase", "jpg", map[string]bool{".jpg": true}},
+		{"single, with dot", ".jpg", map[string]bool{".jpg": true}},
+		{"single, uppercase", "JPG", map[string]bool{".jpg": true}},
+		{"single, mixed case, with dot", ".HeIc", map[string]bool{".heic": true}},
+		{"single, whitespace", "  jpg  ", map[string]bool{".jpg": true}},
+		{"multiple", "jpg,png", map[string]bool{".jpg": true, ".png": true}},
+		{"multiple, mixed", "JPG, .png, MP4", map[string]bool{".jpg": true, ".png": true, ".mp4": true}},
+		{"empty entries skipped", ",,jpg,,", map[string]bool{".jpg": true}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := parseTypeFilter(url.Values{"type": {c.input}})
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("input %q: got %v, want %v", c.input, got, c.want)
+			}
+		})
+	}
+}
+
+// TestTypeFilterActive verifies the boolean predicate: true if
+// the URL has a non-empty ?type= value, false otherwise.
+func TestTypeFilterActive(t *testing.T) {
+	cases := []struct {
+		name  string
+		query url.Values
+		want  bool
+	}{
+		{"no param", url.Values{}, false},
+		{"empty", url.Values{"type": {""}}, false},
+		{"whitespace", url.Values{"type": {"  "}}, false},
+		{"value", url.Values{"type": {"jpg"}}, true},
+		{"value with whitespace", url.Values{"type": {"  jpg  "}}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := typeFilterActive(c.query); got != c.want {
+				t.Errorf("query=%v: got %v, want %v", c.query, got, c.want)
+			}
+		})
+	}
+}
+
+// TestApplyTypeFilter verifies the filter's effect on a file list:
+//   - nil filter = pass-through
+//   - empty filter (non-nil, no entries) = return empty
+//   - non-empty filter = keep only matching
+//   - case-insensitive (files may have .JPG ext; filter .jpg)
+func TestApplyTypeFilter(t *testing.T) {
+	files := []FileInfo{
+		{Name: "a.jpg", Kind: KindImage},
+		{Name: "b.JPG", Kind: KindImage},
+		{Name: "c.png", Kind: KindImage},
+		{Name: "d.mp4", Kind: KindVideo},
+		{Name: "e.txt", Kind: KindOther},
+		{Name: "f.tar.gz", Kind: KindOther},
+	}
+
+	t.Run("nil filter = pass-through", func(t *testing.T) {
+		got := applyTypeFilter(files, nil)
+		if len(got) != len(files) {
+			t.Errorf("expected %d files, got %d", len(files), len(got))
+		}
+	})
+
+	t.Run("empty filter = no files", func(t *testing.T) {
+		got := applyTypeFilter(files, map[string]bool{})
+		if len(got) != 0 {
+			t.Errorf("expected 0 files, got %d", len(got))
+		}
+	})
+
+	t.Run("filter to .jpg only (case-insensitive)", func(t *testing.T) {
+		got := applyTypeFilter(files, map[string]bool{".jpg": true})
+		if len(got) != 2 {
+			t.Errorf("expected 2 files (a.jpg, b.JPG), got %d", len(got))
+		}
+		for _, f := range got {
+			if f.Name != "a.jpg" && f.Name != "b.JPG" {
+				t.Errorf("unexpected file: %q", f.Name)
+			}
+		}
+	})
+
+	t.Run("filter to .jpg + .png", func(t *testing.T) {
+		got := applyTypeFilter(files, map[string]bool{".jpg": true, ".png": true})
+		if len(got) != 3 {
+			t.Errorf("expected 3 files, got %d", len(got))
+		}
+	})
+
+	t.Run("filter to .gz (multi-dot files)", func(t *testing.T) {
+		// filepath.Ext returns ".gz" for "f.tar.gz"
+		got := applyTypeFilter(files, map[string]bool{".gz": true})
+		if len(got) != 1 || got[0].Name != "f.tar.gz" {
+			t.Errorf("expected f.tar.gz, got %+v", got)
+		}
+	})
+}
+
+// TestRenderPage_TypeFilter verifies the server-side filter
+// works end-to-end: ?type=jpg in the URL shows only the jpg
+// files, and the rendered HTML reflects the filter state.
+func TestRenderPage_TypeFilter(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha.jpg", ModTime: 100, Size: 1000, Kind: KindImage},
+		{Name: "beta.png", ModTime: 90, Size: 2000, Kind: KindImage},
+		{Name: "gamma.mp4", ModTime: 80, Size: 3000, Kind: KindVideo},
+		{Name: "notes.txt", ModTime: 70, Size: 100, Kind: KindOther},
+	}
+
+	// No filter — all files should appear
+	all, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, url.Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(all, "alpha.jpg") || !strings.Contains(all, "beta.png") {
+		t.Errorf("no-filter render should include all files")
+	}
+	if !strings.Contains(all, "gamma.mp4") {
+		t.Errorf("no-filter render should include gamma.mp4")
+	}
+	if !strings.Contains(all, "notes.txt") {
+		t.Errorf("no-filter render should include notes.txt")
+	}
+
+	// Filter to images only
+	img, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, url.Values{
+		"type": {"jpg,png"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(img, "alpha.jpg") {
+		t.Errorf("filtered render should include alpha.jpg")
+	}
+	if !strings.Contains(img, "beta.png") {
+		t.Errorf("filtered render should include beta.png")
+	}
+	if strings.Contains(img, "gamma.mp4") {
+		t.Errorf("filtered render should NOT include gamma.mp4 (not in filter)")
+	}
+	if strings.Contains(img, "notes.txt") {
+		t.Errorf("filtered render should NOT include notes.txt (other-files are also filtered out)")
+	}
+}
