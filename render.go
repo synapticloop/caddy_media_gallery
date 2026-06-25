@@ -1758,70 +1758,58 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      breadcrumb to separate it from the sort-bar below. */
   border-bottom: 1px solid var(--border);
 }
-/* Per user request 2026-06-20: the FIRST chevron has
-   margin-right: 0 (set via :first-child), so its right-
-   pointing tip is fully visible. Subsequent chevrons have
-   margin-right: -6px to overlap with the next one (creating
-   the "ribbon" effect). The text is padded on the right so it
-   doesn't crowd the chevron tip. */
+/* Per user request 2026-06-20: the breadcrumb is now
+   rectangular (no chevron shape). All segments are simple
+   bordered boxes with the name + a » separator after each.
+   Only the CURRENT (last) segment gets the chevron shape +
+   softer grey colour to stand out as "you are here". The
+   separator is the standard » (right-pointing double angle
+   quotation mark) shown BETWEEN segments, not as part of
+   the segment itself. */
 .breadcrumb-link {
   display: inline-flex;
   align-items: center;
-  /* 14px right padding + ~14px extra for the chevron point
-     so the text doesn't crowd the right edge */
-  padding: 0.3rem 1.3rem 0.3rem 0.75rem;
-  margin-right: -6px; /* overlap with the next chevron */
+  padding: 0.25rem 0.75rem;
+  margin-right: 0.25rem;
   background: var(--bg-card);
   color: var(--fg-muted);
   text-decoration: none;
-  /* Chevron shape: pointed right edge (12px protrusion).
-     The 5 vertices are:
-       0 0              - top-left
-       calc(100% - 12px) 0  - top-right (where the point starts)
-       100% 50%         - right tip
-       calc(100% - 12px) 100% - bottom-right
-       0 100%           - bottom-left */
-  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-  transition: background 0.12s, color 0.12s;
   border: 1px solid var(--border);
-}
-/* Per user request 2026-06-20: the first chevron has no
-   left overlap (it's the start of the breadcrumb), so we
-   reset its margin-right to 0 so its right-pointing tip is
-   fully visible. */
-.breadcrumb-link:first-child {
-  margin-right: 0;
+  border-radius: 3px;
+  transition: background 0.12s, color 0.12s;
 }
 .breadcrumb-link:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
-/* Per user request 2026-06-20: the current chevron uses a
-   softer colour (--border-strong + --fg) instead of the
-   almost-black --active-bg that was too dark to read.
-   --border-strong is #d0d4d6 in light mode (#444444 in dark
-   mode), which gives a medium-grey "you are here" indicator
-   that's visible but not jarring. The text uses --fg for
-   readability in both modes. */
+/* Per user request 2026-06-20: the » separator sits between
+   segments. It's the standard HTML entity &raquo; (= » =
+   right-pointing double angle quotation mark), shown with
+   user-select: none so it can't be selected along with text.
+   Same colour as the border-strong token so it visually
+   connects to the segments but doesn't compete with the
+   text. */
+.breadcrumb-sep {
+  color: var(--border-strong);
+  user-select: none;
+  font-size: 0.95rem;
+  line-height: 1;
+  margin-right: 0.25rem;
+}
+/* Per user request 2026-06-20: the CURRENT (last) segment
+   gets the chevron shape and the softer colour scheme. It's
+   the visual "you are here" indicator. --border-strong (medium
+   grey) + --fg (readable text) in both light and dark mode. */
 .breadcrumb-current {
   display: inline-flex;
   align-items: center;
-  padding: 0.3rem 1.3rem 0.3rem 0.75rem;
+  padding: 0.25rem 0.75rem;
   background: var(--border-strong);
   color: var(--fg);
   font-weight: 500;
-  /* Same chevron shape as the links */
+  /* Chevron shape: pointed right edge (12px protrusion).
+     Keeps the chevron on the CURRENT segment only, not all. */
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
-}
-.breadcrumb-sep {
-  /* Per user request 2026-06-20: the chevron shape IS the
-     separator (no separate separator element needed). The
-     clip-path on .breadcrumb-link + .breadcrumb-current
-     creates the chevron points, and the overlap (margin-right:
-     -6px) makes the segments flow into each other. We keep
-     .breadcrumb-sep as a no-op for backwards-compatibility
-     (the template still renders it but it's invisible). */
-  display: none;
 }
 .breadcrumb-sep {
   /* Per user request 2026-06-20: chevron separator instead of
@@ -2525,7 +2513,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
           <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">›</span>
+          <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span>
         {{end}}
       {{end}}
     </nav>
