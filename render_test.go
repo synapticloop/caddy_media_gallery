@@ -3240,6 +3240,7 @@ func TestComputeBreadcrumb(t *testing.T) {
 		pathPrefix string
 		want       []BreadcrumbSegment
 	}{
+		// relPath == "" uses the title as the root (no other segments).
 		{
 			name:       "gallery root (no subdir)",
 			relPath:    "",
@@ -3247,10 +3248,20 @@ func TestComputeBreadcrumb(t *testing.T) {
 			pathPrefix: "./",
 			want:       []BreadcrumbSegment{{Name: "images", Href: "./"}},
 		},
+		// relPath == "/" (just the leading slash) also uses the title.
+		{
+			name:       "root with trailing slash only",
+			relPath:    "/",
+			title:      "images",
+			pathPrefix: "./",
+			want:       []BreadcrumbSegment{{Name: "images", Href: "./"}},
+		},
+		// When relPath is non-empty, the FIRST segment of relPath
+		// is the root (NOT the title). The title is unused.
 		{
 			name:       "one level deep",
-			relPath:    "photos/",
-			title:      "images",
+			relPath:    "images/photos/",
+			title:      "title-not-used",
 			pathPrefix: "./",
 			want: []BreadcrumbSegment{
 				{Name: "images", Href: "./"},
@@ -3259,8 +3270,8 @@ func TestComputeBreadcrumb(t *testing.T) {
 		},
 		{
 			name:       "three levels deep",
-			relPath:    "photos/2024/maui/",
-			title:      "images",
+			relPath:    "images/photos/2024/maui/",
+			title:      "title-not-used",
 			pathPrefix: "./",
 			want: []BreadcrumbSegment{
 				{Name: "images", Href: "./"},
@@ -3269,22 +3280,18 @@ func TestComputeBreadcrumb(t *testing.T) {
 				{Name: "maui", Href: "./photos/2024/maui/"},
 			},
 		},
+		// Real-world case the user reported: relPath "images/photos/"
+		// → breadcrumb should be "images / photos" (NOT "photos / images
+		// / photos" which the old logic produced because it used the
+		// title as the root).
 		{
-			name:       "root with trailing slash only",
-			relPath:    "/",
-			title:      "images",
-			pathPrefix: "./",
-			want:       []BreadcrumbSegment{{Name: "images", Href: "./"}},
-		},
-		{
-			name:       "custom title (gallery at non-standard path)",
-			relPath:    "albums/family/",
-			title:      "Photo Albums",
+			name:       "user-reported case (URL /images/photos/)",
+			relPath:    "images/photos/",
+			title:      "photos",
 			pathPrefix: "./",
 			want: []BreadcrumbSegment{
-				{Name: "Photo Albums", Href: "./"},
-				{Name: "albums", Href: "./albums/"},
-				{Name: "family", Href: "./albums/family/"},
+				{Name: "images", Href: "./"},
+				{Name: "photos", Href: "./photos/"},
 			},
 		},
 	}
@@ -3338,9 +3345,9 @@ func TestRenderPage_Breadcrumb(t *testing.T) {
 // the filter should be carried over to the new URL.)
 func TestRenderPage_Breadcrumb_PreservesFilter(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
-	html, err := RenderPage("images", "./", "./_thumbs/", "photos/", "", false, false, 0, files, url.Values{
+	html, err := RenderPage("title-not-used", "./", "./_thumbs/", "images/photos/", "", false, false, 0, files, url.Values{
 		"type": {"jpg,png"},
-	}, nil, nil)
+	}, defaultImageExts, defaultVideoExts)
 	if err != nil {
 		t.Fatal(err)
 	}

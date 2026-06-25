@@ -184,24 +184,75 @@ type BreadcrumbSegment struct {
 // The first segment's Name comes from the title arg (the
 // gallery's root title, e.g. "images" for /images/ or the
 // basename of the root dir for top-level galleries).
+// computeBreadcrumb returns the breadcrumb segments for the
+// current gallery view. The first segment is the GALLERY ROOT
+// (the first path component of relPath — e.g. "images" for a
+// gallery mounted at /images/*). Each subsequent segment is one
+// path component deeper; the last is the current directory
+// (rendered as plain text, not a link).
+//
+// The relPath is the URL path after the leading slash, with
+// the trailing slash preserved. We split on "/" and:
+//   - If relPath is empty, return just the title (the gallery
+//     is at the root with no subdirs).
+//   - Otherwise, use the FIRST segment of relPath as the root
+//     name (this is the gallery's mount point in the URL —
+//     e.g. "images" for /images/animals/). The remaining
+//     segments become the breadcrumb path.
+//
+// Per user request 2026-06-20: the previous version used
+// `title` (the current dir's basename) as the root name, which
+// produced wrong breadcrumb sequences like "animals / images
+// / media_gallery / animals" (first and last were the same).
+// Using the first relPath segment as the root fixes this.
+//
+// Examples:
+//
+//	relPath ""                  -> [{Name: <title>, Href: "./"}]
+//	relPath "images/"           -> [{Name: "images", Href: "./"}]
+//	relPath "images/photos/"   -> [{Name: "images", Href: "./"},
+//	                                {Name: "photos", Href: "./photos/"}]
+//	relPath "images/photos/2024/maui/"
+//	                            -> [{Name: "images", Href: "./"},
+//	                                {Name: "photos", Href: "./photos/"},
+//	                                {Name: "2024",   Href: "./photos/2024/"},
+//	                                {Name: "maui",   Href: "./photos/2024/maui/"}]
 func computeBreadcrumb(relPath, title, pathPrefix string) []BreadcrumbSegment {
-	root := BreadcrumbSegment{Name: title, Href: pathPrefix}
-	out := []BreadcrumbSegment{root}
+	out := []BreadcrumbSegment{}
 	if relPath == "" {
+		// No subdirs; the gallery is at the root. Use the
+		// title (passed in from RenderPage) as the root label.
+		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
 		return out
 	}
-	// Strip trailing slash (relPath is normally "foo/bar/" but
-	// we want just "foo/bar" for splitting).
+	// Strip trailing slash for splitting.
 	trimmed := strings.TrimSuffix(relPath, "/")
 	if trimmed == "" {
+		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
 		return out
 	}
 	parts := strings.Split(trimmed, "/")
-	// Build the cumulative path for each segment's Href.
-	// Each segment's Href is "./a/b/c/" where the path
-	// accumulates.
+	if len(parts) == 0 {
+		out = append(out, BreadcrumbSegment{Name: title, Href: pathPrefix})
+		return out
+	}
+	// Root: the FIRST segment of relPath (e.g. "images" for
+	// /images/photos/animals/). Href is pathPrefix (which is
+	// typically "./" — the relative root of the gallery).
+	out = append(out, BreadcrumbSegment{Name: parts[0], Href: pathPrefix})
+	// Remaining segments: build cumulative Href RELATIVE to
+	// the gallery root (not absolute URL path). For example,
+	// with relPath "images/photos/2024/", the root is "images"
+	// and the cumulative path after the root is "photos/2024" —
+	// so the Hrefs are "./photos/", "./photos/2024/", etc.
+	// (pathPrefix is "./" by convention, which puts the segments
+	// at the gallery root, not at the gallery's mount point
+	// in the URL).
 	acc := ""
-	for _, p := range parts {
+	for i, p := range parts {
+		if i == 0 {
+			continue // first segment is the root, already added
+		}
 		if p == "" {
 			continue
 		}
@@ -1321,7 +1372,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      tighter and usually looks better for single-character
      buttons). */
   justify-content: center;
-  padding: 0;
+  /* Per user request 2026-06-20: padding 4px 0 0 0 (top only)
+     to give the button a slight vertical offset from the
+     section name text. The button (1.5rem square) would
+     otherwise sit flush with the text baseline. */
+  padding: 4px 0 0 0;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   font-family: inherit;
   flex-shrink: 0;
@@ -1637,7 +1692,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   font-size: 0.85rem;
-  padding: 0.25rem 2rem 0.5rem;
+  /* Per user request 2026-06-20: padding-left reduced from
+     2rem to 0.5rem to match the filter form (the two rows
+     are now visually aligned at the same left edge). */
+  padding: 0.25rem 0.5rem 0.5rem;
   color: var(--fg-faint);
 }
 .breadcrumb-link {
@@ -1676,7 +1734,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    accent color for active. The Apply button is a primary
    CTA (slightly more prominent than the pills). */
 .filter-form {
-  padding: 0.25rem 2rem 0.75rem;
+  /* Per user request 2026-06-20: padding-left
+     reduced from 2rem to 0.5rem. The filter row was indented
+     like the breadcrumb/sort-bar, which made it visually
+     disconnected from the dropdown contents (the dropdowns
+     are at the left edge of the page). Now the filter row
+     starts close to the page edge, with the dropdowns
+     opening to the right of the trigger — better alignment. */
+  padding: 0.25rem 0.5rem 0.75rem;
 }
 .filter-row {
   display: flex;
@@ -2309,37 +2374,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        last (current dir, plain text). The filter (?type=)
        is preserved across breadcrumb clicks so the user
        doesn't lose their filter state when navigating up. */}}
-    {{if gt (len .Breadcrumb) 0}}
-    <nav class="breadcrumb" aria-label="Directory path">
-      {{range $i, $seg := .Breadcrumb}}
-        {{if eq $i (lastIndex $.Breadcrumb)}}
-          <span class="breadcrumb-current">{{$seg.Name}}</span>
-        {{else}}
-          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
-          <span class="breadcrumb-sep" aria-hidden="true">/</span>
-        {{end}}
-      {{end}}
-    </nav>
-    {{end}}
-
-    {{/* Per user request 2026-06-20 (Phase 4): the file-type
-       filter UI. Three side-by-side dropdowns (Images /
-       Videos / Other), each a <details> element that opens
-       to show a list of sub-types with checkboxes + counts.
-       One global "All" button (clears all selections +
-       drops the ?type= param) and one global "Apply"
-       button (submits the form, building the ?ext=ext1&ext=2
-       URL which RenderPage parses via the parseTypeFilter
-       ?ext= fallback added in Phase 4).
-
-       The form is a standard HTML <form method="get"> with
-       checkboxes named "ext". The browser builds the URL as
-       ?ext=jpg&ext=png automatically. RenderPage accepts
-       this format via the ?ext= fallback.
-
-       The "All" button is a link (not a submit) that points
-       to the current URL without any ?type= / ?ext= — the
-       filter UI for "show all files". */}}
     {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       <div class="filter-row">
@@ -2408,6 +2442,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <button type="submit" class="filter-apply">Apply</button>
       </div>
     </form>
+    {{end}}
+
+        {{if gt (len .Breadcrumb) 0}}
+    <nav class="breadcrumb" aria-label="Directory path">
+      {{range $i, $seg := .Breadcrumb}}
+        {{if eq $i (lastIndex $.Breadcrumb)}}
+          <span class="breadcrumb-current">{{$seg.Name}}</span>
+        {{else}}
+          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <span class="breadcrumb-sep" aria-hidden="true">/</span>
+        {{end}}
+      {{end}}
+    </nav>
     {{end}}
     </header>
 
