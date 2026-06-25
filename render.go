@@ -2887,7 +2887,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       // keyboard users tab to the button and press Enter, screen
       // readers announce "Show/hide directories" via the
       // button's title + aria-label.
-      var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading');
+      // Per Phase 113: added .media-section to the selector
+      // list so the Media section's toggle button works (it
+      // was previously excluded, making the toggle a no-op).
+      var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading, .media-section .section-heading');
       headings.forEach(function(h) {
         var section = h.parentElement.getAttribute('data-section');
         if (!section) return;

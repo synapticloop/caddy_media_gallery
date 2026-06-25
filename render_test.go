@@ -2339,7 +2339,7 @@ func TestRenderPage_SectionHeadingClickable(t *testing.T) {
 
 	// 3. JS: the click handler is attached to .section-heading
 	// (not just to .section-toggle).
-	if !strings.Contains(html, `var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading')`) {
+	if !strings.Contains(html, `var headings = document.querySelectorAll('.dirs-section .section-heading, .others-section .section-heading, .media-section .section-heading')`) {
 		t.Error("expected the JS to find .section-heading (Phase 74: full-width click target)")
 	}
 	// 4. JS: a click handler is added to each heading.
