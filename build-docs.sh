@@ -50,6 +50,7 @@ SOURCES=(
     "$DOCS_DIR/02-configuration-reference.md"
     "$DOCS_DIR/03-templates.md"
     "$DOCS_DIR/04-sort-and-pagination.md"
+    "$DOCS_DIR/05-font-credits.md"
     "$DOCS_DIR/06-endplate.md"
 )
 MISSING_SOURCES=()
@@ -75,7 +76,7 @@ if [ ! -d "$DOCS_DIR/fonts" ] || [ -z "$(ls -A "$DOCS_DIR/fonts" 2>/dev/null)" ]
 fi
 
 echo "Building $OUTPUT ..."
-echo "  sources:    ${#SOURCES[@]} markdown files in docs/"
+echo "  sources:    ${#SOURCES[@]} markdown files in docs/"  # 7 as of Phase 107: cover, 01-04, 05-font-credits, 06-endplate
 echo "  engine:     xelatex via pandoc"
 echo "  preamble:   docs/preamble.tex (Libre Baskerville + JetBrains Mono)"
 echo "  output:     $OUTPUT"
@@ -90,6 +91,7 @@ pandoc -t pdf --pdf-engine=xelatex \
     02-configuration-reference.md \
     03-templates.md \
     04-sort-and-pagination.md \
+    05-font-credits.md \
     06-endplate.md \
     -o "$OUTPUT"
 

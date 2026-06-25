@@ -220,6 +220,7 @@ Detailed operator documentation lives in [`docs/`](docs/):
 - [docs/02-configuration-reference.md](docs/02-configuration-reference.md) — one-page reference of every config knob
 - [docs/03-templates.md](docs/03-templates.md) — template structure, all template variables, how to override
 - [docs/04-sort-and-pagination.md](docs/04-sort-and-pagination.md) — the `?sort=&order=&page=` URL API
+- [docs/05-font-credits.md](docs/05-font-credits.md) — SIL OFL 1.1 copyright notice for Libre Baskerville + JetBrains Mono (the two fonts used in the PDF)
 - [docs/06-endplate.md](docs/06-endplate.md) — the back-cover ASCII art (closing plate of the PDF)
 
 ## License
