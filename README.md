@@ -30,6 +30,8 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 
 ## Install
 
+### System install (requires sudo)
+
 Build a custom Caddy binary with this module baked in:
 
 ```bash
@@ -45,6 +47,44 @@ Or use the included build script (pins Caddy to v2.11.4 and the local module pat
 ```
 
 The build script also restarts Caddy via systemd (you may need to be root or use sudo).
+
+### Local install (no root, no sudo)
+
+If you don't have sudo access (shared host, locked-down laptop, etc.), you can still build and run Caddy entirely from your home directory. The bundled build script has a `--user` mode that does the right thing:
+
+```bash
+# Build into ~/bin/caddy, generate Caddyfile.user, listen on port 8080.
+# No sudo needed.
+./build.sh --user
+
+# Custom port (must be > 1024; the script enforces this).
+./build.sh --user 9000
+
+# Serve a different directory (default is ~/Pictures).
+CADDY_USER_ROOT=~/photos ./build.sh --user 9000
+```
+
+This:
+1. Builds the binary into `~/bin/caddy` (no install to `/usr/local/bin`)
+2. Writes a starter `Caddyfile.user` in the project root (only on first run — your edits are preserved on subsequent builds)
+3. Validates the port (must be 1025-65535) and warns if the root directory doesn't exist
+4. Prints the exact commands to start Caddy in the foreground or background
+
+Then to run Caddy:
+
+```bash
+# Foreground (Ctrl+C to stop):
+~/bin/caddy run --config Caddyfile.user
+
+# Background:
+nohup ~/bin/caddy run --config Caddyfile.user > ~/caddy.log 2>&1 &
+echo $! > ~/caddy.pid
+
+# Stop the background process:
+kill $(cat ~/caddy.pid)
+```
+
+Open <http://localhost:8080> in your browser to see the gallery. If 8080 is taken, choose another port — any number from 1025 to 65535 works (the script validates this for you).
 
 ## Caddyfile usage
 
