@@ -1731,31 +1731,27 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    convention (rather than the breadcrumb-arrow ">" which
    would compete visually with the sort buttons). The
    whole row wraps on narrow viewports (long path names). */
-/* Per user request 2026-06-20: the breadcrumb is now
-   rendered as a series of chevron-shaped pills (each segment
-   has a pointed right edge, like the "next" arrow in a slide
-   deck). The chevrons use the gallery's existing color tokens
-   (--bg-card for inactive segments, --active-bg/--active-fg
-   for the current segment) so they match the rest of the UI
-   in both light and dark mode.
+/* Per user request 2026-06-20: the breadcrumb is rendered
+   as a row of rectangular pills (the "chevron" chevron shape
+   was removed in favour of a simpler rectangular design — see
+   the "show stop the chevrons" user request). Each segment
+   is a simple bordered box with the name + a » separator
+   between segments. The CURRENT (last) segment is rendered
+   as plain text (not a link) with a chevron-pointed right
+   edge as the "you are here" indicator.
 
-   The chevron shape is made with clip-path: each pill has a
-   pointed right edge (12px protrusion) and the next pill
-   overlaps it by ~6px so the segments look like a connected
-   ribbon rather than separate buttons. The whole row is
-   centered for the "navigation flow" feel. */
+   Per user request 2026-06-20: padding-bottom: 0.25rem added
+   so the breadcrumb-link's own bottom border is NOT cut off
+   by the breadcrumb container's bottom border (which is the
+   separator line between the breadcrumb and the sort-bar
+   below). */
 .breadcrumb {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0;
+  gap: 0.25rem 0.5rem;
   font-size: 0.85rem;
-  /* Per user request 2026-06-20: padding now matches .sort-bar
-     (0.75rem 0 0.75rem 0 — no horizontal padding). All three
-     header rows align to the page edge at the same left. */
-  padding: 0.75rem 0;
-  /* Per user request 2026-06-20: a horizontal line under the
-     breadcrumb to separate it from the sort-bar below. */
+  padding: 0.75rem 0 0.5rem 0;
   border-bottom: 1px solid var(--border);
 }
 /* Per user request 2026-06-20: the breadcrumb is now
@@ -2512,7 +2508,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
-          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}} <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span></a>
+          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <span class="breadcrumb-sep" aria-hidden="true">&raquo;</span>
         {{end}}
       {{end}}
     </nav>

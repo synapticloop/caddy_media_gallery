@@ -56,6 +56,12 @@ type Gallery struct {
 	// breadcrumb's root label.
 	pathPrefix string
 
+	// rootName is the resolved display name for the first
+	// breadcrumb segment (the gallery's root). Defaults to
+	// "media root" if the operator didn't set RootName in
+	// the Caddyfile (per user request 2026-06-20).
+	rootName string
+
 	// Sort is the field used to order the gallery. Valid values:
 	//   "mtime" (default) — newest first
 	//   "name"           — alphabetical
