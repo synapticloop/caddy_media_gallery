@@ -42,6 +42,7 @@ type Gallery struct {
 	// Caddy's `root` directive (via Provision), or can be set in JSON
 	// config.
 	Root string `json:"root,omitempty"`
+
 	// PathPrefix is the URL mount prefix for the gallery
 	// (e.g. "images" if the gallery is mounted at /images/*
 	// in the Caddyfile). It is used by the breadcrumb so
@@ -393,7 +394,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.pathPrefix)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.pathPrefix, g.PathPrefix)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -536,13 +537,16 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					g.VideoExts = append(g.VideoExts, d.Val())
 				}
 			case "path_prefix":
-				// URL mount prefix for the gallery, used by the
-				// breadcrumb. Example: if the gallery is mounted
-				// at /images/* in the Caddyfile, set
-				//   path_prefix images
-				// so the breadcrumb's first segment is "images".
-				// If empty (default), the breadcrumb uses
-				// filepath.Base(Root) as the first segment.
+				// URL mount path for the gallery, used by the
+				// breadcrumb to build absolute links. Example:
+				// if the gallery is mounted at /images/* in the
+				// Caddyfile, set
+				//   path_prefix /images/
+				// so the breadcrumb's first segment is "images"
+				// (links to "/images/") and subsequent segments
+				// are absolute URLs like "/images/media_gallery/".
+				// If empty (default), the breadcrumb uses relative
+				// links (./seg/...) — backwards-compatible.
 				if !d.NextArg() {
 					return d.ArgErr()
 				}

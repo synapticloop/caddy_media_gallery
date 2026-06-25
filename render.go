@@ -217,6 +217,7 @@ type BreadcrumbSegment struct {
 //	                                {Name: "photos", Href: "./photos/"},
 //	                                {Name: "2024",   Href: "./photos/2024/"},
 //	                                {Name: "maui",   Href: "./photos/2024/maui/"}]
+//
 // computeBreadcrumb returns the breadcrumb segments for the
 // current gallery view. The first segment is the gallery's
 // URL mount (passed in as breadcrumbRoot, e.g. "images" for a
@@ -251,7 +252,7 @@ type BreadcrumbSegment struct {
 //	                          -> [{Name: "images", Href: "./"},
 //	                              {Name: "media_gallery", Href: "./media_gallery/"},
 //	                              {Name: "animals", Href: "./media_gallery/animals/"}]
-func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot string) []BreadcrumbSegment {
+func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot, absolutePrefix string) []BreadcrumbSegment {
 	// Root: the breadcrumbRoot argument (the gallery's URL
 	// mount prefix, e.g. "images"). If it's empty for some
 	// reason, fall back to the title.
@@ -259,8 +260,17 @@ func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot string) []Brea
 	if rootName == "" {
 		rootName = title
 	}
+	// Determine the root Href. If absolutePrefix is set (operator
+	// configured path_prefix in the Caddyfile), use it as the
+	// absolute URL prefix for all breadcrumb links. Otherwise,
+	// fall back to pathPrefix (relative "./") for backwards-
+	// compatible behaviour.
+	rootHref := pathPrefix
+	if absolutePrefix != "" {
+		rootHref = absolutePrefix
+	}
 	out := []BreadcrumbSegment{}
-	out = append(out, BreadcrumbSegment{Name: rootName, Href: pathPrefix})
+	out = append(out, BreadcrumbSegment{Name: rootName, Href: rootHref})
 	if relPath == "" {
 		return out
 	}
@@ -273,10 +283,11 @@ func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot string) []Brea
 	if len(parts) == 0 {
 		return out
 	}
-	// Build cumulative Href RELATIVE to the gallery root.
-	// For example, with relPath "media_gallery/animals/",
-	// the segments are "media_gallery" and "animals" with
-	// Hrefs "./media_gallery/" and "./media_gallery/animals/".
+	// Build cumulative Href for each segment.
+	// - Absolute (absolutePrefix set): links are "/images/seg1/",
+	//   "/images/seg1/seg2/", etc. — work from any page.
+	// - Relative (absolutePrefix empty): links are "./seg1/",
+	//   "./seg1/seg2/", etc. — only work from the current dir.
 	acc := ""
 	for _, p := range parts {
 		if p == "" {
@@ -287,9 +298,15 @@ func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot string) []Brea
 		} else {
 			acc = acc + "/" + p
 		}
+		var href string
+		if absolutePrefix != "" {
+			href = absolutePrefix + acc + "/"
+		} else {
+			href = pathPrefix + acc + "/"
+		}
 		out = append(out, BreadcrumbSegment{
 			Name: p,
-			Href: pathPrefix + acc + "/",
+			Href: href,
 		})
 	}
 	return out
@@ -865,7 +882,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // groups: Images / Videos / Other). `breadcrumbRoot` is the
 // gallery's URL mount prefix (e.g. "images" for /images/*) —
 // used as the first segment of the breadcrumb.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -990,7 +1007,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		HasNext:            page < totalPages,
 		PageNumbers:        pageNumbers(page, totalPages),
 		Sort:               sortSpec,
-		Breadcrumb:         computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot),
+		Breadcrumb:         computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot, absolutePrefix),
 		TypeFilter:         typeFilter,
 		IsTypeFilterActive: typeFilterActive(query),
 		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
