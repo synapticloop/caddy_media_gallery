@@ -1762,26 +1762,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    separator is the standard » (right-pointing double angle
    quotation mark) shown BETWEEN segments, not as part of
    the segment itself. */
-.breadcrumb-link {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.25rem 0.75rem;
-  margin-right: 0.25rem;
-  background: var(--bg-card);
-  color: var(--fg-muted);
-  text-decoration: none;
-  /* Per user request 2026-06-20: border-bottom removed.
-     The 4-sided border made the link look too heavy and
-     competed with the current segment's chevron shape. Now
-     only border-top + left + right, with the bottom edge
-     "floating" (no border, so it visually merges with the
-     background). */
-  border-top: 1px solid var(--border);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  border-radius: 3px;
-  transition: background 0.12s, color 0.12s;
-}
+/* Per user request 2026-06-20: border-bottom added back.
+   Originally removed in Phase 115 because the 4-sided
+   border looked too heavy; re-added with the simpler
+   4-sided "border:" declaration (cleaner than 3 separate
+   border-* properties). Collapsed to one line for
+   readability - the block has no per-side variations, so
+   the shorthand is the clearest expression. */
+.breadcrumb-link { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; margin-right: 0.25rem; background: var(--bg-card); color: var(--fg-muted); text-decoration: none; border: 1px solid var(--border); border-radius: 3px; transition: background 0.12s, color 0.12s; }
 .breadcrumb-link:hover {
   background: var(--bg-hover);
   color: var(--fg);
