@@ -356,7 +356,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The image section header should appear exactly once.
-	if c := strings.Count(html, ">Media<"); c != 1 {
+	if c := strings.Count(html, ">Media ("); c != 1 {
 		t.Errorf("expected exactly one 'Images' section, got %d", c)
 	}
 	// The "Other files" section should appear exactly once.
@@ -366,7 +366,7 @@ func TestRenderPage_OtherFilesHorizontalStrip(t *testing.T) {
 	// notes.txt should be in the "Other files" section.
 	// clip.mp4 should be in the image grid section (with a play-button).
 	othersIdx := strings.Index(html, "Other files")
-	imagesIdx := strings.Index(html, ">Media<")
+	imagesIdx := strings.Index(html, ">Media (")
 	if othersIdx < 0 || imagesIdx < 0 {
 		t.Fatal("could not find both 'Other files' and 'Images' sections")
 	}
@@ -426,7 +426,7 @@ func TestRenderPage_OtherFilesAsTable(t *testing.T) {
 		t.Fatal("could not find 'Other files' section")
 	}
 	othersEnd := len(html)
-	imgStart := strings.Index(html, ">Media<")
+	imgStart := strings.Index(html, ">Media (")
 	if imgStart > 0 {
 		othersEnd = imgStart
 	}
@@ -962,7 +962,10 @@ func TestRenderPage_OpenButtonOnImageAndVideoTiles(t *testing.T) {
 	}
 	// The open-btn should be inside the .thumb (not in the .other-files strip).
 	othersIdx := strings.Index(html, "Other files")
-	imagesIdx := strings.Index(html, ">Media<")
+	imagesIdx := strings.Index(html, ">Media (")
+	if imagesIdx < 0 {
+		t.Fatal("could not find media section")
+	}
 	imagesSection := html[imagesIdx:]
 	if !strings.Contains(imagesSection, `class="open-btn"`) {
 		t.Error("expected open-btn to be in the image grid section")
@@ -1619,7 +1622,7 @@ func TestRenderPage_OtherFilesRespectSort(t *testing.T) {
 		if othersStart < 0 {
 			return nil
 		}
-		imgStart := strings.Index(html[othersStart:], ">Media<")
+		imgStart := strings.Index(html[othersStart:], ">Media (")
 		if imgStart < 0 {
 			return nil
 		}
@@ -1901,7 +1904,7 @@ func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 			// looser match.
 			dirsIdx := strings.Index(html, "Directories (")
 			othersIdx := strings.Index(html, "Other files (")
-			mediaIdx := strings.Index(html, ">Media<")
+			mediaIdx := strings.Index(html, ">Media (")
 			if dirsIdx < 0 || mediaIdx < 0 {
 				t.Fatalf("could not find sections: dirs=%d others=%d media=%d", dirsIdx, othersIdx, mediaIdx)
 			}
@@ -3571,6 +3574,36 @@ func TestRenderPage_FilterUI(t *testing.T) {
 			t.Error("expected image count (1/2) — 1 selected out of 2")
 		}
 	})
+}
+
+// TestRenderPage_MediaSectionHasToggle verifies that the
+// Media section has the same show/hide toggle pattern as
+// Directories + Other files (data-section attribute + toggle
+// button + section-body wrapper + heading-divider line).
+func TestRenderPage_MediaSectionHasToggle(t *testing.T) {
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.png", ModTime: 2, Size: 200, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, files, nil, defaultImageExts, defaultVideoExts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "data-section=") || !strings.Contains(html, "media") {
+		t.Error("expected media section to have data-section attribute")
+	}
+	if !strings.Contains(html, "data-toggle=") || !strings.Contains(html, "media") {
+		t.Error("expected media section to have a toggle button with data-toggle attribute")
+	}
+	if !strings.Contains(html, "aria-controls=") {
+		t.Error("expected toggle button to have aria-controls attribute")
+	}
+	if !strings.Contains(html, "media-body") {
+		t.Error("expected section-body wrapper with id=media-body")
+	}
+	if !strings.Contains(html, "Media (2)") {
+		t.Error("expected heading to show Media (N) where N is the file count")
+	}
 }
 func substringAround(s, needle string, width int) string {
 	idx := strings.Index(s, needle)

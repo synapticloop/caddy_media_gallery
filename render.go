@@ -1339,12 +1339,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    the body is hidden and the section has a smaller bottom
    margin (no point reserving space for hidden content). */
 .dirs-section.collapsed,
-.others-section.collapsed {
+.others-section.collapsed,
+.media-section.collapsed {
   margin-bottom: 0;
   padding-bottom: 0.5rem;
 }
 .dirs-section.collapsed .section-body,
-.others-section.collapsed .section-body {
+.others-section.collapsed .section-body,
+.media-section.collapsed .section-body {
   display: none;
 }
 .chip-row {
@@ -2534,8 +2536,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{end}}
 
   {{if gt .TotalImages 0}}
-  <section class="media-section">
-    <h2 class="section-heading">Media</h2>
+  <section class="media-section" data-section="media">
+    <h2 class="section-heading">
+      <span>Media ({{.TotalImages}})</span>
+      <span class="heading-divider" aria-hidden="true"></span>
+      <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
+    </h2>
+    <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
@@ -2588,6 +2595,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{end}}
     </nav>
     {{end}}
+    </div>
   </section>
   {{else}}
   <p class="empty">No images in this directory.</p>
