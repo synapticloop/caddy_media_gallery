@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,11 @@ type PageData struct {
 	// Pagination
 	Page     int // 1-based
 	PageSize int
+	// PageSizes is the list of per-page options the visitor
+	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
+	// Configured via the `page_sizes` Caddyfile directive;
+	// defaults to [30, 60, 120, "all"].
+	PageSizes []string
 	// TotalImages is the total media count (images + videos)
 	// — used for the pagination math and the visibility check
 	// on the images grid section.
@@ -532,9 +538,11 @@ func sortFiles(files []FileInfo, spec SortSpec) {
 
 // paginate returns the slice of files for the given page (1-based).
 // Returns an empty slice if page is out of range.
+// Per user request 2026-06-20: the default page size changed
+// from 50 to 60 (nicely divisible by 2, 3, 4, 5, 6).
 func paginate(files []FileInfo, page, pageSize int) []FileInfo {
 	if pageSize <= 0 {
-		pageSize = 50
+		pageSize = 60
 	}
 	if page < 1 {
 		page = 1
@@ -548,6 +556,64 @@ func paginate(files []FileInfo, page, pageSize int) []FileInfo {
 		end = len(files)
 	}
 	return files[start:end]
+}
+
+// validatePageSize ensures the requested pageSize is in the
+// pageSizes list (the operator-configured dropdown options).
+// If pageSizes is empty (default), accepts any positive int.
+// If the requested value is "all", converts to 0 (which means
+// "no pagination" downstream).
+// Returns the validated pageSize, or the first item in the
+// list (parsed as int, or 0 if it is "all") if the requested
+// value is not in the list.
+func validatePageSize(requested int, pageSizes []string) int {
+	if len(pageSizes) == 0 {
+		// No operator override; accept any positive int.
+		if requested <= 0 {
+			return 60
+		}
+		return requested
+	}
+	// Parse the configured sizes (skip "all" for the "find"
+	// step - it represents no pagination limit).
+	var firstValid int
+	firstSet := false
+	for _, s := range pageSizes {
+		if s == "all" {
+			if !firstSet {
+				firstValid = 0
+				firstSet = true
+			}
+			continue
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil || n <= 0 {
+			continue
+		}
+		if !firstSet {
+			firstValid = n
+			firstSet = true
+		}
+		if requested == n {
+			return n
+		}
+	}
+	// Special-case: requested = 0 means "all" (no pagination).
+	hasAll := false
+	for _, s := range pageSizes {
+		if s == "all" {
+			hasAll = true
+			break
+		}
+	}
+	if requested == 0 && hasAll {
+		return 0
+	}
+	// Not found: fall back to the first valid value.
+	if firstSet {
+		return firstValid
+	}
+	return 60
 }
 
 // pageNumbers returns the list of page numbers (and 0 for
@@ -870,19 +936,25 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // template name (relative to the templates dir). Pass "" to use
 // the default ("gallery.tmpl"). The name is validated inside
 // loadTemplate.
-// RenderPage renders the gallery. `tmplName` is the configured
-// template name (relative to the templates dir). Pass "" to use
-// the default ("gallery.tmpl"). `noThumbs` is the configured
-// no_thumbs flag — when true, image tiles use the original file
-// as the <img src> instead of `/_thumbs/<name>.webp` (no thumb
-// generation). `pageSize` is the configured page_size — the
-// number of image entries per page. Pass 0 for the default of 50.
+// `noThumbs` is the configured no_thumbs flag - when true,
+// image tiles use the original file as the <img src> instead
+// of /_thumbs/<name>.webp (no thumb generation).
+// `pageSize` is the configured page_size - the number of image
+// entries per page. Pass 0 for the default of 60 (per user
+// request 2026-06-20).
+// `pageSizes` is the list of per-page options the visitor can
+// choose from in the dropdown (e.g. [30, 60, 120, "all"]).
+// "all" is a special token meaning "show all items on one
+// page" - only included if the operator explicitly listed it.
+// Default: [30, 60, 120, "all"].
 // `imageExts` and `videoExts` are the Gallery's configured
-// extension sets (used to build the filter UI's sub-type
-// groups: Images / Videos / Other). `breadcrumbRoot` is the
-// gallery's URL mount prefix (e.g. "images" for /images/*) —
-// used as the first segment of the breadcrumb.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix string) (string, error) {
+// extension sets (used to build the filter UI's sub-type groups).
+// `breadcrumbRoot` is the gallery's URL mount prefix (e.g.
+// "images" for /images/*) - used as the first segment of the
+// breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
+// "/images/") - used as the prefix for absolute breadcrumb
+// links.
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 
@@ -912,8 +984,14 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// here (splitFiles keeps them alphabetical).
 	sortFiles(others, sortSpec)
 	if pageSize <= 0 {
-		pageSize = 50
+		pageSize = 60
 	}
+	// Per user request 2026-06-20: validate the requested page
+	// size against the operator-configured pageSizes list. If
+	// the requested value is not in the list, fall back to the
+	// first item in the list (e.g. 30 if [30, 60, 120, "all"]
+	// is configured).
+	pageSize = validatePageSize(pageSize, pageSizes)
 	paged := paginate(allImages, page, pageSize)
 
 	totalImages := len(allImages)
@@ -992,6 +1070,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
 		Page:        page,
 		PageSize:    pageSize,
+		PageSizes:   pageSizes,
 		TotalImages: totalImages,
 		ImageCount:  imageCount,
 		TotalVideos: videoCount,
@@ -2460,7 +2539,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <span>//</span>
           <span>({{.TotalAllFilesSize}} total)</span>
           <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
-          <span>·</span><span>{{.PageSize}} per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
+          <!-- Per user request 2026-06-20: a dropdown for page size.
+     Shows the operator-configured list (defaults to
+     30, 60, 120, "all"). "all" is a special token meaning
+     "show all items in one page" - only included if the
+     operator explicitly listed it. Each option is a link
+     to the same URL with ?page_size=N appended (or removed
+     for "all"). The current selection is shown as selected. -->
+  <span>·</span>
+  <form method="get" action="" class="page-size-form">
+    <span>
+      <label for="page-size-select">per page:</label>
+      <select name="page_size" id="page-size-select" onchange="this.form.submit()">
+        {{range .PageSizes}}
+        <option value="{{.}}"{{if eq . $.PageSize}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
+        {{end}}
+      </select>
+    </span>
+  </form>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
       <!-- Per user request 2026-06-18: removed the top-right

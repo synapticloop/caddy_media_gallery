@@ -149,6 +149,17 @@ type Gallery struct {
 	// Validation: must be > 0. A zero or negative value is rejected
 	// by UnmarshalCaddyfile (the Caddyfile parser).
 	PageSize int `json:"page_size,omitempty"`
+	// PageSizes is the list of page sizes the visitor can
+	// choose from in the per-page dropdown (e.g. [30, 60, 120,
+	// "all"]). Set in the Caddyfile via `page_sizes 30 60 120 all`
+	// (space-separated; "all" as a token means "show all items
+	// in one page" - only included if explicitly listed).
+	// If empty (default), the resolved PageSizes (set in
+	// Provision) is [30, 60, 120, "all"]. The CURRENT page size
+	// is set via the URL ?page_size=N parameter, which is
+	// validated against this list (unknown values fall back to
+	// the first item).
+	PageSizes []string `json:"page_sizes,omitempty"`
 
 	// ThumbWidth is the maximum width in pixels of generated
 	// thumbnails. The source image is fit-within-bounds (aspect
@@ -227,6 +238,14 @@ func (g *Gallery) Provision(caddy.Context) error {
 	}
 	if g.ThumbTTLMinutes == 0 {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
+	}
+	// Resolve the page sizes list (default [30, 60, 120, "all"]).
+	// The operator can override via the `page_sizes` Caddyfile
+	// directive (space-separated list). If they include "all"
+	// it means "show all items on one page" - only included if
+	// explicitly listed.
+	if len(g.PageSizes) == 0 {
+		g.PageSizes = []string{"30", "60", "120", "all"}
 	}
 	// Resolve the image + video extension sets. If the operator
 	// configured them via the Caddyfile, use their list;
@@ -406,7 +425,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -467,6 +486,25 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				g.PageSize = n
 				if d.NextArg() {
+					return d.ArgErr()
+				}
+			case "page_sizes":
+				// Space-separated list of page size options the
+				// visitor can choose from in the per-page dropdown.
+				// Special token "all" means "show all items in
+				// one page" (only included if explicitly listed).
+				// Examples:
+				//   page_sizes 30 60 120 all
+				//   page_sizes 50 100
+				//   page_sizes 25 50 75 100
+				// If the operator doesn't set page_sizes, the
+				// default is [30, 60, 120, "all"] (per user
+				// request 2026-06-20).
+				g.PageSizes = nil
+				for d.NextArg() {
+					g.PageSizes = append(g.PageSizes, d.Val())
+				}
+				if len(g.PageSizes) == 0 {
 					return d.ArgErr()
 				}
 			case "thumb_width":
