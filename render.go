@@ -714,6 +714,47 @@ func applySearchFilter(files []FileInfo, query []string) []FileInfo {
 	return out
 }
 
+// sortPageSizes returns a sorted copy of the page size
+// list. Numeric values are sorted ascending by their integer
+// value; the special token "all" always sorts to the END.
+// Any other non-numeric value sorts to the very end (after
+// "all"). This way the operator can write the list in any
+// order and the dropdown display is consistent.
+func sortPageSizes(sizes []string) []string {
+	if len(sizes) == 0 {
+		return sizes
+	}
+	out := make([]string, len(sizes))
+	copy(out, sizes)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		// "all" always sorts last.
+		if a == "all" {
+			return false
+		}
+		if b == "all" {
+			return true
+		}
+		// Numeric values sort ascending.
+		aNum, aErr := strconv.Atoi(a)
+		bNum, bErr := strconv.Atoi(b)
+		if aErr == nil && bErr == nil {
+			return aNum < bNum
+		}
+		// Non-numeric: keep insertion order (slice stable
+		// already does this). If one is numeric, the numeric
+		// one comes first.
+		if aErr != nil && bErr != nil {
+			return a < b
+		}
+		if aErr != nil {
+			return false
+		}
+		return true
+	})
+	return out
+}
+
 // parseSearchQuery splits a raw search query string into
 // normalized word tokens. Whitespace-separated; lowercased;
 // empty/whitespace-only returns an empty slice (meaning

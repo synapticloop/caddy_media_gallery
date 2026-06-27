@@ -240,12 +240,40 @@ func (g *Gallery) Provision(caddy.Context) error {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
 	}
 	// Resolve the page sizes list (default [30, 60, 120, "all"]).
-	// The operator can override via the `page_sizes` Caddyfile
-	// directive (space-separated list). If they include "all"
-	// it means "show all items on one page" - only included if
-	// explicitly listed.
+	// The operator can override via the `num_per_page` Caddyfile
+	// directive (space-separated list). The FIRST item in the
+	// list is the default page size (used if the URL doesn't
+	// include ?page_size=). If they include "all" it means
+	// "show all items on one page" - only included in the
+	// dropdown if explicitly listed.
 	if len(g.PageSizes) == 0 {
 		g.PageSizes = []string{"30", "60", "120", "all"}
+	}
+	// Sort the page sizes: numeric values ascending, then "all"
+	// at the end. This way the operator can write the list in
+	// any order; the display is consistent.
+	g.PageSizes = sortPageSizes(g.PageSizes)
+	// The default PageSize is the first item in the (now sorted)
+	// page sizes list. For the default list this is 30; for an
+	// operator that wrote `num_per_page 60 30 120 all` the
+	// default is 60 (their first item). For `num_per_page all`,
+	// the default would be 0 ("show all items").
+	if g.PageSize == 0 {
+		// Pick the first item in the (sorted) page sizes
+		// list. If it's "all", the default is 0 (show all
+		// items on one page). Otherwise parse it as an int
+		// and use that as the default.
+		first := g.PageSizes[0]
+		if first == "all" {
+			g.PageSize = 0
+		} else if n, err := strconv.Atoi(first); err == nil && n > 0 {
+			g.PageSize = n
+		} else {
+			// Fall back to 60 if the first item is somehow
+			// not a valid page size (shouldn't happen given
+			// validation, but defensive).
+			g.PageSize = 60
+		}
 	}
 	// Resolve the image + video extension sets. If the operator
 	// configured them via the Caddyfile, use their list;
@@ -496,18 +524,26 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if d.NextArg() {
 					return d.ArgErr()
 				}
-			case "page_sizes":
-				// Space-separated list of page size options the
-				// visitor can choose from in the per-page dropdown.
-				// Special token "all" means "show all items in
-				// one page" (only included if explicitly listed).
+			case "num_per_page":
+				// Per user request 2026-06-27: the operator
+				// configures the per-page dropdown options via
+				// `num_per_page 60 30 120 all` (space-separated).
+				// The FIRST item in the list is the DEFAULT
+				// page size (used if the URL doesn't include
+				// ?page_size=). "all" is a special token
+				// meaning "show all items in one page" - only
+				// included in the dropdown if the operator
+				// explicitly listed it. The dropdown is
+				// always sorted by increasing value with "all"
+				// at the end (so the operator can write the
+				// list in any order; the display is consistent).
 				// Examples:
-				//   page_sizes 30 60 120 all
-				//   page_sizes 50 100
-				//   page_sizes 25 50 75 100
-				// If the operator doesn't set page_sizes, the
-				// default is [30, 60, 120, "all"] (per user
-				// request 2026-06-20).
+				//   num_per_page 30 60 120 all
+				//   num_per_page 50 100
+				//   num_per_page 25 50 75 100
+				// If the operator doesn't set num_per_page,
+				// the default is [30, 60, 120, "all"] (per
+				// user request 2026-06-20).
 				g.PageSizes = nil
 				for d.NextArg() {
 					g.PageSizes = append(g.PageSizes, d.Val())
