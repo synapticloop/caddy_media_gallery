@@ -262,6 +262,14 @@ func (g *Gallery) Provision(caddy.Context) error {
 	if g.pathPrefix == "" {
 		g.pathPrefix = filepath.Base(g.Root)
 	}
+	// Resolve the breadcrumb root name. If the operator
+	// configured `root_name` in the Caddyfile, use it;
+	// otherwise default to the basename of the gallery's
+	// root directory (same default as the path prefix).
+	g.rootName = g.RootName
+	if g.rootName == "" {
+		g.rootName = filepath.Base(g.Root)
+	}
 
 	g.imageExtsMap = defaultImageExts
 	if len(g.ImageExts) > 0 {

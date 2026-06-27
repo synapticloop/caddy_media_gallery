@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -157,6 +158,50 @@ func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 // TestRenderPage_NoThumbs_OriginalImageAsThumb verifies that
 // when no_thumbs is true, the rendered tile <img> uses the
 // original file URL (the Href) as its src, not the thumb URL.
+// TestGallery_ProvisionRootNameDefaults verifies that when
+// the operator doesn't set `root_name` in the Caddyfile,
+// g.rootName defaults to filepath.Base(g.Root) (e.g.
+// "images" for /var/www/html/images). This is the fix for
+// the user-reported bug where the first breadcrumb segment
+// showed the subdirectory name twice instead of "images"
+// + "media_gallery".
+func TestGallery_ProvisionRootNameDefaults(t *testing.T) {
+	g := &Gallery{
+		Root:             "/var/www/html/images",
+		Cache:            NewScanCache(time.Minute),
+		ThumbWidth:       320,
+		ThumbHeight:      320,
+		ThumbFormat:      "webp",
+		CacheScanMinutes: 1,
+		ThumbTTLMinutes:  1440,
+		PageSizes:        []string{"30", "60", "120", "all"},
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.rootName != "images" {
+		t.Errorf("expected g.rootName = %q, got %q", "images", g.rootName)
+	}
+	// And when the operator DID set RootName, use their value.
+	g2 := &Gallery{
+		Root:             "/var/www/html/images",
+		RootName:         "media root",
+		Cache:            NewScanCache(time.Minute),
+		ThumbWidth:       320,
+		ThumbHeight:      320,
+		ThumbFormat:      "webp",
+		CacheScanMinutes: 1,
+		ThumbTTLMinutes:  1440,
+		PageSizes:        []string{"30", "60", "120", "all"},
+	}
+	if err := g2.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g2.rootName != "media root" {
+		t.Errorf("expected g.rootName = %q, got %q", "media root", g2.rootName)
+	}
+}
+
 func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
