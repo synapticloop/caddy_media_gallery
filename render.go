@@ -1876,15 +1876,25 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-variant-numeric: tabular-nums; /* digits line up across rows */
 }
 
-/* Per user request 2026-06-27: # Items and # Dirs columns
-   in the dirs table. Right-aligned, tabular-nums so the
-   digits line up across rows. Narrow (5rem) since these
-   are small integers. */
+/* Per user request 2026-06-27: # Items and # Sub-Dirs
+   columns in the dirs table. Right-aligned, tabular-nums
+   so the digits line up across rows. Narrow (5rem) since
+   these are small integers.
+
+   Per user request 2026-06-27: the column heading
+   "#&nbsp;Items" / "#&nbsp;Sub-Dirs" uses non-breaking
+   spaces (the entity inside the HTML, not just CSS) so
+   the heading never splits across lines. The
+   white-space: nowrap rule below is a defensive
+   backstop: it prevents the cell content (e.g. long
+   counts in the future) from wrapping to a second line,
+   which would break the column alignment. */
 .col-count {
   width: 5rem;
   text-align: right;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .files-table .col-date {
   /* Date column: narrow-ish, formatted by formatDate()
@@ -3088,8 +3098,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                ReadDir per subdir, see Scanner.countSubdirStats).
                "Items" excludes directories; "Dirs" includes
                symlinks to directories. -->
-          <th class="col-count"># Items</th>
-          <th class="col-count"># Dirs</th>
+          <th class="col-count">#&nbsp;Items</th>
+          <th class="col-count">#&nbsp;Sub-Dirs</th>
           <th class="col-size">Size</th>
           <th class="col-date">Modified</th>
         </tr>

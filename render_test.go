@@ -2263,7 +2263,7 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 	// Count cell-link occurrences in the alpha row.
 	cellLinks := strings.Count(alphaRow, `class="table-link cell-link"`)
 	if cellLinks != 4 {
-		t.Errorf("expected 4 cell-links in the alpha row (# Items + # Dirs + Size + Date), got %d in row: %q", cellLinks, alphaRow)
+		t.Errorf("expected 4 cell-links in the alpha row (# Items + # Sub-Dirs + Size + Date), got %d in row: %q", cellLinks, alphaRow)
 	}
 	// All anchors should have the same href (./alpha/).
 	hrefCount := strings.Count(alphaRow, `href="./alpha/"`)
@@ -2547,9 +2547,9 @@ func TestRenderPage_Phase76UpRowAsSeparateTable(t *testing.T) {
 // the dirs table no longer has a Type column (since all
 // entries are DIR, the column was redundant).
 // Per user request 2026-06-27: the dirs table now also
-// has # Items, # Dirs, and Size columns (between Name
+// has # Items, # Sub-Dirs, and Size columns (between Name
 // and Modified). So the current expected column count
-// is 5: Name, # Items, # Dirs, Size, Modified.
+// is 5: Name, # Items, # Sub-Dirs, Size, Modified.
 func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	files := []FileInfo{
 		{Name: "alpha", Kind: KindDir, ModTime: 100},
@@ -2569,17 +2569,17 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	dirsTable := html[dirsStart:dirsEnd]
 
 	// 1. The dirs table's thead should have 5 columns:
-	// Name, # Items, # Dirs, Size, Modified.
+	// Name, # Items, # Sub-Dirs, Size, Modified.
 	thCount := strings.Count(dirsTable, `<th class="col-`)
 	if thCount != 5 {
 		t.Errorf("expected 5 <th> elements in dirs-table thead, got %d in: %q", thCount, dirsTable)
 	}
 	// 1b. The new columns should be present.
-	if !strings.Contains(dirsTable, `<th class="col-count"># Items</th>`) {
+	if !strings.Contains(dirsTable, `<th class="col-count">#&nbsp;Items</th>`) {
 		t.Error("expected # Items column in dirs-table")
 	}
-	if !strings.Contains(dirsTable, `<th class="col-count"># Dirs</th>`) {
-		t.Error("expected # Dirs column in dirs-table")
+	if !strings.Contains(dirsTable, `<th class="col-count">#&nbsp;Sub-Dirs</th>`) {
+		t.Error("expected # Sub-Dirs column in dirs-table")
 	}
 	if !strings.Contains(dirsTable, `<th class="col-size">Size</th>`) {
 		t.Error("expected Size column in dirs-table")
