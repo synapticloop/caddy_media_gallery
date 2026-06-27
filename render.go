@@ -1112,6 +1112,15 @@ func filterGroupFromMap(label string, counts map[string]struct {
 func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
+	// Per user request 2026-06-27: read ?page_size=N from the
+	// URL so the visitor's dropdown selection takes effect.
+	// pageSizeFromQuery returns -1 if not specified (caller
+	// then uses the operator-configured default). The "all"
+	// token is converted to 0 (which means "no pagination"
+	// downstream — paginate() returns all items).
+	if ps := pageSizeFromQuery(query); ps >= 0 {
+		pageSize = ps
+	}
 
 	// Per user request 2026-06-20: compute the filter UI
 	// data BEFORE applying the filter, so the dropdowns show

@@ -3671,3 +3671,69 @@ func substringAround(s, needle string, width int) string {
 	}
 	return s[start:end]
 }
+
+// TestPageSizeFromQuery covers the URL-parameter reader:
+// ?page_size=N returns N, ?page_size=all returns 0,
+// missing/empty/invalid returns -1.
+func TestPageSizeFromQuery(t *testing.T) {
+	tests := []struct {
+		name string
+		q    url.Values
+		want int
+	}{
+		{"empty", url.Values{}, -1},
+		{"valid number", url.Values{"page_size": []string{"120"}}, 120},
+		{"all", url.Values{"page_size": []string{"all"}}, 0},
+		{"all uppercase", url.Values{"page_size": []string{"ALL"}}, -1}, // case-sensitive
+		{"invalid", url.Values{"page_size": []string{"abc"}}, -1},
+		{"zero", url.Values{"page_size": []string{"0"}}, -1},
+		{"negative", url.Values{"page_size": []string{"-5"}}, -1},
+		{"whitespace only", url.Values{"page_size": []string{"  "}}, -1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := pageSizeFromQuery(tc.q)
+			if got != tc.want {
+				t.Errorf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestRenderPage_PageSizeFromURL verifies that the ?page_size=N
+// URL parameter is honoured by RenderPage (the visitor's dropdown
+// selection takes effect). Per user report 2026-06-27: this
+// was not being recognised before.
+func TestRenderPage_PageSizeFromURL(t *testing.T) {
+	files := []FileInfo{
+		{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "b.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+	}
+	// Without ?page_size=, the operator-configured default
+	// (60, passed as pageSize arg) is used. With ?page_size=120,
+	// the URL overrides it.
+	html60, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
+		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html120, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
+		[]string{"30", "60", "120", "all"}, files,
+		url.Values{"page_size": []string{"120"}}, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// With pageSize=60 (no URL param): dropdown should show 60
+	// selected.
+	if !strings.Contains(html60, `value="60" selected`) {
+		t.Errorf("expected 60 selected when no URL param, got: %q", html60)
+	}
+	// With pageSize=120 in URL: dropdown should show 120
+	// selected (not 60).
+	if !strings.Contains(html120, `value="120" selected`) {
+		t.Errorf("expected 120 selected when URL has ?page_size=120, got: %q", html120)
+	}
+	if strings.Contains(html120, `value="60" selected`) {
+		t.Errorf("did NOT expect 60 selected when URL has ?page_size=120")
+	}
+}
