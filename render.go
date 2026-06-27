@@ -1739,10 +1739,7 @@ h1 {
   align-self: flex-start;
   margin-top: 0.3rem;
   font-size: 0.8rem;
-  padding: 0.35rem 0.75rem;
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 4px;
   color: var(--fg);
   text-decoration: none;
   white-space: nowrap;
