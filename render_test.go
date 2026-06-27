@@ -3681,16 +3681,18 @@ func TestRenderPage_FilterUI(t *testing.T) {
 		if strings.Contains(html, `class="filter-all filter-pill-active"`) {
 			t.Error("'All' should NOT be active when a filter is active")
 		}
-		// The Images dropdown should be open (has selected options)
-		// — we check via the open attribute or via the [open]
-		// in the dropdown container
-		if !strings.Contains(html, `class="filter-dropdown" open`) &&
-			!strings.Contains(html, `class="filter-dropdown" open=""`) {
-			// html/template renders the open attr as ` open` (no value)
-			// when set to true
-			if !strings.Contains(html, `<details class="filter-dropdown" open`) {
-				t.Error("expected the Images dropdown to be open (has selected options)")
-			}
+		// Per user request 2026-06-27: the filter dropdown should
+		// NOT auto-open even when a filter is selected. The
+		// selection state is visible in the summary (the
+		// "(selected/total)" count), so the user can see what's
+		// selected without opening the dropdown. Previous
+		// behaviour (auto-open) was annoying because the
+		// dropdown stayed open across page navigations and
+		// page-size changes (the type filter is preserved
+		// in the URL, so the server re-renders it as open
+		// every time).
+		if strings.Contains(html, `<details class="filter-dropdown" open`) {
+			t.Error("expected the Images dropdown to be CLOSED (per user request 2026-06-27), but it was open")
 		}
 		// The .jpg option should be checked
 		if !strings.Contains(html, `value=".jpg" checked`) {

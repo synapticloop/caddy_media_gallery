@@ -3127,7 +3127,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">All</a>
 
         {{if gt .FilterImageOptions.Total 0}}
-        <details class="filter-dropdown" {{if gt .FilterImageOptions.Selected 0}}open{{end}}>
+        <details class="filter-dropdown">
           <summary class="filter-pill">
             {{.FilterImageOptions.Label}}
             <span class="filter-count">({{.FilterImageOptions.Selected}}/{{.FilterImageOptions.Total}})</span>
@@ -3146,7 +3146,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
 
         {{if gt .FilterVideoOptions.Total 0}}
-        <details class="filter-dropdown" {{if gt .FilterVideoOptions.Selected 0}}open{{end}}>
+        <details class="filter-dropdown">
           <summary class="filter-pill">
             {{.FilterVideoOptions.Label}}
             <span class="filter-count">({{.FilterVideoOptions.Selected}}/{{.FilterVideoOptions.Total}})</span>
@@ -3165,7 +3165,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
 
         {{if gt .FilterOtherOptions.Total 0}}
-        <details class="filter-dropdown" {{if gt .FilterOtherOptions.Selected 0}}open{{end}}>
+        <details class="filter-dropdown">
           <summary class="filter-pill">
             {{.FilterOtherOptions.Label}}
             <span class="filter-count">({{.FilterOtherOptions.Selected}}/{{.FilterOtherOptions.Total}})</span>
