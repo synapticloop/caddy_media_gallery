@@ -345,55 +345,45 @@ func extractImgSrcs(html string) string {
 // TestUnmarshalCaddyfile_TemplateDirective covers the new
 // `template <name>` Caddyfile directive.
 // TestUnmarshalCaddyfile_PageSize covers the new
-// `page_size <int>` Caddyfile directive. Accepts positive
-// integers; rejects zero, negative, and non-numeric values.
+// `page_size <list>` Caddyfile directive. Accepts a
+// space-separated list of page sizes; the first item is
+// the default. Rejects empty lists.
 func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
-	t.Run("page_size 100", func(t *testing.T) {
+	t.Run("page_size 60 30 120 all (default 60)", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 100\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 60 30 120 all\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
-		if g.PageSize != 100 {
-			t.Errorf("PageSize: got %d, want 100", g.PageSize)
+		if len(g.PageSizes) != 4 || g.PageSizes[0] != "60" || g.PageSizes[3] != "all" {
+			t.Errorf("PageSizes: got %v, want [60 30 120 all]", g.PageSizes)
 		}
 	})
-	t.Run("page_size 1 (minimum valid)", func(t *testing.T) {
+	t.Run("page_size 50 100 (no all)", func(t *testing.T) {
 		g := Gallery{}
-		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 1\n}")
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 50 100\n}")
 		if err := g.UnmarshalCaddyfile(d); err != nil {
 			t.Fatal(err)
 		}
-		if g.PageSize != 1 {
-			t.Errorf("PageSize: got %d, want 1", g.PageSize)
+		if len(g.PageSizes) != 2 || g.PageSizes[0] != "50" || g.PageSizes[1] != "100" {
+			t.Errorf("PageSizes: got %v, want [50 100]", g.PageSizes)
 		}
 	})
-	t.Run("page_size 0 → error", func(t *testing.T) {
-		g := Gallery{}
-		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 0\n}")
-		if err := g.UnmarshalCaddyfile(d); err == nil {
-			t.Error("expected error for `page_size 0` (must be > 0)")
-		}
-	})
-	t.Run("page_size -5 → error", func(t *testing.T) {
-		g := Gallery{}
-		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size -5\n}")
-		if err := g.UnmarshalCaddyfile(d); err == nil {
-			t.Error("expected error for `page_size -5` (must be > 0)")
-		}
-	})
-	t.Run("page_size abc → error", func(t *testing.T) {
-		g := Gallery{}
-		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size abc\n}")
-		if err := g.UnmarshalCaddyfile(d); err == nil {
-			t.Error("expected error for `page_size abc` (must be an integer)")
-		}
-	})
-	t.Run("page_size with no arg → error", func(t *testing.T) {
+	t.Run("page_size with no args → error", func(t *testing.T) {
 		g := Gallery{}
 		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size\n}")
 		if err := g.UnmarshalCaddyfile(d); err == nil {
-			t.Error("expected error for `page_size` with no value")
+			t.Error("expected error for `page_size` with no values")
+		}
+	})
+	t.Run("page_size 30 60 120 all (default 30)", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  page_size 30 60 120 all\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.PageSizes[0] != "30" {
+			t.Errorf("PageSizes[0]: got %v, want 30 (operator's declared first item)", g.PageSizes[0])
 		}
 	})
 }
@@ -402,14 +392,17 @@ func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
 // the default of 50 when the Caddyfile doesn't set page_size.
 // TestProvision_PageSizeDefault verifies that the default
 // page size (with no operator config) is the first item in
-// the default PageSizes list, which is 30.
+// the default PageSizes list, which is 60. The default list
+// was changed from [30, 60, 120, "all"] to [60, 30, 120,
+// "all"] in Phase 161 so the default page size is 60
+// (matches the user-requested default).
 func TestProvision_PageSizeDefault(t *testing.T) {
 	g := Gallery{}
 	if err := g.Provision(caddy.Context{}); err != nil {
 		t.Fatal(err)
 	}
-	if g.PageSize != 30 {
-		t.Errorf("expected default PageSize=30 after Provision (first item of default list), got %d", g.PageSize)
+	if g.PageSize != 60 {
+		t.Errorf("expected default PageSize=60 after Provision (first item of default list), got %d", g.PageSize)
 	}
 	// The default PageSizes list itself should be set.
 	if len(g.PageSizes) == 0 {

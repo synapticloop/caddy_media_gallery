@@ -2,7 +2,7 @@
 // Supports images (jpg, png, gif, webp, avif, svg) and videos (mp4, webm,
 // mov, mkv, etc.) with on-demand WebP thumbnails for images and
 // ffmpeg-extracted first-frame thumbnails for videos. Replaces Caddy's
-// default `file_server browse` with a richer directory listing that
+// default  with a richer directory listing that
 // includes a lightbox, on-the-fly image thumbnailing, and video
 // preview generation.
 package gallery
@@ -39,22 +39,22 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 // dark-themed image/video gallery. See the README for behaviour.
 type Gallery struct {
 	// Root is the on-disk directory to render. Set automatically by
-	// Caddy's `root` directive (via Provision), or can be set in JSON
+	// Caddy's  directive (via Provision), or can be set in JSON
 	// config.
-	Root string `json:"root,omitempty"`
+	Root string
 
 	// PathPrefix is the URL mount prefix for the gallery
 	// (e.g. "images" if the gallery is mounted at /images/*
 	// in the Caddyfile). It is used by the breadcrumb so
 	// the first segment matches what the user sees in the
 	// URL. Defaults to filepath.Base(Root) if empty.
-	PathPrefix string `json:"path_prefix,omitempty"`
+	PathPrefix string
 	// RootName is the operator-configurable display name for
 	// the first breadcrumb segment (the gallery's root). Set
-	// in the Caddyfile via `root_name "My Gallery"`. If empty,
+	// in the Caddyfile via . If empty,
 	// the resolved rootName (set in Provision) defaults to
 	// "media root" — a generic name that works for any gallery.
-	RootName string `json:"root_name,omitempty"`
+	RootName string
 
 	// pathPrefix is the resolved path prefix (after Provision
 	// applies the default of filepath.Base(Root) if PathPrefix
@@ -71,42 +71,42 @@ type Gallery struct {
 	// Sort is the field used to order the gallery. Valid values:
 	//   "mtime" (default) — newest first
 	//   "name"           — alphabetical
-	Sort string `json:"sort,omitempty"`
+	Sort string
 
 	// Template is the name of the template file to use, relative to
-	// the templates dir ($GALLERY_TEMPLATES_DIR, default
+	// the templates dir (, default
 	// /etc/caddy/gallery-templates). If empty, defaults to
 	// "gallery.tmpl". The path is validated at Provision to
 	// reject absolute paths and any traversal above the templates
-	// dir (no `..` allowed). The template dir is the chroot; the
+	// dir (no  allowed). The template dir is the chroot; the
 	// operator can only reference files inside it.
-	Template string `json:"template,omitempty"`
+	Template string
 
 	// ImageExts is the set of file extensions the gallery treats
-	// as images. Set from the `image_types` Caddyfile subdirective
+	// as images. Set from the  Caddyfile subdirective
 	// (space-separated, case-insensitive, with or without leading
 	// dot). If empty (the default), the plugin uses a built-in list
 	// of common image extensions (jpg, jpeg, png, gif, webp, svg,
 	// avif, heic). Provision() converts this list to a map for the
 	// Scanner to use.
-	ImageExts []string `json:"image_types,omitempty"`
+	ImageExts []string
 
 	// VideoExts is the set of file extensions the gallery treats
-	// as videos. Set from the `video_types` Caddyfile subdirective
+	// as videos. Set from the  Caddyfile subdirective
 	// (same syntax as image_types). Empty (default) uses the
 	// built-in video list (mp4, webm, m4v, mov, mkv, avi, ogv, ogg).
-	VideoExts []string `json:"video_types,omitempty"`
+	VideoExts []string
 
 	// NoThumbs disables the on-the-fly WebP thumbnail generation.
 	// When true, the gallery uses the original image as the tile
-	// <img src> instead of `/_thumbs/<name>.webp`. Requests to the
+	// <img src> instead of . Requests to the
 	// thumb URL fall through to the next handler (typically
 	// file_server, which 404s since no _thumbs/ dir exists).
 	// Tradeoffs: no thumb cache, no CPU cost, but the browser
 	// downloads the full image per tile (bigger page payload, slower
 	// load on dirs of large photos). Useful for small galleries
 	// where the operator doesn't want to maintain a thumb cache.
-	NoThumbs bool `json:"no_thumbs,omitempty"`
+	NoThumbs bool
 
 	// NoVideoThumbs disables the on-demand WebP thumbnail generation
 	// for VIDEO files (extracted from the first frame via ffmpeg).
@@ -118,40 +118,40 @@ type Gallery struct {
 	// fall back to the placeholder regardless of this setting
 	// (there's no way to generate a frame without a tool that can
 	// decode the video).
-	// Caddyfile: `no_video_thumbs` (no arg → true) or
-	//            `no_video_thumbs false` (re-enable).
-	NoVideoThumbs bool `json:"no_video_thumbs,omitempty"`
+	// Caddyfile:  (no arg → true) or
+	//             (re-enable).
+	NoVideoThumbs bool
 
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
 	// NoVideoThumbs is true — we skip the lookup since it would
 	// be unused). Resolution order:
 	//   1. FFMPEG_PATH env var (if set + points to an executable)
-	//   2. exec.LookPath("ffmpeg") (scans $PATH)
+	//   2. exec.LookPath("ffmpeg") (scans /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin)
 	// Thread-safe to read after Provision returns; written only
 	// during Provision.
-	ffmpegPath string `json:"-"`
+	ffmpegPath string
 
 	// imageExtsMap is the resolved image-extension set (after
 	// lowercasing + dot-normalization in Provision) for fast
 	// lookup in Scanner.Classify. Built from ImageExts (if
 	// non-empty) or defaultImageExts. Set once in Provision;
 	// read-only after that.
-	imageExtsMap map[string]bool `json:"-"`
+	imageExtsMap map[string]bool
 
 	// videoExtsMap is the resolved video-extension set, same
 	// shape as imageExtsMap.
-	videoExtsMap map[string]bool `json:"-"`
+	videoExtsMap map[string]bool
 
 	// PageSize is the number of image entries per page. Default
 	// is 50 (set in Provision if zero). The user can override
-	// per-route via the Caddyfile: `media_gallery { page_size 100 }`.
+	// per-route via the Caddyfile: .
 	// Validation: must be > 0. A zero or negative value is rejected
 	// by UnmarshalCaddyfile (the Caddyfile parser).
-	PageSize int `json:"page_size,omitempty"`
+	PageSize int
 	// PageSizes is the list of page sizes the visitor can
 	// choose from in the per-page dropdown (e.g. [30, 60, 120,
-	// "all"]). Set in the Caddyfile via `page_sizes 30 60 120 all`
+	// "all"]). Set in the Caddyfile via
 	// (space-separated; "all" as a token means "show all items
 	// in one page" - only included if explicitly listed).
 	// If empty (default), the resolved PageSizes (set in
@@ -159,42 +159,42 @@ type Gallery struct {
 	// is set via the URL ?page_size=N parameter, which is
 	// validated against this list (unknown values fall back to
 	// the first item).
-	PageSizes []string `json:"page_sizes,omitempty"`
+	PageSizes []string
 
 	// ThumbWidth is the maximum width in pixels of generated
 	// thumbnails. The source image is fit-within-bounds (aspect
 	// ratio preserved, longest edge becomes the configured value).
-	// Default: 320. Caddyfile: `thumb_width 480`.
+	// Default: 320. Caddyfile: .
 	// Validation: must be > 0; zero/negative rejected.
-	ThumbWidth int `json:"thumb_width,omitempty"`
+	ThumbWidth int
 
 	// ThumbHeight is the maximum height in pixels of generated
 	// thumbnails. Fit-within-bounds behavior — see ThumbWidth.
-	// Default: 320. Caddyfile: `thumb_height 480`.
+	// Default: 320. Caddyfile: .
 	// Validation: must be > 0.
-	ThumbHeight int `json:"thumb_height,omitempty"`
+	ThumbHeight int
 
 	// ThumbFormat is the output format for generated thumbnails.
 	// One of: "jpeg" (or "jpg"), "png", or "webp" (the current
 	// default, lossless). Default: "webp". Caddyfile:
-	// `thumb_format jpeg`. Validation: must be one of the three.
-	ThumbFormat string `json:"thumb_format,omitempty"`
+	// . Validation: must be one of the three.
+	ThumbFormat string
 
 	// CacheScanMinutes is the in-memory scan cache TTL in
-	// minutes. Default: 1. Caddyfile: `cache_scan 5`.
+	// minutes. Default: 1. Caddyfile: .
 	// Validation: must be > 0.
-	CacheScanMinutes int `json:"cache_scan,omitempty"`
+	CacheScanMinutes int
 
 	// ThumbTTLMinutes is the HTTP Cache-Control max-age in
 	// minutes for thumb responses. Thumbs are immutable per
 	// source mtime, so a long TTL is safe. Default: 1440
 	// (= 24 hours, matches the previous 86400-second value).
-	// Caddyfile: `thumb_ttl 60`. Validation: must be > 0.
-	ThumbTTLMinutes int `json:"thumb_ttl,omitempty"`
+	// Caddyfile: . Validation: must be > 0.
+	ThumbTTLMinutes int
 
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
-	Cache *ScanCache `json:"-"`
+	Cache *ScanCache
 }
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
@@ -222,8 +222,8 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// already rejects invalid values, so if we see zero/empty
 	// here it just means the user didn't specify a value.
 	// Note: g.PageSize default is set LATER in Provision
-	// (after the operator's num_per_page list is resolved),
-	// so the first item in num_per_page becomes the default.
+	// (after the operator's page_size list is resolved),
+	// so the first item in page_size becomes the default.
 	if g.ThumbWidth == 0 {
 		g.ThumbWidth = 320
 	}
@@ -240,21 +240,21 @@ func (g *Gallery) Provision(caddy.Context) error {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
 	}
 	// Resolve the page sizes list (default [30, 60, 120, "all"]).
-	// The operator can override via the `num_per_page` Caddyfile
+	// The operator can override via the  Caddyfile
 	// directive (space-separated list). The FIRST item in the
 	// list is the default page size (used if the URL doesn't
 	// include ?page_size=). If they include "all" it means
 	// "show all items on one page" - only included in the
 	// dropdown if explicitly listed.
 	if len(g.PageSizes) == 0 {
-		g.PageSizes = []string{"30", "60", "120", "all"}
+		g.PageSizes = []string{"60", "30", "120", "all"}
 	}
 	// The default PageSize is the first item in the
 	// operator's DECLARED list (NOT the sorted list). So
-	// `num_per_page 60 30 120 all` makes the default 60 even
+	//  makes the default 60 even
 	// though the dropdown displays the values in sorted
 	// order (30 / 60 / 120 / all). If the operator didn't
-	// set num_per_page at all, fall back to 30 (the default
+	// set page_size at all, fall back to 30 (the default
 	// list's first item).
 	if g.PageSize == 0 {
 		if len(g.PageSizes) > 0 {
@@ -292,7 +292,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 		g.pathPrefix = filepath.Base(g.Root)
 	}
 	// Resolve the breadcrumb root name. If the operator
-	// configured `root_name` in the Caddyfile, use it;
+	// configured  in the Caddyfile, use it;
 	// otherwise default to the basename of the gallery's
 	// root directory (same default as the path prefix).
 	g.rootName = g.RootName
@@ -316,7 +316,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 	//
 	// Resolution order (Phase 67):
 	//   1. FFMPEG_PATH env var (if set and points to an executable)
-	//   2. exec.LookPath("ffmpeg") (scans $PATH)
+	//   2. exec.LookPath("ffmpeg") (scans /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin)
 	// If both fail, g.ffmpegPath stays empty and the video-thumb
 	// code path falls back to the placeholder.
 	if !g.NoVideoThumbs {
@@ -384,7 +384,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		}
 	}
 	if root == "" {
-		http.Error(w, "media_gallery: no root configured (set Gallery.Root in JSON or use `root * /path` in the Caddyfile)", http.StatusInternalServerError)
+		http.Error(w, "media_gallery: no root configured (set Gallery.Root in JSON or use  in the Caddyfile)", http.StatusInternalServerError)
 		return nil
 	}
 	// Normalise the path. r.URL.Path may or may not have a leading
@@ -510,41 +510,32 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					}
 					g.NoVideoThumbs = false
 				}
+
 			case "page_size":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-				n, err := strconv.Atoi(d.Val())
-				if err != nil {
-					return d.ArgErr()
-				}
-				if n <= 0 {
-					return d.ArgErr()
-				}
-				g.PageSize = n
-				if d.NextArg() {
-					return d.ArgErr()
-				}
-			case "num_per_page":
 				// Per user request 2026-06-27: the operator
 				// configures the per-page dropdown options via
-				// `num_per_page 60 30 120 all` (space-separated).
+				// `page_size 60 30 120 all` (space-separated).
 				// The FIRST item in the list is the DEFAULT
 				// page size (used if the URL doesn't include
 				// ?page_size=). "all" is a special token
-				// meaning "show all items in one page" - only
+				// meaning "show all items on one page" - only
 				// included in the dropdown if the operator
 				// explicitly listed it. The dropdown is
 				// always sorted by increasing value with "all"
 				// at the end (so the operator can write the
 				// list in any order; the display is consistent).
 				// Examples:
-				//   num_per_page 30 60 120 all
-				//   num_per_page 50 100
-				//   num_per_page 25 50 75 100
-				// If the operator doesn't set num_per_page,
+				//   page_size 30 60 120 all
+				//   page_size 50 100
+				//   page_size 25 50 75 100
+				// If the operator doesn't set page_size,
 				// the default is [30, 60, 120, "all"] (per
 				// user request 2026-06-20).
+				//
+				// This replaces the old single-value form
+				// (page_size N). The list form is strictly
+				// more capable (the list IS the default
+				// ordering).
 				g.PageSizes = nil
 				for d.NextArg() {
 					g.PageSizes = append(g.PageSizes, d.Val())
@@ -552,6 +543,7 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if len(g.PageSizes) == 0 {
 					return d.ArgErr()
 				}
+
 			case "thumb_width":
 				if !d.NextArg() {
 					return d.ArgErr()
@@ -652,7 +644,7 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			case "root_name":
 				// Display name for the first breadcrumb
 				// segment (the gallery's root). Set in the
-				// Caddyfile as e.g. `root_name images`. Used
+				// Caddyfile as e.g. . Used
 				// by the breadcrumb to show a custom name
 				// (like "images", "Photos", "My Gallery")
 				// instead of the default "media root".
