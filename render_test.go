@@ -2262,13 +2262,13 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 
 	// Count cell-link occurrences in the alpha row.
 	cellLinks := strings.Count(alphaRow, `class="table-link cell-link"`)
-	if cellLinks != 1 {
-		t.Errorf("expected 1 cell-link in the alpha row (Date column only, after Phase 77 removed Type), got %d in row: %q", cellLinks, alphaRow)
+	if cellLinks != 4 {
+		t.Errorf("expected 4 cell-links in the alpha row (# Items + # Dirs + Size + Date), got %d in row: %q", cellLinks, alphaRow)
 	}
 	// All anchors should have the same href (./alpha/).
 	hrefCount := strings.Count(alphaRow, `href="./alpha/"`)
-	if hrefCount != 2 {
-		t.Errorf("expected 2 anchors with href=./alpha/ (Name + 1 cell-link), got %d", hrefCount)
+	if hrefCount != 5 {
+		t.Errorf("expected 5 anchors with href=./alpha/ (Name + 4 cell-links), got %d", hrefCount)
 	}
 
 	// Now check the others table.
@@ -2545,8 +2545,11 @@ func TestRenderPage_Phase76UpRowAsSeparateTable(t *testing.T) {
 
 // TestRenderPage_Phase77DirsTableNoTypeColumn verifies Phase 77:
 // the dirs table no longer has a Type column (since all
-// entries are DIR, the column was redundant). The dirs
-// table now has only Name and Modified columns.
+// entries are DIR, the column was redundant).
+// Per user request 2026-06-27: the dirs table now also
+// has # Items, # Dirs, and Size columns (between Name
+// and Modified). So the current expected column count
+// is 5: Name, # Items, # Dirs, Size, Modified.
 func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	files := []FileInfo{
 		{Name: "alpha", Kind: KindDir, ModTime: 100},
@@ -2565,11 +2568,21 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	dirsEnd := strings.Index(html[dirsStart:], `</table>`) + dirsStart
 	dirsTable := html[dirsStart:dirsEnd]
 
-	// 1. The dirs table's thead should have ONLY Name + Modified
-	// (no Type column). Count the <th> elements.
+	// 1. The dirs table's thead should have 5 columns:
+	// Name, # Items, # Dirs, Size, Modified.
 	thCount := strings.Count(dirsTable, `<th class="col-`)
-	if thCount != 2 {
-		t.Errorf("expected 2 <th> elements in dirs-table thead (Name + Modified), got %d in: %q", thCount, dirsTable)
+	if thCount != 5 {
+		t.Errorf("expected 5 <th> elements in dirs-table thead, got %d in: %q", thCount, dirsTable)
+	}
+	// 1b. The new columns should be present.
+	if !strings.Contains(dirsTable, `<th class="col-count"># Items</th>`) {
+		t.Error("expected # Items column in dirs-table")
+	}
+	if !strings.Contains(dirsTable, `<th class="col-count"># Dirs</th>`) {
+		t.Error("expected # Dirs column in dirs-table")
+	}
+	if !strings.Contains(dirsTable, `<th class="col-size">Size</th>`) {
+		t.Error("expected Size column in dirs-table")
 	}
 	// 2. The thead should NOT have a col-type <th>.
 	if strings.Contains(dirsTable, `<th class="col-type">Type</th>`) {
@@ -3735,5 +3748,69 @@ func TestRenderPage_PageSizeFromURL(t *testing.T) {
 	}
 	if strings.Contains(html120, `value="60" selected`) {
 		t.Errorf("did NOT expect 60 selected when URL has ?page_size=120")
+	}
+}
+
+// TestCountSubdirStats verifies the per-subdir counter helper
+// (scanner.go countSubdirStats). The behaviour:
+//   - counts non-directory entries as "items"
+//   - counts real directories as "dirs"
+//   - counts symlinks-to-directories as "dirs" too (per
+//     user request 2026-06-27)
+//   - excludes hidden files (starting with '.')
+//   - returns (0, 0) on error (e.g. directory doesn't exist)
+//
+// The test creates a temp directory tree, then calls
+// countSubdirStats on it.
+func TestCountSubdirStats(t *testing.T) {
+	tmp := t.TempDir()
+	// Create a subdir with 3 files + 2 real subdirs + 1
+	// symlink-to-directory + 1 hidden file (excluded) +
+	// 1 broken symlink (excluded).
+	sub := filepath.Join(tmp, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 3 files
+	for _, n := range []string{"a.jpg", "b.txt", "c.png"} {
+		if err := os.WriteFile(filepath.Join(sub, n), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 2 real subdirs
+	for _, n := range []string{"real1", "real2"} {
+		if err := os.Mkdir(filepath.Join(sub, n), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Symlink to a directory (the symlink target is /tmp/.../sub/real1)
+	if err := os.Symlink(filepath.Join(sub, "real1"), filepath.Join(sub, "link1")); err != nil {
+		t.Fatal(err)
+	}
+	// Hidden file (should be EXCLUDED)
+	if err := os.WriteFile(filepath.Join(sub, ".hidden"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Broken symlink (should be EXCLUDED — silently)
+	if err := os.Symlink("/nonexistent", filepath.Join(sub, "broken")); err != nil {
+		t.Fatal(err)
+	}
+
+	items, dirs := countSubdirStats(sub)
+	if items != 3 {
+		t.Errorf("expected 3 items, got %d", items)
+	}
+	if dirs != 3 {
+		t.Errorf("expected 3 dirs (2 real + 1 symlink-to-dir), got %d", dirs)
+	}
+}
+
+// TestCountSubdirStats_NonExistentDir verifies the error
+// fallback: countSubdirStats returns (0, 0) when the
+// directory doesn't exist (so the page can still render).
+func TestCountSubdirStats_NonExistentDir(t *testing.T) {
+	items, dirs := countSubdirStats("/nonexistent/path/at/all")
+	if items != 0 || dirs != 0 {
+		t.Errorf("expected (0, 0), got (%d, %d)", items, dirs)
 	}
 }

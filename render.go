@@ -159,6 +159,18 @@ type FileView struct {
 	Size string
 	Date string
 	Type string
+
+	// CountItems is the number of NON-directory entries inside
+	// this subdirectory (files + symlinks to files + broken
+	// symlinks, etc.). Only set on directory entries (IsDir=true).
+	// Populated by buildFileView from FileInfo.CountItems
+	// (set by Scanner.Scan via countSubdirStats).
+	CountItems int
+	// CountDirs is the number of directories inside this
+	// subdirectory. Includes real directories AND symlinks to
+	// directories (per user request 2026-06-27). Only set on
+	// directory entries.
+	CountDirs int
 }
 
 // BreadcrumbSegment is one segment of the breadcrumb path.
@@ -402,12 +414,22 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 	case KindDir:
 		v.IsDir = true
 		v.Href = pathPrefix + f.Name + "/"
-		// Per user request 2026-06-19: directories now have a
-		// Modified date in the dirs table. The Size is still
-		// omitted (meaningless — recursive size would require
-		// a separate scan, and the dirs table doesn't have a
-		// Size column).
+		// Per user request 2026-06-19: directories have a
+		// Modified date in the dirs table.
 		v.Date = formatDate(f.ModTime)
+		// Per user request 2026-06-27: the dirs table now has
+		// a Size column. We show the directory entry's OWN
+		// size (the size of the directory inode, not a
+		// recursive sum of its contents). For most filesystems
+		// this is the size of the directory entry metadata
+		// (typically 4KB or similar); the humanSize() formatter
+		// displays it in human-readable form.
+		v.Size = humanSize(f.Size)
+		// Per user request 2026-06-27: # Items and # Dirs show
+		// the contents of the subdir. Populated by Scanner.Scan
+		// via countSubdirStats (one extra ReadDir per subdir).
+		v.CountItems = f.CountItems
+		v.CountDirs = f.CountDirs
 	case KindImage:
 		v.IsImage = true
 		v.Href = pathPrefix + f.Name
@@ -1838,6 +1860,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums; /* digits line up across rows */
 }
+
+/* Per user request 2026-06-27: # Items and # Dirs columns
+   in the dirs table. Right-aligned, tabular-nums so the
+   digits line up across rows. Narrow (5rem) since these
+   are small integers. */
+.col-count {
+  width: 5rem;
+  text-align: right;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
 .files-table .col-date {
   /* Date column: narrow-ish, formatted by formatDate()
      (e.g. "2026-06-20 14:30" or "Yesterday"). */
@@ -3034,6 +3067,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <thead>
         <tr>
           <th class="col-name">Name</th>
+          <!-- Per user request 2026-06-27: # Items and # Dirs
+               columns show the contents of each subdir. The
+               counts are computed at scan time (one extra
+               ReadDir per subdir, see Scanner.countSubdirStats).
+               "Items" excludes directories; "Dirs" includes
+               symlinks to directories. -->
+          <th class="col-count"># Items</th>
+          <th class="col-count"># Dirs</th>
+          <th class="col-size">Size</th>
           <th class="col-date">Modified</th>
         </tr>
       </thead>
@@ -3041,6 +3083,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{range .Subdirs}}
         <tr>
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
+          <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountItems}}</a></td>
+          <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountDirs}}</a></td>
+          <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
           <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}

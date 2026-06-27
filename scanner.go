@@ -76,6 +76,18 @@ type FileInfo struct {
 	ModTime int64    `json:"mtime"`
 	Size    int64    `json:"size"`
 	Kind    FileKind `json:"kind"`
+	// CountItems is the number of NON-directory entries
+	// (files, symlinks-to-files, broken symlinks, etc.) inside
+	// this subdirectory. Only meaningful for KindDir entries.
+	// Populated by Scanner.Scan; the count is computed by
+	// reading the subdir's contents (one extra os.ReadDir
+	// syscall per subdir, then discarded).
+	CountItems int `json:"count_items"`
+	// CountDirs is the number of directories inside this
+	// subdirectory. Includes real directories AND symlinks
+	// that point to directories (per user request 2026-06-27).
+	// Only meaningful for KindDir entries.
+	CountDirs int `json:"count_dirs"`
 }
 
 // Scanner reads a directory and produces a sorted []FileInfo.
@@ -118,6 +130,64 @@ func Classify(name string, imageExts, videoExts map[string]bool) FileKind {
 	default:
 		return KindOther
 	}
+}
+
+// countSubdirStats reads a subdirectory and returns the number
+// of non-directory entries and the number of directories
+// (including symlinks-to-directories). Returns (0, 0) on any
+// error so the caller can still render the page (the columns
+// just show "0").
+//
+// This is a single ReadDir call. For each entry:
+//   - lstat → if real directory, count in dirs
+//   - lstat → if symlink, follow with stat → if target is
+//     directory, count in dirs
+//   - otherwise (file, symlink-to-file, etc.), count in items
+//
+// Per user request 2026-06-27: # Dirs INCLUDES symlinks to
+// directories (not just real directories). The reasoning is
+// that from the visitor's perspective, both behave the same
+// way (clicking enters the directory); the distinction is
+// an implementation detail.
+func countSubdirStats(path string) (items, dirs int) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return 0, 0
+	}
+	for _, e := range entries {
+		// Hidden files (starting with '.') are not counted
+		// (consistent with how the gallery already filters
+		// hidden files out of the visible file list).
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		// e.Info() returns lstat (symlink itself, not target).
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Follow the symlink to determine what it points to.
+			target, err := os.Stat(filepath.Join(path, e.Name()))
+			if err != nil {
+				// Broken symlink — skip
+				continue
+			}
+			if target.IsDir() {
+				dirs++
+			} else {
+				items++
+			}
+			continue
+		}
+		// Not a symlink — use lstat's IsDir directly.
+		if info.IsDir() {
+			dirs++
+		} else {
+			items++
+		}
+	}
+	return items, dirs
 }
 
 // Scan walks the directory and returns a sorted slice of FileInfo.
@@ -165,12 +235,23 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		} else {
 			kind = Classify(e.Name(), s.ImageExts, s.VideoExts)
 		}
-		out = append(out, FileInfo{
+		fi := FileInfo{
 			Name:    e.Name(),
 			ModTime: info.ModTime().UnixNano(),
 			Size:    info.Size(),
 			Kind:    kind,
-		})
+		}
+		// For subdirs, count the contents (items + subdirs).
+		// Per user request 2026-06-27: this is what powers the
+		// # Items and # Dirs columns in the dirs table. The cost
+		// is one extra os.ReadDir per subdir, which is then
+		// discarded; the counters are stored on the FileInfo.
+		if kind == KindDir {
+			items, dirs := countSubdirStats(filepath.Join(s.Root, e.Name()))
+			fi.CountItems = items
+			fi.CountDirs = dirs
+		}
+		out = append(out, fi)
 	}
 	if s.Sort == "name" {
 		sort.Slice(out, func(i, j int) bool {
