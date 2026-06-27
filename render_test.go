@@ -417,7 +417,7 @@ func TestRenderPage_OtherFilesAsTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The new structure: a <table class="files-table others-table">.
-	if !strings.Contains(html, `<table class="files-table others-table">`) {
+	if !strings.Contains(html, `<table class="files-table others-table`) {
 		t.Error(`expected <table class="files-table others-table"> in the rendered page`)
 	}
 	// Old structure should be GONE: no <div class="chip-row">
@@ -525,7 +525,7 @@ func TestRenderPage_UpEntryInSubdir(t *testing.T) {
 	// 2. The subdirs must be in a <table class="files-table dirs-table">
 	//    AFTER the up-chip-row. Per Phase 69, the chip-row layout
 	//    was replaced with a full-width table.
-	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table`)
 	if dirsTableStart < 0 {
 		t.Fatal(`expected a <table class="files-table dirs-table"> containing the subdirs`)
 	}
@@ -621,7 +621,7 @@ func TestRenderPage_DirsAsTable(t *testing.T) {
 	}
 	// The new structure: a <table class="files-table dirs-table">
 	// with one <tr> per directory.
-	if !strings.Contains(html, `<table class="files-table dirs-table">`) {
+	if !strings.Contains(html, `<table class="files-table dirs-table`) {
 		t.Error("expected <table class=\"files-table dirs-table\"> in the rendered page")
 	}
 	// The CSS rule for .files-table (the new layout).
@@ -2152,7 +2152,7 @@ func TestRenderPage_Phase72UIChanges(t *testing.T) {
 	// 3. The up-row is in a SEPARATE up-row-table (Phase 76)
 	// that lives ABOVE the dirs-table. We just verify the
 	// up-row-table exists in the HTML.
-	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table`)
 	if dirsTableStart < 0 {
 		t.Fatal("no dirs-table found")
 	}
@@ -2242,8 +2242,13 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 	}
 
 	// Find the dirs table.
-	dirsStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	dirsStart := strings.Index(html, `<table class="files-table dirs-table`)
 	if dirsStart < 0 {
+		// DEBUG: show what we have
+		t.Logf("html length: %d", len(html))
+		for _, substr := range []string{"dirs-table", "files-table", "<table"} {
+			t.Logf("contains %q: %v", substr, strings.Contains(html, substr))
+		}
 		t.Fatal("no dirs-table")
 	}
 	dirsEnd := strings.Index(html[dirsStart:], `</table>`) + dirsStart
@@ -2280,7 +2285,7 @@ func TestRenderPage_TableRowClickable(t *testing.T) {
 	}
 
 	// Now check the others table.
-	othersStart := strings.Index(html, `<table class="files-table others-table">`)
+	othersStart := strings.Index(html, `<table class="files-table others-table`)
 	if othersStart < 0 {
 		t.Fatal("no others-table")
 	}
@@ -2498,7 +2503,7 @@ func TestRenderPage_Phase76UpRowAsSeparateTable(t *testing.T) {
 	}
 
 	// 2. The dirs-table should be present.
-	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	dirsTableStart := strings.Index(html, `<table class="files-table dirs-table`)
 	if dirsTableStart < 0 {
 		t.Fatal(`expected <table class="files-table dirs-table"> (Phase 76: dirs table still has subdirs)`)
 	}
@@ -2569,7 +2574,7 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	}
 
 	// Find the dirs table.
-	dirsStart := strings.Index(html, `<table class="files-table dirs-table">`)
+	dirsStart := strings.Index(html, `<table class="files-table dirs-table`)
 	if dirsStart < 0 {
 		t.Fatal("no dirs-table")
 	}

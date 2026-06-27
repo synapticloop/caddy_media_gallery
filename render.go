@@ -3272,7 +3272,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     </table>
     {{end}}
     {{if .Subdirs}}
-    <table class="files-table dirs-table">
+    <table class="files-table dirs-table" id="dirs-table">
       <thead>
         <tr>
           <!-- Per user request 2026-06-27: each <th> is
@@ -3319,7 +3319,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <!-- Per user request 2026-06-20: same full-width table format
          as the directories table. Adds a Size column (directories
          omitted Size because it's not meaningful for folders). -->
-    <table class="files-table others-table">
+    <table class="files-table others-table" id="others-table">
       <thead>
         <tr>
           <!-- Per user request 2026-06-27: each <th> is
