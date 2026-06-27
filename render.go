@@ -2644,15 +2644,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   display: block;
 }
 /* Per user request 2026-06-27: the dimensions watermark
-   appears at the bottom-right of every thumbnail card,
-   always visible. Shows the W × H of the source image
+   appears at the bottom-LEFT of the IMAGE (inside .thumb
+   div), always visible. Shows the W × H of the source image
    (or video). Styled like the open-btn (translucent
    background) but text instead of an icon, and ALWAYS
-   visible (the open-btn is hover-only). */
+   visible (the open-btn is hover-only).
+
+   Position: bottom-left of the IMAGE itself (not the
+   card meta). The .thumb div is position: relative so the
+   absolute positioning of this watermark is relative to
+   the image bounds, not the card. */
 .thumb-dimensions {
   position: absolute;
   bottom: 6px;
-  right: 6px;
+  left: 6px;
   padding: 2px 6px;
   background: rgba(0, 0, 0, 0.65);
   color: rgba(255, 255, 255, 0.95);
@@ -3473,7 +3478,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="media-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
-        {{if .Dimensions}}<span class="thumb-dimensions">{{.Dimensions}}</span>{{end}}
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
@@ -3486,6 +3490,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           {{else}}
           <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
           {{end}}
+          {{if .Dimensions}}<span class="thumb-dimensions">{{.Dimensions}}</span>{{end}}
           <span class="open-btn" data-open-url="{{.Href}}" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>
         </div>
         <div class="tile-name">{{.Name}}</div>
