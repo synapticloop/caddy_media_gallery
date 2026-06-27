@@ -133,26 +133,33 @@ func Classify(name string, imageExts, videoExts map[string]bool) FileKind {
 }
 
 // countSubdirStats reads a subdirectory and returns the number
-// of non-directory entries and the number of directories
-// (including symlinks-to-directories). Returns (0, 0) on any
-// error so the caller can still render the page (the columns
-// just show "0").
+// of non-directory entries, the number of directories
+// (including symlinks-to-directories), AND the total size
+// (in bytes) of all non-directory entries DIRECTLY in the
+// subdir (one level deep — NOT recursive into subdirs).
+//
+// Returns (0, 0, 0) on any error so the caller can still
+// render the page (the columns just show "0").
 //
 // This is a single ReadDir call. For each entry:
-//   - lstat → if real directory, count in dirs
+//   - lstat → if real directory, count in dirs (size = 0
+//     because the dir's own inode size is ~4 KB and not
+//     meaningful; the actual contents are shown in nested
+//     rows of the table)
 //   - lstat → if symlink, follow with stat → if target is
 //     directory, count in dirs
-//   - otherwise (file, symlink-to-file, etc.), count in items
+//   - otherwise (file, symlink-to-file, etc.), count in
+//     items AND add the entry's size to totalSize
 //
 // Per user request 2026-06-27: # Dirs INCLUDES symlinks to
 // directories (not just real directories). The reasoning is
 // that from the visitor's perspective, both behave the same
 // way (clicking enters the directory); the distinction is
 // an implementation detail.
-func countSubdirStats(path string) (items, dirs int) {
+func countSubdirStats(path string) (items, dirs int, totalSize int64) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
-		return 0, 0
+		return 0, 0, 0
 	}
 	for _, e := range entries {
 		// Hidden files (starting with '.') are not counted
@@ -177,6 +184,7 @@ func countSubdirStats(path string) (items, dirs int) {
 				dirs++
 			} else {
 				items++
+				totalSize += target.Size()
 			}
 			continue
 		}
@@ -185,9 +193,10 @@ func countSubdirStats(path string) (items, dirs int) {
 			dirs++
 		} else {
 			items++
+			totalSize += info.Size()
 		}
 	}
-	return items, dirs
+	return items, dirs, totalSize
 }
 
 // Scan walks the directory and returns a sorted slice of FileInfo.
@@ -247,9 +256,16 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		// is one extra os.ReadDir per subdir, which is then
 		// discarded; the counters are stored on the FileInfo.
 		if kind == KindDir {
-			items, dirs := countSubdirStats(filepath.Join(s.Root, e.Name()))
+			// Per user request 2026-06-27: the size column
+			// in the dirs table shows the sum of file sizes
+			// in the subdir (NOT the directory inode size, NOT
+			// recursive). countSubdirStats does one ReadDir
+			// and sums sizes as it goes.
+			items, dirs, totalSize := countSubdirStats(filepath.Join(s.Root, e.Name()))
+
 			fi.CountItems = items
 			fi.CountDirs = dirs
+			fi.Size = totalSize
 		}
 		out = append(out, fi)
 	}

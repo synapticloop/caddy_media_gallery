@@ -3826,12 +3826,19 @@ func TestCountSubdirStats(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, dirs := countSubdirStats(sub)
+	items, dirs, totalSize := countSubdirStats(sub)
 	if items != 3 {
 		t.Errorf("expected 3 items, got %d", items)
 	}
 	if dirs != 3 {
 		t.Errorf("expected 3 dirs (2 real + 1 symlink-to-dir), got %d", dirs)
+	}
+	// Each file is 1 byte (we wrote "x" above). 3 files = 3 bytes.
+	// The 2 subdirs contribute 0 (no file size, only their
+	// directory inode size which we don't count). The
+	// symlink-to-dir also contributes 0.
+	if totalSize != 3 {
+		t.Errorf("expected totalSize=3 (3 files * 1 byte), got %d", totalSize)
 	}
 }
 
@@ -3839,8 +3846,8 @@ func TestCountSubdirStats(t *testing.T) {
 // fallback: countSubdirStats returns (0, 0) when the
 // directory doesn't exist (so the page can still render).
 func TestCountSubdirStats_NonExistentDir(t *testing.T) {
-	items, dirs := countSubdirStats("/nonexistent/path/at/all")
-	if items != 0 || dirs != 0 {
-		t.Errorf("expected (0, 0), got (%d, %d)", items, dirs)
+	items, dirs, totalSize := countSubdirStats("/nonexistent/path/at/all")
+	if items != 0 || dirs != 0 || totalSize != 0 {
+		t.Errorf("expected (0, 0, 0), got (%d, %d, %d)", items, dirs, totalSize)
 	}
 }

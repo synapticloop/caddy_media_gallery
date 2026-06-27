@@ -417,17 +417,20 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		// Per user request 2026-06-19: directories have a
 		// Modified date in the dirs table.
 		v.Date = formatDate(f.ModTime)
-		// Per user request 2026-06-27: the dirs table now has
-		// a Size column. We show the directory entry's OWN
-		// size (the size of the directory inode, not a
-		// recursive sum of its contents). For most filesystems
-		// this is the size of the directory entry metadata
-		// (typically 4KB or similar); the humanSize() formatter
+		// Per user request 2026-06-27: the dirs table's Size
+		// column shows the sum of file sizes DIRECTLY in the
+		// subdir (NOT recursive into nested subdirs, NOT the
+		// directory inode size). Scanner.Scan computes this
+		// via countSubdirStats and stores the result in
+		// FileInfo.Size (overwriting the directory's own
+		// inode size, which is typically 4KB and not useful
+		// for the visitor). The humanSize() formatter
 		// displays it in human-readable form.
 		v.Size = humanSize(f.Size)
-		// Per user request 2026-06-27: # Items and # Dirs show
-		// the contents of the subdir. Populated by Scanner.Scan
-		// via countSubdirStats (one extra ReadDir per subdir).
+		// Per user request 2026-06-27: # Items and # Sub-Dirs
+		// show the contents of the subdir. Populated by
+		// Scanner.Scan via countSubdirStats (one extra
+		// ReadDir per subdir).
 		v.CountItems = f.CountItems
 		v.CountDirs = f.CountDirs
 	case KindImage:
