@@ -2926,6 +2926,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      to the same URL with ?page_size=N appended (or removed
      for "all"). The current selection is shown as selected. -->
   <span>·</span>
+  <span>Show</span>
   <form method="get" action="" class="page-size-form">
     {{- /* Preserve other URL params (sort, filter, page, breadcrumb) when submitting */ -}}
     {{- queryToHiddenInputs $.Query -}}
@@ -2935,7 +2936,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
       {{end}}
     </select>
-  </form>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
+  </form>
+  <span>Per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
       <!-- Per user request 2026-06-18: removed the top-right
