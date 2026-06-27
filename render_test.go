@@ -634,9 +634,12 @@ func TestRenderPage_DirsAsTable(t *testing.T) {
 		t.Error("expected NO <div class=\"dirs-row\"> in the rendered page (replaced by table in Phase 69)")
 	}
 	// Each subdir name should appear in a Name cell with a link.
-	rowCount := strings.Count(html, "<tr>")
+	// Per user request 2026-06-27: dirs table rows now have
+	// data-name (and other data-* attrs for JS sort). Use a
+	// more specific selector than bare "<tr>".
+	rowCount := strings.Count(html, `<tr data-name="`)
 	if rowCount < 3 {
-		t.Errorf("expected at least 3 <tr> rows (one per subdir), got %d", rowCount)
+		t.Errorf("expected at least 3 subdir rows, got %d", rowCount)
 	}
 }
 
@@ -1926,7 +1929,12 @@ func TestRenderPage_DirectoriesIgnoreSort(t *testing.T) {
 			var got []string
 			idx := 0
 			for {
-				trStart := strings.Index(dirsSection[idx:], "<tr>")
+				// Per user request 2026-06-27: dirs table rows now
+				// have data-name (and other data-* attrs for JS
+				// sort). Match <tr data-name="..."> instead of
+				// the bare <tr> tag (which also matches the header
+				// row in <thead>).
+				trStart := strings.Index(dirsSection[idx:], `<tr data-name="`)
 				if trStart < 0 {
 					break
 				}
@@ -2575,26 +2583,46 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 		t.Errorf("expected 5 <th> elements in dirs-table thead, got %d in: %q", thCount, dirsTable)
 	}
 	// 1b. The new columns should be present.
-	if !strings.Contains(dirsTable, `<th class="col-count">#&nbsp;Items</th>`) {
-		t.Error("expected # Items column in dirs-table")
+	// Per user request 2026-06-27: now wrapped in a
+	// sortable <th> with a <span> around the text.
+	if !strings.Contains(dirsTable, `<th class="col-count sortable"`) {
+		t.Error("expected sortable col-count th in dirs-table")
 	}
-	if !strings.Contains(dirsTable, `<th class="col-count">#&nbsp;Sub-Dirs</th>`) {
-		t.Error("expected # Sub-Dirs column in dirs-table")
+	if !strings.Contains(dirsTable, `<span>#&nbsp;Items</span>`) {
+		t.Error("expected <span>#&nbsp;Items</span> in dirs-table")
 	}
-	if !strings.Contains(dirsTable, `<th class="col-size">Size</th>`) {
-		t.Error("expected Size column in dirs-table")
+	if !strings.Contains(dirsTable, `<span>#&nbsp;Sub-Dirs</span>`) {
+		t.Error("expected <span>#&nbsp;Sub-Dirs</span> in dirs-table")
+	}
+	// Per user request 2026-06-27: now wrapped in a
+	// sortable <th> with a <span> around the text.
+	if !strings.Contains(dirsTable, `<th class="col-size sortable"`) {
+		t.Error("expected sortable col-size th in dirs-table")
+	}
+	if !strings.Contains(dirsTable, `<span>Size</span>`) {
+		t.Error("expected <span>Size</span> in dirs-table")
 	}
 	// 2. The thead should NOT have a col-type <th>.
 	if strings.Contains(dirsTable, `<th class="col-type">Type</th>`) {
 		t.Error("expected NO <th class=\"col-type\">Type</th> in dirs-table (Phase 77: Type column removed)")
 	}
-	// 3. The Name column should still be there.
-	if !strings.Contains(dirsTable, `<th class="col-name">Name</th>`) {
-		t.Error("expected <th class=\"col-name\">Name</th> in dirs-table")
+	// 3. The Name column should still be there. Per user
+	// request 2026-06-27: now wrapped in a sortable <th>
+	// with a data-sort-key + a <span> around the text.
+	if !strings.Contains(dirsTable, `<th class="col-name sortable"`) {
+		t.Error("expected sortable col-name th in dirs-table")
 	}
-	// 4. The Modified column should still be there.
-	if !strings.Contains(dirsTable, `<th class="col-date">Modified</th>`) {
-		t.Error("expected <th class=\"col-date\">Modified</th> in dirs-table")
+	if !strings.Contains(dirsTable, `<span>Name</span>`) {
+		t.Error("expected <span>Name</span> in dirs-table")
+	}
+	// 4. The Modified column should still be there. Per
+	// user request 2026-06-27: now wrapped in a sortable
+	// <th> with a data-sort-key + a <span> around the text.
+	if !strings.Contains(dirsTable, `<th class="col-date sortable"`) {
+		t.Error("expected sortable col-date th in dirs-table")
+	}
+	if !strings.Contains(dirsTable, `<span>Modified</span>`) {
+		t.Error("expected <span>Modified</span> in dirs-table")
 	}
 
 	// 5. The dirs-table body should have NO <td class="col-type"> cells.

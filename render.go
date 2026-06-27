@@ -160,6 +160,12 @@ type FileView struct {
 	Date string
 	Type string
 
+	// ModTime is the raw int64 timestamp (nanoseconds since
+	// epoch). Used by the JS header-sort feature to sort
+	// the others table by Modified. Formatted display goes
+	// through Date (the human-readable form).
+	ModTime int64
+
 	// CountItems is the number of NON-directory entries inside
 	// this subdirectory (files + symlinks to files + broken
 	// symlinks, etc.). Only set on directory entries (IsDir=true).
@@ -466,6 +472,10 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		v.Href = pathPrefix + f.Name
 		v.Size = humanSize(f.Size)
 		v.Date = formatDate(f.ModTime)
+		// Per user request 2026-06-27: expose the raw ModTime
+		// to the JS header-sort feature. The dirs and others
+		// tables have data-date="..." attributes for sorting.
+		v.ModTime = f.ModTime
 	}
 	return v
 }
@@ -1805,8 +1815,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 
 /* Full-width tables for directories (Phase 69) and other files.
-   Same structure: <table class="files-table dirs-table"> or
-   <table class="files-table others-table">. The class .files-table
+   Same structure: <table class="files-table dirs-table" id="dirs-table"> or
+   <table class="files-table others-table" id="others-table">. The class .files-table
    carries the shared styling (width, borders, hover); the
    .dirs-table / .others-table class can be used for any
    per-section override (currently none).
@@ -1905,6 +1915,32 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   width: 11rem;
   color: var(--fg-muted);
   white-space: nowrap;
+}
+
+/* Per user request 2026-06-27: clickable column headers for
+   the dirs and others tables. The .sortable class adds a
+   pointer cursor and a hover effect. The .sort-indicator
+   span inside the <th> shows ▲ (asc) or ▼ (desc) for the
+   active sort column. Empty when the column is not the
+   active sort. */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.sortable:hover {
+  background: var(--bg-hover);
+}
+.sortable.sort-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.sort-indicator {
+  display: inline-block;
+  width: 0.85rem;
+  margin-left: 0.25rem;
+  color: var(--accent);
+  font-size: 0.75rem;
+  vertical-align: middle;
 }
 .table-link {
   /* The link inside the Name cell. Inherits color from the
@@ -3094,22 +3130,25 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <table class="files-table dirs-table">
       <thead>
         <tr>
-          <th class="col-name">Name</th>
-          <!-- Per user request 2026-06-27: # Items and # Dirs
-               columns show the contents of each subdir. The
-               counts are computed at scan time (one extra
-               ReadDir per subdir, see Scanner.countSubdirStats).
-               "Items" excludes directories; "Dirs" includes
-               symlinks to directories. -->
-          <th class="col-count">#&nbsp;Items</th>
-          <th class="col-count">#&nbsp;Sub-Dirs</th>
-          <th class="col-size">Size</th>
-          <th class="col-date">Modified</th>
+          <!-- Per user request 2026-06-27: each <th> is
+               sortable via JS click. The data-sort-key
+               attribute tells the JS handler what the column
+               key is; data-default-order is the initial
+               direction (asc or desc) when the user first
+               clicks that column. The <span class="sort-indicator">
+               inside the <th> shows ▲/▼ for the active sort.
+               The default sort for the dirs table is
+               "name asc" (matches the server-side order). -->
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Items</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Sub-Dirs</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Modified</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
         {{range .Subdirs}}
-        <tr>
+        <tr data-name="{{.Name}}" data-items="{{.CountItems}}" data-dirs="{{.CountDirs}}" data-size="{{.Size}}" data-date="{{.ModTime}}">
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
           <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountItems}}</a></td>
           <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountDirs}}</a></td>
@@ -3138,15 +3177,21 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <table class="files-table others-table">
       <thead>
         <tr>
-          <th class="col-name">Name</th>
-          <th class="col-type">Type</th>
-          <th class="col-size">Size</th>
-          <th class="col-date">Modified</th>
+          <!-- Per user request 2026-06-27: each <th> is
+               sortable. data-sort-key tells the JS handler
+               what column key this is. data-default-order is
+               the initial direction. The default for the
+               others table is "date desc" (matches the
+               server-side mtime-desc default). -->
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
+          <th class="col-type sortable" data-sort-key="type" data-default-order="asc"><span>Type</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Modified</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
         {{range .OtherFiles}}
-        <tr data-filename="{{.Name}}">
+        <tr data-filename="{{.Name}}" data-name="{{.Name}}" data-type="{{.Type}}" data-size="{{.Size}}" data-date="{{.ModTime}}">
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a></td>
           <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
           <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
@@ -3296,6 +3341,129 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       applyFilter();
     }
   }
+})();
+
+/* Phase 163: click-to-sort table column headers.
+   Per user request 2026-06-27: dirs and others tables have
+   clickable column headers that sort the rows client-side.
+   No page reload — JS reorders the <tbody> rows in place.
+
+   State (in priority order):
+     1. URL query string (?dirs_sort=name&dirs_order=asc) —
+        the canonical state. New tabs / shared links pick
+        this up automatically.
+     2. localStorage (gallery-dirs-sort, gallery-dirs-order,
+        gallery-others-sort, gallery-others-order) — the
+        visitor's preferred sort. Persists across page
+        reloads and tab closes.
+     3. Default: dirs = name asc, others = date desc
+        (matches the existing server-side order).
+
+   On click:
+     - Same column → toggle direction
+     - Different column → use that column's data-default-order
+     - Sort client-side, save to localStorage, update URL
+       via history.replaceState (no reload, no history
+       pollution). */
+(function() {
+  function getParam(name) {
+    var m = window.location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function setParam(name, value) {
+    var url = new URL(window.location.href);
+    if (value == null) {
+      url.searchParams.delete(name);
+    } else {
+      url.searchParams.set(name, value);
+    }
+    history.replaceState(null, '', url.toString());
+  }
+
+  function setupTable(tableId, paramPrefix, defaultSort, defaultOrder) {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    if (!thead || !tbody) return;
+
+    // Determine initial sort: URL > localStorage > default
+    var initSort = getParam(paramPrefix + '_sort') ||
+                   localStorage.getItem('gallery-' + paramPrefix + '-sort') ||
+                   defaultSort;
+    var initOrder = getParam(paramPrefix + '_order') ||
+                    localStorage.getItem('gallery-' + paramPrefix + '-order') ||
+                    defaultOrder;
+    applySort(initSort, initOrder, false);
+
+    // Wire up click handlers
+    var ths = thead.querySelectorAll('th.sortable');
+    for (var i = 0; i < ths.length; i++) {
+      ths[i].addEventListener('click', (function(th) {
+        return function() {
+          var key = th.getAttribute('data-sort-key');
+          var currentSort = localStorage.getItem('gallery-' + paramPrefix + '-sort') || defaultSort;
+          var currentOrder = localStorage.getItem('gallery-' + paramPrefix + '-order') || defaultOrder;
+          var newOrder;
+          if (currentSort === key) {
+            // Same column: toggle direction
+            newOrder = currentOrder === 'asc' ? 'desc' : 'asc';
+          } else {
+            // Different column: use the column's default direction
+            newOrder = th.getAttribute('data-default-order') || 'asc';
+          }
+          applySort(key, newOrder, true);
+        };
+      })(ths[i]));
+    }
+
+    function applySort(key, order, save) {
+      // Find the th for this key
+      var th = thead.querySelector('th[data-sort-key="' + key + '"]');
+      if (!th) return;
+
+      // Update indicators on all ths
+      var allThs = thead.querySelectorAll('th.sortable');
+      for (var i = 0; i < allThs.length; i++) {
+        var ind = allThs[i].querySelector('.sort-indicator');
+        if (ind) ind.textContent = '';
+        allThs[i].classList.remove('sort-active');
+      }
+      var ind = th.querySelector('.sort-indicator');
+      if (ind) ind.textContent = order === 'asc' ? '\u25B2' : '\u25BC';
+      th.classList.add('sort-active');
+
+      // Get rows and sort
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+      rows.sort(function(a, b) {
+        var av = a.getAttribute('data-' + key) || '';
+        var bv = b.getAttribute('data-' + key) || '';
+        // Numeric vs string: detect by trying parseInt
+        var an = parseFloat(av);
+        var bn = parseFloat(bv);
+        if (!isNaN(an) && !isNaN(bn) && av !== '' && bv !== '' && /^-?\d/.test(av) && /^-?\d/.test(bv)) {
+          return order === 'asc' ? an - bn : bn - an;
+        }
+        // String compare
+        if (av < bv) return order === 'asc' ? -1 : 1;
+        if (av > bv) return order === 'asc' ? 1 : -1;
+        return 0;
+      });
+      for (var i = 0; i < rows.length; i++) {
+        tbody.appendChild(rows[i]);
+      }
+
+      if (save) {
+        localStorage.setItem('gallery-' + paramPrefix + '-sort', key);
+        localStorage.setItem('gallery-' + paramPrefix + '-order', order);
+        setParam(paramPrefix + '_sort', key);
+        setParam(paramPrefix + '_order', order);
+      }
+    }
+  }
+
+  setupTable('dirs-table', 'dirs', 'name', 'asc');
+  setupTable('others-table', 'others', 'date', 'desc');
 })();
 
 (function() {
