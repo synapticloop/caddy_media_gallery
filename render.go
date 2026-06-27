@@ -2064,17 +2064,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-hover);
 }
 .sortable.sort-active {
-  color: var(--accent);
-  font-weight: 600;
+  /* Active column header (when a dirs/others table column
+     is the current sort key). Per user request 2026-06-27:
+     no longer color or bold the active header — the ▲/▼
+     glyph in the .sort-indicator span is enough to show
+     which column is the active sort. */
 }
 .sort-indicator {
   display: inline-block;
   width: 0.85rem;
   margin-top: -0.3rem;
   margin-left: 0.25rem;
-  color: var(--accent);
   font-size: 0.75rem;
   vertical-align: middle;
+  /* Per user request 2026-06-27: removed color so the
+     ▲/▼ indicator is no longer tinted with the brand
+     colour. Inherits the default text colour from the
+     <th> (which is the default page colour since the
+     active <th> is no longer colored either). */
 }
 .table-link {
   /* The link inside the Name cell. Inherits color from the
