@@ -38,6 +38,8 @@ type PageData struct {
 	// Pagination
 	Page     int // 1-based
 	PageSize int
+	// Query is the current URL query (sort, filter, page, breadcrumb, etc.) — passed to the template so the page-size form can include hidden inputs to preserve other params on submit.
+	Query url.Values
 	// PageSizes is the list of per-page options the visitor
 	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
 	// Configured via the `page_sizes` Caddyfile directive;
@@ -686,6 +688,46 @@ func pageFromQuery(q url.Values) int {
 	return page
 }
 
+// pageSizeFromQuery returns the per-page size from the URL
+// query (?page_size=N). Returns -1 if not specified or invalid
+// (the caller will then use the configured default). The
+// special token "all" is converted to 0 (which means "no
+// pagination" downstream).
+func pageSizeFromQuery(q url.Values) int {
+	raw := strings.TrimSpace(q.Get("page_size"))
+	if raw == "" {
+		return -1
+	}
+	if raw == "all" {
+		return 0
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return -1
+	}
+	return n
+}
+
+// queryToHiddenInputs renders url.Values as hidden <input>
+// elements, one per value. Used by the page-size form so the
+// form preserves other URL parameters (sort, filter, page,
+// etc.) when submitting. Skips the page_size key (the
+// dropdown itself supplies that).
+func queryToHiddenInputs(query url.Values) template.HTML {
+	var buf strings.Builder
+	for k, vs := range query {
+		if k == "page_size" {
+			continue
+		}
+		for _, v := range vs {
+			kEsc := template.HTMLEscaper(k)
+			vEsc := template.HTMLEscaper(v)
+			fmt.Fprintf(&buf, `<input type="hidden" name="%s" value="%s">`, kEsc, vEsc)
+		}
+	}
+	return template.HTML(buf.String())
+}
+
 // parseTypeFilter returns the set of file extensions to show.
 // It accepts TWO formats (the bookmarkable URL and the standard
 // form-submission format):
@@ -1071,6 +1113,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Page:        page,
 		PageSize:    pageSize,
 		PageSizes:   pageSizes,
+		Query:       query,
 		TotalImages: totalImages,
 		ImageCount:  imageCount,
 		TotalVideos: videoCount,
@@ -1963,6 +2006,32 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-color: var(--border-strong);
   color: var(--fg);
 }
+
+/* Per user request 2026-06-20: style the page-size <select>
+   to match the filter-pill look. Same border, padding, font
+   size, colors; same hover behaviour. The native caret is
+   preserved by the browser (uses system UI). */
+.page-size-select {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+  margin-left: 0.25rem;
+}
+.page-size-select:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+.page-size-select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .filter-count {
   color: var(--fg-faint);
   font-size: 0.8rem;
@@ -2548,15 +2617,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      for "all"). The current selection is shown as selected. -->
   <span>·</span>
   <form method="get" action="" class="page-size-form">
-    <span>
-      <label for="page-size-select">per page:</label>
-      <select name="page_size" id="page-size-select" onchange="this.form.submit()">
-        {{$pageSizeStr := printf "%d" $.PageSize}}
-        {{range .PageSizes}}
-        <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
-        {{end}}
-      </select>
-    </span>
+    {{- /* Preserve other URL params (sort, filter, page, breadcrumb) when submitting */ -}}
+    {{- queryToHiddenInputs $.Query -}}
+    <select name="page_size" class="page-size-select" onchange="this.form.submit()">
+      {{$pageSizeStr := printf "%d" $.PageSize}}
+      {{range .PageSizes}}
+      <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
+      {{end}}
+    </select>
   </form>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
         </div>
       </div>
@@ -3222,6 +3290,11 @@ var galleryFuncs = template.FuncMap{
 	// directly. This helper exists purely to make the
 	// "is last segment" check readable in the template.
 	"lastIndex": func(s []BreadcrumbSegment) int { return len(s) - 1 },
+	// queryToHiddenInputs renders url.Values as hidden inputs,
+	// excluding the page_size key (which the dropdown supplies).
+	// Used by the page-size form to preserve other URL params
+	// (sort, filter, page) when the visitor changes page size.
+	"queryToHiddenInputs": queryToHiddenInputs,
 	"sortLabel": func(field string) string {
 		switch field {
 		case "name":
