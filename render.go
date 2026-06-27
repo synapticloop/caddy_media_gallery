@@ -1739,7 +1739,6 @@ h1 {
   align-self: flex-start;
   margin-top: 0.3rem;
   font-size: 0.8rem;
-  background: var(--bg-card);
   color: var(--fg);
   text-decoration: none;
   white-space: nowrap;
