@@ -3886,3 +3886,171 @@ func TestCountSubdirStats_NonExistentDir(t *testing.T) {
 		t.Errorf("expected (0, 0, 0), got (%d, %d, %d)", items, dirs, totalSize)
 	}
 }
+
+// TestRenderPage_EXIFPill_AppearsWhenExifPresent verifies the
+// "EXIF" pill appears on the card overlay below the filetype
+// chip when the image has EXIF data. Per user request
+// 2026-06-27: the pill is a label (not a link) so the
+// visitor knows EXIF metadata is available in the lightbox.
+func TestRenderPage_EXIFPill_AppearsWhenExifPresent(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "with_exif.jpg", Kind: KindImage, Size: 1024,
+			Exif: &ExifData{
+				CameraMake: "Sony", CameraModel: "ILCE-7M4",
+				LensModel:    "FE 70-200mm F2.8 GM OSS II",
+				DateTaken:    "2024:11:08 06:23:14",
+				ExposureTime: "1/250 s", Aperture: "f/4",
+				ISO: "ISO 800", FocalLength: "135 mm",
+			},
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `<span class="exif-chip"`) {
+		t.Error("expected EXIF chip to appear on the card when image has EXIF")
+	}
+	if !strings.Contains(html, `>EXIF<`) {
+		t.Error("expected EXIF chip text to be 'EXIF'")
+	}
+}
+
+// TestRenderPage_EXIFPill_HiddenWhenNoExif verifies the EXIF
+// pill does NOT appear when the image has no EXIF data.
+func TestRenderPage_EXIFPill_HiddenWhenNoExif(t *testing.T) {
+	files := []FileInfo{
+		{Name: "no_exif.jpg", Kind: KindImage, Size: 1024},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `<span class="exif-chip"`) {
+		t.Error("expected EXIF chip to NOT appear when image has no EXIF")
+	}
+}
+
+// TestRenderPage_EXIFPill_HiddenWhenExifEmpty verifies the EXIF
+// pill does NOT appear when ExifData has fields set but they're
+// all empty strings (HasAny returns false). This guards against
+// a regression where Exif is non-nil but empty.
+func TestRenderPage_EXIFPill_HiddenWhenExifEmpty(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "empty_exif.jpg", Kind: KindImage, Size: 1024,
+			Exif: &ExifData{}, // non-nil but no fields set
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `<span class="exif-chip"`) {
+		t.Error("expected EXIF chip to NOT appear when ExifData is empty (HasAny=false)")
+	}
+}
+
+// TestRenderPage_EXIFDataAttributes verifies the card <a> has
+// the data-exif-* attributes when the image has EXIF. The JS
+// lightbox reads these attributes to populate the EXIF panel.
+func TestRenderPage_EXIFDataAttributes(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "with_exif.jpg", Kind: KindImage, Size: 1024,
+			Exif: &ExifData{
+				CameraMake: "Sony", CameraModel: "ILCE-7M4",
+				LensModel:    "FE 70-200mm F2.8 GM OSS II",
+				DateTaken:    "2024:11:08 06:23:14",
+				ExposureTime: "1/250 s", Aperture: "f/4",
+				ISO: "ISO 800", FocalLength: "135 mm",
+			},
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The card <a> should have all 8 data-exif-* attributes.
+	for _, attr := range []string{
+		`data-exif-camera-make="Sony"`,
+		`data-exif-camera-model="ILCE-7M4"`,
+		`data-exif-lens="FE 70-200mm F2.8 GM OSS II"`,
+		`data-exif-date="2024:11:08 06:23:14"`,
+		`data-exif-shutter="1/250 s"`,
+		`data-exif-aperture="f/4"`,
+		`data-exif-iso="ISO 800"`,
+		`data-exif-focal="135 mm"`,
+	} {
+		if !strings.Contains(html, attr) {
+			t.Errorf("expected card to have %s", attr)
+		}
+	}
+}
+
+// TestRenderPage_EXIFPanel_AlwaysInLightboxHTML verifies the
+// EXIF panel is part of the lightbox HTML (initially hidden via
+// the `hidden` attribute). The JS shows it when the image has
+// EXIF data (read from the card's data-exif-* attributes).
+func TestRenderPage_EXIFPanel_AlwaysInLightboxHTML(t *testing.T) {
+	files := []FileInfo{
+		{Name: "any.jpg", Kind: KindImage, Size: 1024},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `<div class="lb-exif"`) {
+		t.Error("expected lightbox HTML to include the .lb-exif panel")
+	}
+	// The panel should be hidden by default (JS toggles it).
+	if !strings.Contains(html, `<div class="lb-exif" hidden>`) {
+		t.Error("expected .lb-exif panel to be hidden by default")
+	}
+	// The panel should have all 4 rows (Camera, Lens, Date, Exposure).
+	for _, label := range []string{"Camera", "Lens", "Date", "Exposure"} {
+		if !strings.Contains(html, label) {
+			t.Errorf("expected EXIF panel to have %q row", label)
+		}
+	}
+}
+
+// TestScanner_ExifOnlyForImages verifies the scanner only
+// calls readExif for KindImage files (not for KindVideo or
+// KindOther). Per user request 2026-06-27: video files don't
+// need EXIF, and reading EXIF for non-image files is wasted I/O.
+func TestScanner_ExifOnlyForImages(t *testing.T) {
+	s := &Scanner{
+		Root: "/var/www/html/images/media_gallery",
+		ImageExts: map[string]bool{
+			".jpg": true, ".jpeg": true, ".png": true, ".webp": true,
+		},
+		VideoExts: map[string]bool{".mp4": true, ".webm": true},
+	}
+	files, err := s.Scan()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if f.Kind == KindImage {
+			// 3 fixtures have EXIF; others don't
+			if f.Name == "elderly_man_profile_fishing_misty_dawn.png" ||
+				f.Name == "misty_bamboo_forest_path.jpg" ||
+				f.Name == "potted_succulent_windowsill_sunlight.webp" {
+				if f.Exif == nil {
+					t.Errorf("expected %s to have EXIF (fixture)", f.Name)
+				}
+			} else {
+				if f.Exif != nil {
+					t.Errorf("did not expect %s to have EXIF (no fixture)", f.Name)
+				}
+			}
+		} else {
+			// KindVideo, KindDir, KindOther should never have Exif
+			if f.Exif != nil {
+				t.Errorf("non-image %s (kind=%s) should not have EXIF", f.Name, f.Kind)
+			}
+		}
+	}
+}

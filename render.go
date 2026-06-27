@@ -166,6 +166,15 @@ type FileView struct {
 	// through Date (the human-readable form).
 	ModTime int64
 
+	// Exif holds the CAMERA-subset EXIF metadata for this
+	// file. nil means "no EXIF" — the template should render
+	// neither the "EXIF" pill on the card nor the EXIF panel
+	// in the lightbox. Populated by buildFileView from
+	// FileInfo.Exif (which is populated by scanner.Scan via
+	// readExif). Per user request 2026-06-27: GPS fields
+	// are NEVER extracted.
+	Exif *ExifData
+
 	// CountItems is the number of NON-directory entries inside
 	// this subdirectory (files + symlinks to files + broken
 	// symlinks, etc.). Only set on directory entries (IsDir=true).
@@ -477,6 +486,11 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		// tables have data-date="..." attributes for sorting.
 		v.ModTime = f.ModTime
 	}
+	// Copy EXIF data through (regardless of kind — the template
+	// uses {{if .Exif.HasAny}} to decide whether to render the
+	// EXIF pill and the lightbox panel). Per user request
+	// 2026-06-27: GPS fields are NEVER extracted; see exif.go.
+	v.Exif = f.Exif
 	return v
 }
 
@@ -2737,6 +2751,29 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.05em;
   flex: 0 0 auto;
 }
+/* Per user request 2026-06-27: the EXIF pill appears below
+   the filetype-chip on the card overlay, only when the image
+   has EXIF metadata. The pill is just a label (not a link)
+   to inform the visitor that more info is available in the
+   lightbox. Same chip style as .filetype-chip but with a
+   slightly different background to distinguish it. */
+.tile-meta-chips {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+}
+.exif-chip {
+  background: var(--bg-active);
+  color: var(--accent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: help;
+}
 .pagination {
   display: flex;
   align-items: center;
@@ -3019,6 +3056,40 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+#gallery-lightbox .lb-exif {
+  /* Per user request 2026-06-27: the EXIF panel appears in
+     the lightbox below the caption, only when the current
+     image has EXIF metadata. Shown as a compact 2-column
+     table (label + value) for readability. Hidden via the
+     hidden HTML attribute when there is no EXIF. */
+  position: absolute;
+  bottom: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+#gallery-lightbox .lb-exif-table {
+  border-collapse: collapse;
+}
+#gallery-lightbox .lb-exif-table td {
+  padding: 0;
+  vertical-align: top;
+}
+#gallery-lightbox .lb-exif-label {
+  color: rgba(255, 255, 255, 0.55);
+  padding-right: 0.6rem !important;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  font-weight: 600;
 }
 #gallery-lightbox .lb-counter {
   position: absolute;
@@ -3363,7 +3434,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}">
+      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
@@ -3384,7 +3455,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
             <span class="date">{{.Date}}</span>
             <span class="size">{{.Size}}</span>
           </div>
-          <span class="filetype-chip">{{.Type}}</span>
+          <div class="tile-meta-chips">
+            <span class="filetype-chip">{{.Type}}</span>
+            {{if and .Exif .Exif.HasAny}}<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>{{end}}
+          </div>
         </div>
       </a>
       {{end}}
@@ -3626,7 +3700,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
     '<span class="lb-counter"></span>' +
-    '<span class="lb-caption"></span>';
+    '<span class="lb-caption"></span>' +
+    '<div class="lb-exif" hidden>' +
+      '<table class="lb-exif-table">' +
+        '<tr><td class="lb-exif-label">Camera</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
+        '<tr><td class="lb-exif-label">Lens</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
+        '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
+        '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
+      '</table>' +
+    '</div>';
   document.body.appendChild(overlay);
 
   var media = overlay.appendChild(document.createElement('div'));
@@ -3700,6 +3782,32 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     media.appendChild(currentEl);
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
+    // Per user request 2026-06-27: show the EXIF metadata
+    // in the lightbox. Read the data-exif-* attributes from
+    // the card; if the card has none, hide the EXIF panel.
+    var exifPanel = overlay.querySelector('.lb-exif');
+    var cameraMake = c.getAttribute('data-exif-camera-make') || '';
+    var cameraModel = c.getAttribute('data-exif-camera-model') || '';
+    var lens = c.getAttribute('data-exif-lens') || '';
+    var dateTaken = c.getAttribute('data-exif-date') || '';
+    var shutter = c.getAttribute('data-exif-shutter') || '';
+    var aperture = c.getAttribute('data-exif-aperture') || '';
+    var iso = c.getAttribute('data-exif-iso') || '';
+    var focal = c.getAttribute('data-exif-focal') || '';
+    if (cameraMake || cameraModel || lens || dateTaken || shutter || aperture || iso || focal) {
+      // Camera = "Make Model" (or just Make, or just Model)
+      var camera = (cameraMake + (cameraMake && cameraModel ? ' ' : '') + cameraModel).trim();
+      // Exposure = "Shutter · Aperture · ISO · Focal"
+      var exposureParts = [shutter, aperture, iso, focal].filter(function(s) { return s; });
+      var exposure = exposureParts.join(' · ');
+      exifPanel.querySelector('[data-exif="camera"]').textContent = camera || '—';
+      exifPanel.querySelector('[data-exif="lens"]').textContent = lens || '—';
+      exifPanel.querySelector('[data-exif="date"]').textContent = dateTaken || '—';
+      exifPanel.querySelector('[data-exif="exposure"]').textContent = exposure || '—';
+      exifPanel.hidden = false;
+    } else {
+      exifPanel.hidden = true;
+    }
     overlay.classList.add('open');
   }
 

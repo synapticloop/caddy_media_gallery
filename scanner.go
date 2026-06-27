@@ -1,6 +1,7 @@
 package gallery
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -82,7 +83,15 @@ type FileInfo struct {
 	// Populated by Scanner.Scan; the count is computed by
 	// reading the subdir's contents (one extra os.ReadDir
 	// syscall per subdir, then discarded).
-	CountItems int `json:"count_items"`
+	// Exif holds the CAMERA-subset EXIF metadata for this
+	// file (only populated for image files). nil means "no
+	// EXIF block" or "EXIF block with no displayable fields".
+	// Per user request 2026-06-27: GPS fields are NEVER
+	// extracted — the parser only reads Make, Model, Lens,
+	// DateTimeOriginal, ExposureTime, FNumber, ISOSpeedRatings,
+	// and FocalLength. See exif.go for details.
+	Exif       *ExifData `json:"exif,omitempty"`
+	CountItems int       `json:"count_items"`
 	// CountDirs is the number of directories inside this
 	// subdirectory. Includes real directories AND symlinks
 	// that point to directories (per user request 2026-06-27).
@@ -249,6 +258,27 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 			ModTime: info.ModTime().UnixNano(),
 			Size:    info.Size(),
 			Kind:    kind,
+		}
+		// Read EXIF for image files. Per user request
+		// 2026-06-27: GPS data is NEVER extracted (see exif.go).
+		// We only call readExif for KindImage; KindVideo and
+		// KindOther don't have EXIF in our scope. Errors are
+		// logged but not fatal — a malformed EXIF block
+		// shouldn't break the scan.
+		if kind == KindImage {
+			fullPath := filepath.Join(s.Root, e.Name())
+			exif, err := readExif(fullPath)
+			if err != nil {
+				// Most images have no EXIF block; that's expected
+				// and not an error worth logging. The dsoprea library
+				// returns exif.ErrNoExif for those — we never see that
+				// because readExif converts it to (nil, nil). So if we
+				// DO see an error here, it's a genuine one (malformed
+				// EXIF, file read error, etc.) and worth logging.
+				fmt.Fprintf(os.Stderr, "readExif(%s): %v\n", fullPath, err)
+			} else {
+				fi.Exif = exif
+			}
 		}
 		// For subdirs, count the contents (items + subdirs).
 		// Per user request 2026-06-27: this is what powers the
