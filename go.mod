@@ -4,7 +4,7 @@ go 1.25.1
 
 require github.com/caddyserver/caddy/v2 v2.11.4
 
-require golang.org/x/image v0.42.0
+require golang.org/x/image v0.43.0
 
 require (
 	cel.dev/expr v0.25.1 // indirect

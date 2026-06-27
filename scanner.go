@@ -77,6 +77,15 @@ type FileInfo struct {
 	ModTime int64    `json:"mtime"`
 	Size    int64    `json:"size"`
 	Kind    FileKind `json:"kind"`
+	// Width and Height are the pixel dimensions of the source
+	// image or video (the file the thumbnail was generated
+	// from). Zero means "dimensions not available" — for
+	// unsupported formats (AVIF, HEIC, SVG) the scanner
+	// skips readDimensions. Per user request 2026-06-27:
+	// dimensions are read at scan time and cached alongside
+	// the rest of the file metadata.
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
 	// CountItems is the number of NON-directory entries
 	// (files, symlinks-to-files, broken symlinks, etc.) inside
 	// this subdirectory. Only meaningful for KindDir entries.
@@ -278,6 +287,22 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 				fmt.Fprintf(os.Stderr, "readExif(%s): %v\n", fullPath, err)
 			} else {
 				fi.Exif = exif
+			}
+		}
+		// Read pixel dimensions for images and videos. Per user
+		// request 2026-06-27: the watermark at the bottom-right
+		// of the thumbnail shows the W × H of the source file.
+		// AVIF, HEIC, SVG are NOT supported (per user request);
+		// readDimensions returns (0, 0, nil) for those, which
+		// the watermark template treats as "don't render".
+		if kind == KindImage || kind == KindVideo {
+			fullPath := filepath.Join(s.Root, e.Name())
+			w, h, err := readDimensions(fullPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "readDimensions(%s): %v\n", fullPath, err)
+			} else if w > 0 && h > 0 {
+				fi.Width = w
+				fi.Height = h
 			}
 		}
 		// For subdirs, count the contents (items + subdirs).

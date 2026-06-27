@@ -4054,3 +4054,90 @@ func TestScanner_ExifOnlyForImages(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderPage_ThumbDimensions_AppearsWhenSet verifies the
+// dimensions watermark appears at the bottom-right of the
+// thumbnail card when FileView.Dimensions is set. Per user
+// request 2026-06-27: the watermark shows W × H of the
+// source image/video, always visible (not hover-only like
+// the open-btn).
+func TestRenderPage_ThumbDimensions_AppearsWhenSet(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "photo.jpg", Kind: KindImage, Size: 1024,
+			Width: 6000, Height: 4000,
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `class="thumb-dimensions"`) {
+		t.Error("expected .thumb-dimensions watermark in the rendered HTML")
+	}
+	if !strings.Contains(html, `6000 × 4000`) {
+		t.Error("expected dimensions text `6000 × 4000` in the rendered HTML")
+	}
+}
+
+// TestRenderPage_ThumbDimensions_HiddenWhenZero verifies
+// the watermark does NOT appear when Width or Height is 0
+// (unsupported format like AVIF/HEIC/SVG, or the readDimensions
+// call returned 0,0).
+func TestRenderPage_ThumbDimensions_HiddenWhenZero(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "photo.jpg", Kind: KindImage, Size: 1024,
+			Width: 0, Height: 0,
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `class="thumb-dimensions"`) {
+		t.Error("expected .thumb-dimensions to be ABSENT when Width/Height are 0")
+	}
+}
+
+// TestRenderPage_ThumbDimensions_PartialZeroHidden verifies
+// the watermark is hidden when ONLY one dimension is set
+// (defensive case — should never happen in practice but
+// the template should handle it gracefully).
+func TestRenderPage_ThumbDimensions_PartialZeroHidden(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "photo.jpg", Kind: KindImage, Size: 1024,
+			Width: 6000, Height: 0,
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `class="thumb-dimensions"`) {
+		t.Error("expected .thumb-dimensions to be ABSENT when Height is 0")
+	}
+}
+
+// TestRenderPage_ThumbDimensions_AppearsForVideo verifies
+// the watermark appears for KindVideo entries too (per the
+// plan: dimensions of the source video file, read via ffprobe).
+func TestRenderPage_ThumbDimensions_AppearsForVideo(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "clip.mp4", Kind: KindVideo, Size: 1024,
+			Width: 1920, Height: 1080,
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `class="thumb-dimensions"`) {
+		t.Error("expected .thumb-dimensions watermark for video card")
+	}
+	if !strings.Contains(html, `1920 × 1080`) {
+		t.Error("expected video dimensions text `1920 × 1080`")
+	}
+}

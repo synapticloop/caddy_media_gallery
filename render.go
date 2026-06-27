@@ -166,6 +166,15 @@ type FileView struct {
 	// through Date (the human-readable form).
 	ModTime int64
 
+	// Width and Height are the pixel dimensions of the source
+	// image/video. Zero for unsupported formats (AVIF, HEIC,
+	// SVG — per user request 2026-06-27). Dimensions is the
+	// formatted "WIDTH × HEIGHT" string for the watermark;
+	// empty when Width or Height is zero.
+	Width      int
+	Height     int
+	Dimensions string
+
 	// Exif holds the CAMERA-subset EXIF metadata for this
 	// file. nil means "no EXIF" — the template should render
 	// neither the "EXIF" pill on the card nor the EXIF panel
@@ -491,6 +500,14 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 	// EXIF pill and the lightbox panel). Per user request
 	// 2026-06-27: GPS fields are NEVER extracted; see exif.go.
 	v.Exif = f.Exif
+	// Copy dimensions through. Per user request 2026-06-27:
+	// the bottom-right watermark shows the source file's
+	// W × H. The formatDimensions helper returns an empty
+	// string when either dimension is zero, which the
+	// template treats as "don't render the watermark".
+	v.Width = f.Width
+	v.Height = f.Height
+	v.Dimensions = formatDimensions(f.Width, f.Height)
 	return v
 }
 
@@ -2626,6 +2643,27 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   object-fit: cover;
   display: block;
 }
+/* Per user request 2026-06-27: the dimensions watermark
+   appears at the bottom-right of every thumbnail card,
+   always visible. Shows the W × H of the source image
+   (or video). Styled like the open-btn (translucent
+   background) but text instead of an icon, and ALWAYS
+   visible (the open-btn is hover-only). */
+.thumb-dimensions {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.95);
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
 .open-btn {
   position: absolute;
   top: 6px;
@@ -3435,6 +3473,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="media-grid">
       {{range .Images}}
       <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
+        {{if .Dimensions}}<span class="thumb-dimensions">{{.Dimensions}}</span>{{end}}
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
