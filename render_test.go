@@ -132,7 +132,7 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 	// First page: should have "Next" but not "← Prev" as a link
-	if !strings.Contains(html, `href="?sort=mtime&order=desc&page=2"`) {
+	if !strings.Contains(html, `href="?order=desc&amp;page=2&amp;sort=mtime"`) {
 		t.Error("expected Next link to page 2")
 	}
 	// Test page 2
@@ -144,10 +144,10 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	if !strings.Contains(html2, "Page 2 of 4") {
 		t.Error("expected 'Page 2 of 4' on page 2")
 	}
-	if !strings.Contains(html2, `href="?sort=mtime&order=desc&page=1"`) {
+	if !strings.Contains(html2, `href="?order=desc&amp;page=1&amp;sort=mtime"`) {
 		t.Error("expected Prev link to page 1 on page 2")
 	}
-	if !strings.Contains(html2, `href="?sort=mtime&order=desc&page=3"`) {
+	if !strings.Contains(html2, `href="?order=desc&amp;page=3&amp;sort=mtime"`) {
 		t.Error("expected Next link to page 3 on page 2")
 	}
 }
@@ -269,7 +269,7 @@ func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	// (Go's html/template leaves & unescaped in href attributes —
 	// they're valid HTML — so we check for & not &amp;.)
 	html, _ := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
-	if !strings.Contains(html, `href="?sort=name&order=asc"`) {
+	if !strings.Contains(html, `href="?order=asc&amp;sort=name"`) {
 		t.Error("expected default Name link to be asc (clicking activates sort)")
 	}
 
@@ -279,7 +279,7 @@ func TestRenderPage_SortUITogglesDirection(t *testing.T) {
 	if !strings.Contains(html, `class="sort-btn active"`) {
 		t.Error("expected the active sort button to have the 'active' class")
 	}
-	if !strings.Contains(html, `href="?sort=name&order=desc"`) {
+	if !strings.Contains(html, `href="?order=desc&amp;sort=name"`) {
 		t.Error("expected active Name link to toggle to desc")
 	}
 	// The active button should also display an arrow.

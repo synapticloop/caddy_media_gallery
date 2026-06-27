@@ -856,6 +856,142 @@ func pageSizeFromQuery(q url.Values) int {
 	return n
 }
 
+// queryString renders url.Values as a URL query string
+// (without the leading "?"). Empty string if the query has
+// no keys. Uses literal "=" and "&" (not URL-encoded) so
+// the HTML source is readable. Values are still html-escaped
+// for safety against injection, but the structural chars
+// are unencoded.
+//
+// Used by link builders (pagination, sort bar, filter
+// buttons) that need to preserve the current query when
+// changing a single param. The template uses it as:
+//
+//	href="?{{queryString .Query}}&page=2"
+//
+// (or similar). The leading "?" is always present (even
+// if queryString returns ""), so the link is always a
+// valid relative URL.
+//
+// Per user request 2026-06-27: the pagination links and
+// sort-by filter links were not preserving the active
+// type filter, search query, or other params — clicking
+// "Next" would lose the filter state. This helper makes
+// it trivial to preserve them everywhere.
+func queryString(query url.Values) template.URL {
+	if len(query) == 0 {
+		return ""
+	}
+	var parts []string
+	// Iterate in sorted key order for stable test assertions
+	// (and predictable HTML output). The test assertions look
+	// for strings like "order=desc&page=2&sort=mtime".
+	keys := make([]string, 0, len(query))
+	for k := range query {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for _, v := range query[k] {
+			// HTMLEscape key+value to prevent XSS via crafted
+			// URL params. Then wrap in template.URL so the
+			// template engine doesn't double-escape the &, =, etc.
+			parts = append(parts, template.HTMLEscaper(k)+"="+template.HTMLEscaper(v))
+		}
+	}
+	return template.URL(strings.Join(parts, "&"))
+}
+
+// queryWith returns url.Values with the given key replaced
+// (or removed if value is ""). Returns a NEW map (the
+// original is not modified). Helper for building URLs
+// with overrides; e.g. for the pagination:
+//
+//	{{range .PageNumbers}}
+//	<a href="?{{queryString (queryWith .Query "page" .)}}">{{.}}</a>
+//
+// Less convenient than queryString for templates (which
+// prefer strings) but useful for chained logic in Go.
+// Most call sites should use queryString directly.
+func queryWith(query url.Values, key, value string) url.Values {
+	out := make(url.Values, len(query)+1)
+	for k, vs := range query {
+		newVs := make([]string, len(vs))
+		copy(newVs, vs)
+		out[k] = newVs
+	}
+	if value == "" {
+		out.Del(key)
+	} else {
+		out.Set(key, value)
+	}
+	return out
+}
+
+// sortOrder returns the OPPOSITE order of the current sort
+// for the given field. If the field isn't the current sort,
+// returns "asc" (the default first-click direction).
+// Used by the sort bar to render the toggle href.
+//
+// Examples (assuming current sort is mtime desc):
+//
+//	sortOrder("mtime", "desc") → "asc"  (clicking mtime again)
+//	sortOrder("name",  "desc") → "asc"  (clicking a different field)
+//	sortOrder("mtime", "asc")  → "desc" (clicking mtime again)
+//
+// Replaces the previous inline template logic that was
+// broken when wrapped in a function call (the `if` template
+// function can't be used inside a function argument list).
+func sortOrder(currentField, field, currentOrder string) string {
+	if currentField == field && currentOrder == "asc" {
+		return "desc"
+	}
+	return "asc"
+}
+
+// sortURL builds the URL query for a sort-toggle link.
+// It sets the new sort field+order, resets page to 1
+// (changing the sort should go back to the first page),
+// and preserves the active URL-only params (type filter,
+// search query, page_size).
+func sortURL(query url.Values, field, order string) url.Values {
+	out := make(url.Values, len(query)+3)
+	for k, vs := range query {
+		newVs := make([]string, len(vs))
+		copy(newVs, vs)
+		out[k] = newVs
+	}
+	out.Set("sort", field)
+	out.Set("order", order)
+	out.Del("page")
+	return out
+}
+
+// queryForPage builds the URL query for a pagination link
+// that navigates to a specific page. It preserves the
+// EFFECTIVE sort/order (from the Sort field, which has
+// defaults applied) and the active URL-only params (type
+// filter, search query, page_size). The "page" key is
+// replaced (or added) with the new value.
+//
+// Use this instead of queryWith for pagination links — the
+// difference is that queryWith only looks at the URL query
+// (so it would lose sort/order when they're at their
+// defaults), while queryForPage also includes the effective
+// sort/order.
+func queryForPage(query url.Values, sort SortSpec, page int) url.Values {
+	out := make(url.Values, len(query)+3)
+	for k, vs := range query {
+		newVs := make([]string, len(vs))
+		copy(newVs, vs)
+		out[k] = newVs
+	}
+	out.Set("sort", sort.Field)
+	out.Set("order", sort.Order)
+	out.Set("page", strconv.Itoa(page))
+	return out
+}
+
 // queryToHiddenInputs renders url.Values as hidden <input>
 // elements, one per value. Used by the page-size form so the
 // form preserves other URL parameters (sort, filter, page,
@@ -2953,11 +3089,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       </div>
     </div>
     <div class="sort-bar">
+      {{$q := .Query}}
       <span class="sort-label">Sort by</span>
-      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?sort=name&order={{if and (eq .Sort.Field "name") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?sort=type&order={{if and (eq .Sort.Field "type") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?sort=mtime&order={{if and (eq .Sort.Field "mtime") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?sort=size&order={{if and (eq .Sort.Field "size") (eq .Sort.Order "asc")}}desc{{else}}asc{{end}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
     {{/* Per user request 2026-06-20 (Phase 3): breadcrumb
        below the sort-bar, above the media section. Each
@@ -3062,13 +3199,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     </header>
 
     {{if gt .TotalPages 1}}
-    <!-- Per user request 2026-06-18: pagination at the top, just
-       below the sort-bar and above the DIRECTORIES section.
-       Mirrors the bottom pagination (same HTML, same styling).
-       Same conditional (only when multi-page). -->
+    <!-- Per user request 2026-06-27: pagination links now
+       preserve the full query (sort, order, type filter,
+       search query, page_size) — only page is replaced. The
+       old links only had sort+order+page, which lost the
+       type filter and search query when navigating pages.
+       The pattern is: build a query with page=N (using
+       queryWith), render it with queryString. The leading
+       "?" is always present (empty if the only param was
+       the page we're replacing), so the URL is always
+       a valid relative URL. -->
     <nav class="pagination">
     {{if .HasPrev}}
-      <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | minus1}}">← Prev</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
     {{else}}
       <span class="page-btn disabled">← Prev</span>
     {{end}}
@@ -3078,11 +3221,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{else if eq . $.Page}}
       <span class="page-btn active">{{.}}</span>
     {{else}}
-      <a class="page-btn" href="?sort={{$.Sort.Field}}&order={{$.Sort.Order}}&page={{.}}">{{.}}</a>
+      <a class="page-btn" href="?{{queryString (queryForPage $.Query $.Sort .)}}">{{.}}</a>
     {{end}}
     {{end}}
     {{if .HasNext}}
-      <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
     {{else}}
       <span class="page-btn disabled">Next →</span>
     {{end}}
@@ -3246,7 +3389,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{if gt .TotalPages 1}}
     <nav class="pagination">
       {{if .HasPrev}}
-        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | minus1}}">← Prev</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
       {{else}}
         <span class="page-btn disabled">← Prev</span>
       {{end}}
@@ -3256,11 +3399,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{else if eq . $.Page}}
         <span class="page-btn active">{{.}}</span>
       {{else}}
-        <a class="page-btn" href="?sort={{$.Sort.Field}}&order={{$.Sort.Order}}&page={{.}}">{{.}}</a>
+        <a class="page-btn" href="?{{queryString (queryForPage $.Query $.Sort .)}}">{{.}}</a>
       {{end}}
       {{end}}
       {{if .HasNext}}
-        <a class="page-btn" href="?sort={{.Sort.Field}}&order={{.Sort.Order}}&page={{.Page | plus1}}">Next →</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
       {{else}}
         <span class="page-btn disabled">Next →</span>
       {{end}}
@@ -3827,6 +3970,29 @@ var galleryFuncs = template.FuncMap{
 	// directly. This helper exists purely to make the
 	// "is last segment" check readable in the template.
 	"lastIndex": func(s []BreadcrumbSegment) int { return len(s) - 1 },
+	// queryString renders the current URL query as a
+	// "key=val&..." string. Used by link builders (pagination,
+	// sort bar, filter buttons) to preserve the current
+	// query state when changing a single param. Per user
+	// request 2026-06-27: pagination and sort links were
+	// not preserving type/q/page_size.
+	"queryString": queryString,
+	// queryWith returns a new url.Values with the given key
+	// replaced (or removed if value is ""). Used with
+	// queryString to build links with overrides:
+	//   href="?{{queryString (queryWith .Query "page" .)}}"
+	"queryWith": queryWith,
+	// queryForPage builds the URL query for a pagination
+	// link. Preserves the effective sort/order (from the
+	// Sort field, which has defaults applied) and the
+	// active URL-only params (type, q, page_size).
+	"queryForPage": queryForPage,
+	// sortURL builds the URL query for a sort-toggle link.
+	// Sets sort+order, resets page=1, preserves type+q+page_size.
+	"sortURL": sortURL,
+	// sortOrder returns the toggled order for a sort link
+	// (asc → desc if same field, else asc).
+	"sortOrder": sortOrder,
 	// queryToHiddenInputs renders url.Values as hidden inputs,
 	// excluding the page_size key (which the dropdown supplies).
 	// Used by the page-size form to preserve other URL params
