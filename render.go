@@ -2551,8 +2551,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <span>
       <label for="page-size-select">per page:</label>
       <select name="page_size" id="page-size-select" onchange="this.form.submit()">
+        {{$pageSizeStr := printf "%d" $.PageSize}}
         {{range .PageSizes}}
-        <option value="{{.}}"{{if eq . $.PageSize}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
+        <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
         {{end}}
       </select>
     </span>
