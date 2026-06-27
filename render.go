@@ -2831,7 +2831,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       <div class="filter-row">
-        <span class="filter-label">Filter</span>
+        <span class="filter-label">Type Filter</span>
 
         <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
            href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">All</a>
