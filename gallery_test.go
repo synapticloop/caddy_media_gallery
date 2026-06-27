@@ -155,6 +155,62 @@ func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	})
 }
 
+// TestGallery_ProvisionDefaultFromNumPerPage verifies that
+// when the operator configures `num_per_page 60 30 120 all`
+// in the Caddyfile, the default page size is 60 (the operator's
+// DECLARED first item), NOT 30 (the sorted first item).
+// This is the fix for the user-reported bug: the dropdown
+// was showing 30 selected because sortPageSizes was running
+// BEFORE the default was read from the list.
+func TestGallery_ProvisionDefaultFromNumPerPage(t *testing.T) {
+	// Operator wrote `num_per_page 60 30 120 all`
+	g := &Gallery{
+		Root:             "/var/www/html/images",
+		Cache:            NewScanCache(time.Minute),
+		ThumbWidth:       320,
+		ThumbHeight:      320,
+		ThumbFormat:      "webp",
+		CacheScanMinutes: 1,
+		ThumbTTLMinutes:  1440,
+		PageSizes:        []string{"60", "30", "120", "all"},
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.PageSize != 60 {
+		t.Errorf("operator declared first item 60: expected default PageSize=60, got %d", g.PageSize)
+	}
+	// Display should still be sorted (30, 60, 120, all).
+	wantDisplay := []string{"30", "60", "120", "all"}
+	if len(g.PageSizes) != len(wantDisplay) {
+		t.Errorf("PageSizes display: got %v, want %v", g.PageSizes, wantDisplay)
+	}
+	for i := range wantDisplay {
+		if g.PageSizes[i] != wantDisplay[i] {
+			t.Errorf("PageSizes display: got %v, want %v", g.PageSizes, wantDisplay)
+			break
+		}
+	}
+
+	// Operator wrote `num_per_page 30 60 120 all` (default 30)
+	g2 := &Gallery{
+		Root:             "/var/www/html/images",
+		Cache:            NewScanCache(time.Minute),
+		ThumbWidth:       320,
+		ThumbHeight:      320,
+		ThumbFormat:      "webp",
+		CacheScanMinutes: 1,
+		ThumbTTLMinutes:  1440,
+		PageSizes:        []string{"30", "60", "120", "all"},
+	}
+	if err := g2.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g2.PageSize != 30 {
+		t.Errorf("operator declared first item 30: expected default PageSize=30, got %d", g2.PageSize)
+	}
+}
+
 // TestRenderPage_NoThumbs_OriginalImageAsThumb verifies that
 // when no_thumbs is true, the rendered tile <img> uses the
 // original file URL (the Href) as its src, not the thumb URL.
@@ -165,6 +221,38 @@ func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 // the user-reported bug where the first breadcrumb segment
 // showed the subdirectory name twice instead of "images"
 // + "media_gallery".
+// TestSortPageSizes verifies the sort rule: numeric values
+// ascending, "all" last. This is the dropdown display order.
+func TestSortPageSizes(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"already sorted", []string{"30", "60", "120", "all"}, []string{"30", "60", "120", "all"}},
+		{"operator's order: 60 first", []string{"60", "30", "120", "all"}, []string{"30", "60", "120", "all"}},
+		{"out of order", []string{"120", "30", "60", "all"}, []string{"30", "60", "120", "all"}},
+		{"no all", []string{"100", "50"}, []string{"50", "100"}},
+		{"all only", []string{"all"}, []string{"all"}},
+		{"empty", []string{}, []string{}},
+		{"all in middle", []string{"60", "all", "30"}, []string{"30", "60", "all"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sortPageSizes(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("got %v, want %v", got, tc.want)
+					break
+				}
+			}
+		})
+	}
+}
+
 func TestGallery_ProvisionRootNameDefaults(t *testing.T) {
 	g := &Gallery{
 		Root:             "/var/www/html/images",
@@ -312,13 +400,20 @@ func TestUnmarshalCaddyfile_PageSize(t *testing.T) {
 
 // TestProvision_PageSizeDefault verifies that Provision applies
 // the default of 50 when the Caddyfile doesn't set page_size.
+// TestProvision_PageSizeDefault verifies that the default
+// page size (with no operator config) is the first item in
+// the default PageSizes list, which is 30.
 func TestProvision_PageSizeDefault(t *testing.T) {
 	g := Gallery{}
 	if err := g.Provision(caddy.Context{}); err != nil {
 		t.Fatal(err)
 	}
-	if g.PageSize != 50 {
-		t.Errorf("expected default PageSize=50 after Provision, got %d", g.PageSize)
+	if g.PageSize != 30 {
+		t.Errorf("expected default PageSize=30 after Provision (first item of default list), got %d", g.PageSize)
+	}
+	// The default PageSizes list itself should be set.
+	if len(g.PageSizes) == 0 {
+		t.Error("expected default PageSizes list to be set")
 	}
 }
 

@@ -221,9 +221,9 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// empty means "use the default" — the UnmarshalCaddyfile
 	// already rejects invalid values, so if we see zero/empty
 	// here it just means the user didn't specify a value.
-	if g.PageSize == 0 {
-		g.PageSize = 50
-	}
+	// Note: g.PageSize default is set LATER in Provision
+	// (after the operator's num_per_page list is resolved),
+	// so the first item in num_per_page becomes the default.
 	if g.ThumbWidth == 0 {
 		g.ThumbWidth = 320
 	}
@@ -249,32 +249,33 @@ func (g *Gallery) Provision(caddy.Context) error {
 	if len(g.PageSizes) == 0 {
 		g.PageSizes = []string{"30", "60", "120", "all"}
 	}
-	// Sort the page sizes: numeric values ascending, then "all"
-	// at the end. This way the operator can write the list in
-	// any order; the display is consistent.
-	g.PageSizes = sortPageSizes(g.PageSizes)
-	// The default PageSize is the first item in the (now sorted)
-	// page sizes list. For the default list this is 30; for an
-	// operator that wrote `num_per_page 60 30 120 all` the
-	// default is 60 (their first item). For `num_per_page all`,
-	// the default would be 0 ("show all items").
+	// The default PageSize is the first item in the
+	// operator's DECLARED list (NOT the sorted list). So
+	// `num_per_page 60 30 120 all` makes the default 60 even
+	// though the dropdown displays the values in sorted
+	// order (30 / 60 / 120 / all). If the operator didn't
+	// set num_per_page at all, fall back to 30 (the default
+	// list's first item).
 	if g.PageSize == 0 {
-		// Pick the first item in the (sorted) page sizes
-		// list. If it's "all", the default is 0 (show all
-		// items on one page). Otherwise parse it as an int
-		// and use that as the default.
-		first := g.PageSizes[0]
-		if first == "all" {
-			g.PageSize = 0
-		} else if n, err := strconv.Atoi(first); err == nil && n > 0 {
-			g.PageSize = n
+		if len(g.PageSizes) > 0 {
+			first := g.PageSizes[0]
+			if first == "all" {
+				g.PageSize = 0
+			} else if n, err := strconv.Atoi(first); err == nil && n > 0 {
+				g.PageSize = n
+			} else {
+				g.PageSize = 60
+			}
 		} else {
-			// Fall back to 60 if the first item is somehow
-			// not a valid page size (shouldn't happen given
-			// validation, but defensive).
 			g.PageSize = 60
 		}
 	}
+	// Sort the page sizes: numeric values ascending, then "all"
+	// at the end. This way the operator can write the list in
+	// any order; the display is consistent. The default
+	// (PageSize) is set ABOVE from the unsorted list, so
+	// sorting the display doesn't change the default.
+	g.PageSizes = sortPageSizes(g.PageSizes)
 	// Resolve the image + video extension sets. If the operator
 	// configured them via the Caddyfile, use their list;
 	// otherwise fall back to the built-in defaults. The resolved
