@@ -2073,6 +2073,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .sort-indicator {
   display: inline-block;
   width: 0.85rem;
+  margin-top: -0.3rem;
   margin-left: 0.25rem;
   color: var(--accent);
   font-size: 0.75rem;
