@@ -40,6 +40,10 @@ type PageData struct {
 	PageSize int
 	// Query is the current URL query (sort, filter, page, breadcrumb, etc.) — passed to the template so the page-size form can include hidden inputs to preserve other params on submit.
 	Query url.Values
+	// SearchQuery is the raw ?q= value (for the search
+	// input's `value=""` attribute and for hidden inputs
+	// that preserve the query on form submit).
+	SearchQuery string
 	// PageSizes is the list of per-page options the visitor
 	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
 	// Configured via the `page_sizes` Caddyfile directive;
@@ -688,6 +692,74 @@ func pageFromQuery(q url.Values) int {
 	return page
 }
 
+// applySearchFilter returns a copy of files with only the
+// entries whose filename matches the query. Directories
+// (KindDir) are NEVER filtered out by search — the user
+// should still be able to navigate up/down even when the
+// search doesn't match the directory name.
+func applySearchFilter(files []FileInfo, query []string) []FileInfo {
+	if len(query) == 0 {
+		return files
+	}
+	out := make([]FileInfo, 0, len(files))
+	for _, f := range files {
+		if f.Kind == KindDir {
+			out = append(out, f)
+			continue
+		}
+		if filenameMatchesQuery(f.Name, query) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// parseSearchQuery splits a raw search query string into
+// normalized word tokens. Whitespace-separated; lowercased;
+// empty/whitespace-only returns an empty slice (meaning
+// "no filter").
+func parseSearchQuery(q string) []string {
+	q = strings.ToLower(strings.TrimSpace(q))
+	if q == "" {
+		return nil
+	}
+	return strings.Fields(q)
+}
+
+// filenameMatchesQuery returns true when the filename
+// matches the (already-parsed) query words under the
+// word-boundary rule:
+//
+//  1. Lowercase both sides.
+//  2. Split the filename on `_`, `-`, and ` ` (each of
+//     these is treated as a word separator). Split the
+//     query on whitespace (already done by parseSearchQuery).
+//  3. A match occurs when any filename "word" starts with
+//     any query word.
+//
+// Empty query = always true (no filter). Examples (query
+// "cat" → matches `cat.jpg`, `cat-photo.jpg`, `my_cat.webp`,
+// `category-icon.svg` but NOT `scatter.png`).
+func filenameMatchesQuery(filename string, query []string) bool {
+	if len(query) == 0 {
+		return true
+	}
+	name := strings.ToLower(filename)
+	// Split the filename on common word separators so each
+	// segment is treated as a discrete "word".
+	words := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '_' || r == '-' || r == ' '
+	})
+	for _, w := range words {
+		for _, q := range query {
+			if strings.HasPrefix(w, q) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // pageSizeFromQuery returns the per-page size from the URL
 // query (?page_size=N). Returns -1 if not specified or invalid
 // (the caller will then use the configured default). The
@@ -1010,6 +1082,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		files, imageExts, videoExts, typeFilter,
 	)
 
+	// Apply the ?q= search filter to the file list BEFORE
+	// splitFiles. Only files (not directories) are searched —
+	// a search should still show the user the directories they
+	// can navigate to. Directories pass through unchanged.
+	searchQuery := parseSearchQuery(query.Get("q"))
+	files = applySearchFilter(files, searchQuery)
+
 	// Now apply the ?type= filter to the file list BEFORE
 	// splitFiles. Directories (KindDir) are NOT affected by
 	// the filter — a ?type=jpg filter should still show the
@@ -1114,6 +1193,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		PageSize:    pageSize,
 		PageSizes:   pageSizes,
 		Query:       query,
+		SearchQuery: query.Get("q"),
 		TotalImages: totalImages,
 		ImageCount:  imageCount,
 		TotalVideos: videoCount,
@@ -2128,6 +2208,82 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-color: var(--active-border);
 }
 
+/* Phase 118: search controls (Phase 118).
+   Per user request 2026-06-20: add a search box + "Search all"
+   button on the right of the filter row. The search box is a
+   native <input type="search"> styled to match the filter
+   pills (border, padding, font, background, hover behaviour).
+   The button matches the .filter-apply look. The
+   .search-controls wrapper is right-aligned inside the
+   .filter-row via margin-left: auto. */
+.search-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+.search-input {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--fg);
+  width: 12rem;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.search-input::placeholder {
+  color: var(--fg-faint);
+}
+.search-input:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.search-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.search-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.search-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+/* Phase 118: cards that don't match the current search get
+   this class. visibility: collapse is the grid-aware collapse
+   (entire rows that have no matches collapse too, so matches
+   cluster at the top rather than scattering through empty
+   grid cells). opacity: 0 + transition gives the fade. */
+.card,
+.files-table tbody tr {
+  transition: opacity 0.2s;
+}
+.card.filtered-out,
+.files-table tbody tr.filtered-out {
+  visibility: collapse;
+  opacity: 0;
+  pointer-events: none;
+  /* Defensive: tabindex/aria-hidden are toggled in JS too so
+     screen readers and keyboard users skip them. */
+}
+
 
 /* Per Phase 85: the sort-by arrow (↑/↓ on the active sort
    button) inherits its color from the active button's text
@@ -2365,6 +2521,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      order). Right-align the toggle in its own row. */
   .header-main { order: 2; }
   .theme-toggle { order: 1; align-self: flex-end; }
+  /* Phase 118: on small screens, the search box moves ABOVE
+     the filter controls. The .filter-row wraps naturally,
+     so just push the search-controls to the top of the wrap
+     and make it full-width. */
+  .filter-row { flex-direction: column; align-items: stretch; }
+  .search-controls {
+    margin-left: 0;
+    margin-bottom: 0.5rem;
+    width: 100%;
+  }
+  .search-input { flex: 1 1 auto; width: auto; }
 }
 
 /* Site footer (Phase 56): "proudly served by caddy + synapticloop"
@@ -2727,6 +2894,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
 
         <button type="submit" class="filter-apply">Apply</button>
+        {{- /* Search box + button on the right of the filter row.
+            Client-side: as the user types, JS hides non-matching
+            cards (see inline JS at the bottom of the template).
+            Server-side: "Search all" submits the form with ?q=foo
+            for a full-directory search. */ -}}
+        <div class="search-controls">
+          <input type="search" name="q" class="search-input"
+            placeholder="Search filenames…"
+            value="{{.SearchQuery}}"
+            autocomplete="off"
+            aria-label="Search filenames in this directory">
+          <button type="submit" class="search-button">Search all</button>
+        </div>
       </div>
     </form>
     {{end}}
@@ -2843,7 +3023,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       </thead>
       <tbody>
         {{range .OtherFiles}}
-        <tr>
+        <tr data-filename="{{.Name}}">
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a></td>
           <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
           <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
@@ -2866,7 +3046,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" href="{{.Href}}">
+      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}">
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
@@ -2926,6 +3106,74 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
 </footer>
 <script>
+
+/* Phase 118: client-side filename search filter.
+   As the user types in the search input, items that don't match
+   the query get the .filtered-out class. Matches the same
+   word-boundary rule as the server (Go) side:
+     - Lowercase both sides.
+     - Split the filename on _, -, and space (each segment is a
+       "word"). Split the query on whitespace.
+     - A match occurs when any filename word starts with any
+       query word.
+   For example, q="cat" matches: cat.jpg, cat-photo.jpg,
+   my_cat.webp, category-icon.svg (NOT scatter.png).
+   Empty query = no filter. */
+(function() {
+  var input = document.querySelector('.search-input');
+  if (input) {
+    var debounceTimer;
+    function applyFilter() {
+      var raw = (input.value || '').toLowerCase().trim();
+      var query = raw.length ? raw.split(/\s+/) : [];
+      function matches(filename) {
+        if (query.length === 0) return true;
+        var name = filename.toLowerCase();
+        var words = name.split(/[_\-\s]+/);
+        for (var i = 0; i < words.length; i++) {
+          for (var j = 0; j < query.length; j++) {
+            if (words[i].indexOf(query[j]) === 0) return true;
+          }
+        }
+        return false;
+      }
+      var cards = document.querySelectorAll('.media-grid .card[data-filename]');
+      for (var i = 0; i < cards.length; i++) {
+        var c = cards[i];
+        var fn = c.getAttribute('data-filename') || '';
+        if (matches(fn)) {
+          c.classList.remove('filtered-out');
+          c.removeAttribute('aria-hidden');
+          c.setAttribute('tabindex', c.getAttribute('data-orig-tabindex') || '0');
+        } else {
+          c.classList.add('filtered-out');
+          c.setAttribute('aria-hidden', 'true');
+          c.setAttribute('tabindex', '-1');
+        }
+      }
+      var rows = document.querySelectorAll('.files-table tbody tr[data-filename]');
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var fn = r.getAttribute('data-filename') || '';
+        if (matches(fn)) {
+          r.classList.remove('filtered-out');
+        } else {
+          r.classList.add('filtered-out');
+        }
+      }
+    }
+    input.addEventListener('input', function() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(applyFilter, 100);
+    });
+    /* If the page was server-rendered with a ?q= value (because
+       the visitor used "Search all" to do a full-directory search),
+       apply that filter on page load too. */
+    if (input.value && input.value.length) {
+      applyFilter();
+    }
+  }
+})();
 
 (function() {
   var overlay = document.createElement('div');

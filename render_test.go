@@ -439,9 +439,11 @@ func TestRenderPage_OtherFilesAsTable(t *testing.T) {
 		t.Error(`expected NO <div class="chip-row"> in the others section (replaced by table in Phase 69)`)
 	}
 	// Verify both files appear as table rows.
-	rowCount := strings.Count(othersSection, "<tr>")
+	// Count data rows (those with data-filename attribute —
+	// the header row doesn't have it). 2 files = 2 data rows.
+	rowCount := strings.Count(othersSection, `<tr data-filename="`)
 	if rowCount < 2 {
-		t.Errorf("expected at least 2 <tr> rows in others section (one per file), got %d", rowCount)
+		t.Errorf("expected at least 2 <tr data-filename> rows in others section (one per file), got %d", rowCount)
 	}
 	// Verify Size column is present (only in others table, not dirs).
 	if !strings.Contains(html, `class="col-size"`) {
@@ -1633,10 +1635,12 @@ func TestRenderPage_OtherFilesRespectSort(t *testing.T) {
 		}
 		othersSection := html[othersStart : othersStart+imgStart]
 		var order []string
-		// Find each <tr> in the others section.
+		// Find each <tr data-filename="..."> (the data rows in
+		// <tbody>; the header <tr> in <thead> doesn't have the
+		// data-filename attribute, so this regex skips it).
 		idx := 0
 		for {
-			trStart := strings.Index(othersSection[idx:], "<tr>")
+			trStart := strings.Index(othersSection[idx:], `<tr data-filename="`)
 			if trStart < 0 {
 				break
 			}
