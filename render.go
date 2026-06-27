@@ -2021,6 +2021,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg-muted);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
+  margin-top: -0.25rem;
   margin-left: 0.25rem;
 }
 .page-size-select:hover {
