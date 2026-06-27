@@ -1539,11 +1539,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      tighter and usually looks better for single-character
      buttons). */
   justify-content: center;
-  /* Per user request 2026-06-20: padding 4px 0 0 0 (top only)
-     to give the button a slight vertical offset from the
-     section name text. The button (1.5rem square) would
-     otherwise sit flush with the text baseline. */
-  padding: 4px 0 0 0;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
   font-family: inherit;
   flex-shrink: 0;
