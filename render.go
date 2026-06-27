@@ -935,15 +935,28 @@ func typeFilterActive(q url.Values) bool {
 // with the input — we don't deep-copy. (Callers don't mutate
 // the structs after this point, and the cache re-creates them
 // from disk each time anyway.)
+// applyTypeFilter filters the file list by the active
+// ?type= filter. Directories ALWAYS pass through unchanged
+// (per user request 2026-06-27: "the directory listing
+// should always show"). The filter only affects files.
+//
+// An empty filter (filter == nil OR len(filter) == 0)
+// means "no filter is active" — return all files including
+// directories. The old code returned files[:0] on an empty
+// filter, which incorrectly hid the directories.
 func applyTypeFilter(files []FileInfo, filter map[string]bool) []FileInfo {
-	if filter == nil {
+	if filter == nil || len(filter) == 0 {
 		return files
-	}
-	if len(filter) == 0 {
-		return files[:0]
 	}
 	out := make([]FileInfo, 0, len(files))
 	for _, f := range files {
+		// Directories always pass through (the visitor should
+		// always be able to navigate up/down even when a file
+		// type filter is active).
+		if f.Kind == KindDir {
+			out = append(out, f)
+			continue
+		}
 		ext := strings.ToLower(filepath.Ext(f.Name))
 		if filter[ext] {
 			out = append(out, f)
@@ -1161,12 +1174,14 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	searchQuery := parseSearchQuery(query.Get("q"))
 	files = applySearchFilter(files, searchQuery)
 
-	// Now apply the ?type= filter to the file list BEFORE
-	// splitFiles. Directories (KindDir) are NOT affected by
-	// the filter — a ?type=jpg filter should still show the
-	// user the directories they can navigate to. splitFiles
-	// operates on the Kind field, so directories pass through
-	// unchanged.
+	// Apply the ?type= filter to the file list BEFORE
+	// splitFiles. Per user request 2026-06-27: directories
+	// ALWAYS pass through unchanged (the dirs table should
+	// always show, even when a filter is active — the visitor
+	// should be able to navigate the directory tree regardless
+	// of what file-type filter is active). applyTypeFilter
+	// implements this: it checks the Kind field and skips
+	// directories, so only files are filtered by the extension.
 	files = applyTypeFilter(files, typeFilter)
 
 	dirs, others, allImages := splitFiles(files)

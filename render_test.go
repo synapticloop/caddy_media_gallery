@@ -3170,10 +3170,40 @@ func TestApplyTypeFilter(t *testing.T) {
 		}
 	})
 
-	t.Run("empty filter = no files", func(t *testing.T) {
+	t.Run("empty filter = pass-through (same as nil)", func(t *testing.T) {
+		// Per user request 2026-06-27: an empty filter means
+		// "no filter is active" — return all files (including
+		// any directories). The OLD behaviour was to return
+		// files[:0] which incorrectly hid the directory listing.
 		got := applyTypeFilter(files, map[string]bool{})
-		if len(got) != 0 {
-			t.Errorf("expected 0 files, got %d", len(got))
+		if len(got) != len(files) {
+			t.Errorf("expected %d files, got %d", len(files), len(got))
+		}
+	})
+
+	t.Run("directories always pass through (per user request 2026-06-27)", func(t *testing.T) {
+		// Even with a filter active, directories should remain
+		// visible so the visitor can navigate the directory tree.
+		filesWithDir := []FileInfo{
+			{Name: "photos", Kind: KindDir},
+			{Name: "a.jpg", Kind: KindImage},
+			{Name: "b.txt", Kind: KindOther},
+		}
+		got := applyTypeFilter(filesWithDir, map[string]bool{".jpg": true})
+		// Expected: 1 directory + 1 jpg = 2 files (NOT 1)
+		if len(got) != 2 {
+			t.Errorf("expected 2 files (1 dir + 1 jpg), got %d", len(got))
+		}
+		// The directory must be in the result
+		found := false
+		for _, f := range got {
+			if f.Name == "photos" && f.Kind == KindDir {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected the 'photos' directory to be in the filtered result")
 		}
 	})
 
