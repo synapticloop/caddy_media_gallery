@@ -161,6 +161,20 @@ type Gallery struct {
 	// the first item).
 	PageSizes []string
 
+	// SearchMatch controls how filenames are matched against
+	// the search query. Two values:
+	//   "substring" (default) — the query can match anywhere in
+	//     the filename. "cat" matches "scatter.png".
+	//   "word" — the query must match the start of a word
+	//     boundary. "cat" matches "cat.jpg" and "my_cat.webp"
+	//     but NOT "scatter.png". Uses the same word boundaries
+	//     as the URL/PATH separators (_, -, space).
+	//
+	// Caddyfile:  (or omit for default).
+	// Validation: must be one of the two; any other value
+	// defaults silently to "substring" in Provision.
+	SearchMatch string
+
 	// ThumbWidth is the maximum width in pixels of generated
 	// thumbnails. The source image is fit-within-bounds (aspect
 	// ratio preserved, longest edge becomes the configured value).
@@ -276,6 +290,19 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// (PageSize) is set ABOVE from the unsorted list, so
 	// sorting the display doesn't change the default.
 	g.PageSizes = sortPageSizes(g.PageSizes)
+	// Resolve the search match mode (default "substring").
+	// The operator can override via the  Caddyfile
+	// directive (one of: "substring", "word"). Empty or
+	// invalid values are silently treated as "substring" —
+	// the documented default. We already validated the value
+	// in UnmarshalCaddyfile, so reaching this point with
+	// an empty string means the operator didn't set the
+	// directive at all (use the default). Unknown values
+	// would have been rejected at parse time, so we only
+	// need to default empty here.
+	if g.SearchMatch == "" {
+		g.SearchMatch = "substring"
+	}
 	// Resolve the image + video extension sets. If the operator
 	// configured them via the Caddyfile, use their list;
 	// otherwise fall back to the built-in defaults. The resolved
@@ -462,7 +489,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -541,6 +568,27 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					g.PageSizes = append(g.PageSizes, d.Val())
 				}
 				if len(g.PageSizes) == 0 {
+					return d.ArgErr()
+				}
+			case "search_match":
+				// Per user request 2026-06-27: operator
+				// configures the filename matching rule
+				// for the search feature. Two values:
+				//   "substring" (default) — query can
+				//     match anywhere in the filename
+				//   "word" — query must match the
+				//     start of a word boundary
+				// If the operator doesn't set this, or
+				// sets an invalid value, the resolved
+				// value in Provision is "substring".
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				g.SearchMatch = d.Val()
+				if g.SearchMatch != "substring" && g.SearchMatch != "word" {
+					return d.ArgErr()
+				}
+				if d.NextArg() {
 					return d.ArgErr()
 				}
 

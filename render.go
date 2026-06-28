@@ -44,6 +44,14 @@ type PageData struct {
 	// input's `value=""` attribute and for hidden inputs
 	// that preserve the query on form submit).
 	SearchQuery string
+	// SearchMatch is the operator-configured filename matching
+	// rule for the search feature. Either "substring" (the
+	// default — query can match anywhere) or "word" (query
+	// must match the start of a word boundary). The template
+	// uses this to render a data-search-match attribute on
+	// the search input; the inline JS reads the attribute
+	// and switches the matching rule accordingly.
+	SearchMatch string
 	// PageSizes is the list of per-page options the visitor
 	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
 	// Configured via the `page_sizes` Caddyfile directive;
@@ -769,7 +777,7 @@ func pageFromQuery(q url.Values) int {
 // (KindDir) are NEVER filtered out by search — the user
 // should still be able to navigate up/down even when the
 // search doesn't match the directory name.
-func applySearchFilter(files []FileInfo, query []string) []FileInfo {
+func applySearchFilter(files []FileInfo, query []string, mode string) []FileInfo {
 	if len(query) == 0 {
 		return files
 	}
@@ -779,7 +787,7 @@ func applySearchFilter(files []FileInfo, query []string) []FileInfo {
 			out = append(out, f)
 			continue
 		}
-		if filenameMatchesQuery(f.Name, query) {
+		if filenameMatchesQuery(f.Name, query, mode) {
 			out = append(out, f)
 		}
 	}
@@ -839,24 +847,58 @@ func parseSearchQuery(q string) []string {
 	return strings.Fields(q)
 }
 
-// filenameMatchesQuery returns true when the filename
-// matches the (already-parsed) query words under the
-// word-boundary rule:
+// SearchMatchMode values for the filename match rule. The
+// operator configures this in the Caddyfile via the
 //
-//  1. Lowercase both sides.
-//  2. Split the filename on `_`, `-`, and ` ` (each of
-//     these is treated as a word separator). Split the
-//     query on whitespace (already done by parseSearchQuery).
-//  3. A match occurs when any filename "word" starts with
-//     any query word.
+//	directive. Two modes:
+//	 - "substring" (default) — query can match anywhere
+//	 - "word" — query must match the start of a word
+const (
+	searchMatchSubstring = "substring"
+	searchMatchWord      = "word"
+)
+
+// filenameMatchesQuery returns true when the filename matches
+// the (already-parsed) query words under the given mode.
+// Empty query = always true (no filter). Empty/invalid mode
+// defaults to "substring" (most permissive).
 //
-// Empty query = always true (no filter). Examples (query
-// "cat" → matches `cat.jpg`, `cat-photo.jpg`, `my_cat.webp`,
-// `category-icon.svg` but NOT `scatter.png`).
-func filenameMatchesQuery(filename string, query []string) bool {
+// Examples with query "cat":
+//
+//	mode = "word":
+//	  cat.jpg           → MATCH (word "cat" starts with "cat")
+//	  cat-photo.jpg     → MATCH (word "cat" starts with "cat")
+//	  my_cat.webp       → MATCH (word "cat" starts with "cat")
+//	  category-icon.svg → MATCH (word "category" starts with "cat")
+//	  catfish.jpg       → MATCH (word "catfish" starts with "cat")
+//	  scatter.png       → no match (word "scatter" does NOT start with "cat")
+//
+//	mode = "substring":
+//	  cat.jpg           → MATCH
+//	  cat-photo.jpg     → MATCH
+//	  my_cat.webp       → MATCH
+//	  category-icon.svg → MATCH
+//	  catfish.jpg       → MATCH
+//	  scatter.png       → MATCH (filename contains "cat")
+func filenameMatchesQuery(filename string, query []string, mode string) bool {
 	if len(query) == 0 {
 		return true
 	}
+	if mode == searchMatchWord {
+		return filenameMatchesQueryWord(filename, query)
+	}
+	// Default: substring (also covers empty + unknown values)
+	return filenameMatchesQuerySubstring(filename, query)
+}
+
+// filenameMatchesQueryWord is the word-boundary matcher.
+//  1. Lowercase both sides.
+//  2. Split the filename on `_`, `-`, and ` ` (each of
+//     these is treated as a word separator). The query is
+//     already split on whitespace by parseSearchQuery.
+//  3. A match occurs when any filename "word" starts with
+//     any query word.
+func filenameMatchesQueryWord(filename string, query []string) bool {
 	name := strings.ToLower(filename)
 	// Split the filename on common word separators so each
 	// segment is treated as a discrete "word".
@@ -871,6 +913,20 @@ func filenameMatchesQuery(filename string, query []string) bool {
 		}
 	}
 	return false
+}
+
+// filenameMatchesQuerySubstring is the permissive matcher:
+// the query can match anywhere in the (lowercased) filename.
+// All query words must match (AND), but each word can be
+// anywhere in the filename.
+func filenameMatchesQuerySubstring(filename string, query []string) bool {
+	name := strings.ToLower(filename)
+	for _, q := range query {
+		if !strings.Contains(name, q) {
+			return false
+		}
+	}
+	return true
 }
 
 // pageSizeFromQuery returns the per-page size from the URL
@@ -1351,7 +1407,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 	// Per user request 2026-06-27: read ?page_size=N from the
@@ -1379,7 +1435,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// a search should still show the user the directories they
 	// can navigate to. Directories pass through unchanged.
 	searchQuery := parseSearchQuery(query.Get("q"))
-	files = applySearchFilter(files, searchQuery)
+	files = applySearchFilter(files, searchQuery, searchMatch)
 
 	// Apply the ?type= filter to the file list BEFORE
 	// splitFiles. Per user request 2026-06-27: directories
@@ -1498,6 +1554,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		PageSizes:   pageSizes,
 		Query:       query,
 		SearchQuery: query.Get("q"),
+		SearchMatch: searchMatch,
 		TotalImages: totalImages,
 		ImageCount:  imageCount,
 		ImageStart:  imageStart,
@@ -3383,6 +3440,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
             for a full-directory search. */ -}}
         <div class="search-controls">
           <input type="search" name="q" class="search-input"
+            data-search-match="{{.SearchMatch}}"
             placeholder="Search filenames…"
             value="{{.SearchQuery}}"
             autocomplete="off"
@@ -3656,41 +3714,77 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   }
 })();
 
-/* Phase 118: client-side filename search filter.
-   As the user types in the search input, items that don't match
-   the query get the .filtered-out class. Matches the same
-   word-boundary rule as the server (Go) side:
+/* Per user request 2026-06-27: client-side filename
+   search filter with TWO match modes, configured by the
+   operator in the Caddyfile via the  directive.
+   The mode is rendered as a data-search-match attribute
+   on the search input; this JS reads it and switches the
+   matching rule accordingly.
+
+   Mode "word" (default to "substring" if invalid/empty):
      - Lowercase both sides.
-     - Split the filename on _, -, and space (each segment is a
-       "word"). Split the query on whitespace.
-     - A match occurs when any filename word starts with any
-       query word.
-   For example, q="cat" matches: cat.jpg, cat-photo.jpg,
-   my_cat.webp, category-icon.svg (NOT scatter.png).
-   Empty query = no filter. */
+     - Split the filename on _, -, and space (each segment
+       is a "word"). Split the query on whitespace.
+     - A match occurs when any filename word starts with
+       any query word.
+     - Example: q="cat" matches: cat.jpg, cat-photo.jpg,
+       my_cat.webp, category-icon.svg (NOT scatter.png).
+
+   Mode "substring" (the default):
+     - Lowercase the filename.
+     - A match occurs when every query word appears as a
+       substring anywhere in the filename.
+     - Example: q="cat" matches: cat.jpg, cat-photo.jpg,
+       my_cat.webp, category-icon.svg, AND scatter.png.
+
+   The server (Go) side uses the same logic via
+   filenameMatchesQuery. Both sides read the same
+   operator config, so the client- and server-side
+   filter never disagree.
+
+   Empty query = no filter (everything visible). */
 (function() {
   var input = document.querySelector('.search-input');
   if (input) {
+    // Read the operator-configured match mode. Default to
+    // "substring" if the attribute is missing or invalid
+    // (matches the Go side default in gallery.go Provision).
+    var mode = input.getAttribute('data-search-match') || 'substring';
+    if (mode !== 'word' && mode !== 'substring') {
+      mode = 'substring';
+    }
+    // matchesWord: the original Phase 118 word-boundary rule.
+    function matchesWord(filename, query) {
+      if (query.length === 0) return true;
+      var name = filename.toLowerCase();
+      var words = name.split(/[_\-\s]+/);
+      for (var i = 0; i < words.length; i++) {
+        for (var j = 0; j < query.length; j++) {
+          if (words[i].indexOf(query[j]) === 0) return true;
+        }
+      }
+      return false;
+    }
+    // matchesSubstring: every query word must appear as a
+    // substring of the (lowercased) filename.
+    function matchesSubstring(filename, query) {
+      if (query.length === 0) return true;
+      var name = filename.toLowerCase();
+      for (var i = 0; i < query.length; i++) {
+        if (name.indexOf(query[i]) === -1) return false;
+      }
+      return true;
+    }
+    var matches = mode === 'word' ? matchesWord : matchesSubstring;
     var debounceTimer;
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
       var query = raw.length ? raw.split(/\s+/) : [];
-      function matches(filename) {
-        if (query.length === 0) return true;
-        var name = filename.toLowerCase();
-        var words = name.split(/[_\-\s]+/);
-        for (var i = 0; i < words.length; i++) {
-          for (var j = 0; j < query.length; j++) {
-            if (words[i].indexOf(query[j]) === 0) return true;
-          }
-        }
-        return false;
-      }
       var cards = document.querySelectorAll('.media-grid .card[data-filename]');
       for (var i = 0; i < cards.length; i++) {
         var c = cards[i];
         var fn = c.getAttribute('data-filename') || '';
-        if (matches(fn)) {
+        if (matches(fn, query)) {
           c.classList.remove('filtered-out');
           c.removeAttribute('aria-hidden');
           c.setAttribute('tabindex', c.getAttribute('data-orig-tabindex') || '0');
@@ -3704,7 +3798,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       for (var i = 0; i < rows.length; i++) {
         var r = rows[i];
         var fn = r.getAttribute('data-filename') || '';
-        if (matches(fn)) {
+        if (matches(fn, query)) {
           r.classList.remove('filtered-out');
         } else {
           r.classList.add('filtered-out');

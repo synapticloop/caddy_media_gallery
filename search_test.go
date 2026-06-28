@@ -68,9 +68,9 @@ func TestFilenameMatchesQuery(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := filenameMatchesQuery(tc.filename, tc.query)
+			got := filenameMatchesQuery(tc.filename, tc.query, "word")
 			if got != tc.want {
-				t.Errorf("filenameMatchesQuery(%q, %v) = %v, want %v",
+				t.Errorf(`filenameMatchesQuery(%q, %v, word) = %v, want %v`,
 					tc.filename, tc.query, got, tc.want)
 			}
 		})
@@ -91,13 +91,13 @@ func TestApplySearchFilter(t *testing.T) {
 		{Name: "notes.txt", Kind: KindOther},
 	}
 	// Empty query = all files returned.
-	all := applySearchFilter(files, nil)
+	all := applySearchFilter(files, nil, "word")
 	if len(all) != len(files) {
 		t.Errorf("empty query: expected %d files, got %d", len(files), len(all))
 	}
 	// q=cat: all matching files (scatter excluded), subdir
 	// passes through (dirs are NOT searched).
-	matched := applySearchFilter(files, []string{"cat"})
+	matched := applySearchFilter(files, []string{"cat"}, "word")
 	names := []string{}
 	for _, f := range matched {
 		names = append(names, f.Name)
@@ -122,7 +122,7 @@ func TestRenderPage_SearchInputInFilterForm(t *testing.T) {
 		{Name: "cat.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
-		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestRenderPage_SearchQueryFiltersFiles(t *testing.T) {
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
 		[]string{"30", "60", "120", "all"}, files,
-		url.Values{"q": []string{"cat"}}, nil, nil, "", "")
+		url.Values{"q": []string{"cat"}}, nil, nil, "", "", "substring")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestRenderPage_EmptySearchShowsAllFiles(t *testing.T) {
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
 		[]string{"30", "60", "120", "all"}, files,
-		url.Values{"q": []string{""}}, nil, nil, "", "")
+		url.Values{"q": []string{""}}, nil, nil, "", "", "substring")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestRenderPage_DataFilenameAttribute(t *testing.T) {
 		{Name: "notes.txt", ModTime: 2, Size: 200, Kind: KindOther},
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
-		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "")
+		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,5 +198,99 @@ func TestRenderPage_DataFilenameAttribute(t *testing.T) {
 	}
 	if !strings.Contains(html, `data-filename="notes.txt"`) {
 		t.Error("expected data-filename on <tr> for notes.txt")
+	}
+}
+
+// TestFilenameMatchesQuery_Substring verifies the substring
+// matching rule. Unlike the word-boundary rule (which
+// requires the query to start a filename "word"),
+// substring matches anywhere in the filename.
+func TestFilenameMatchesQuery_Substring(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		query    []string
+		want     bool
+	}{
+		// Per user request 2026-06-27: substring is the
+		// DEFAULT mode (when the operator doesn't set
+		// search_match). Most permissive: "cat" matches
+		// any filename that contains "cat" anywhere.
+		{"cat in cat.jpg", "cat.jpg", []string{"cat"}, true},
+		{"cat in cat-photo.jpg", "cat-photo.jpg", []string{"cat"}, true},
+		{"cat in my_cat.webp", "my_cat.webp", []string{"cat"}, true},
+		{"cat in category-icon.svg", "category-icon.svg", []string{"cat"}, true},
+		{"cat in scatter.png", "scatter.png", []string{"cat"}, true},
+		{"cat in catnip.jpg", "catnip.jpg", []string{"cat"}, true},
+		// Multi-word query: all words must appear (anywhere).
+		{"cat + dog in catdog.jpg", "catdog.jpg", []string{"cat", "dog"}, true},
+		{"cat + dog in dog-cat.jpg", "dog-cat.jpg", []string{"cat", "dog"}, true},
+		{"cat + dog in just-cat.jpg (missing dog)", "just-cat.jpg", []string{"cat", "dog"}, false},
+		// No match.
+		{"no match", "photo.png", []string{"cat"}, false},
+		// Empty query = no filter = always match.
+		{"empty query", "any.jpg", nil, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filenameMatchesQuery(tc.filename, tc.query, "substring")
+			if got != tc.want {
+				t.Errorf(`filenameMatchesQuery(%q, %v, substring) = %v, want %v`, tc.filename, tc.query, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFilenameMatchesQuery_Word verifies the word-boundary
+// matching rule. Query must match the start of a "word"
+// (delimited by _, -, space). This is the opt-in mode
+// (operator must set search_match word).
+func TestFilenameMatchesQuery_Word(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		query    []string
+		want     bool
+	}{
+		// Per user request 2026-06-27: "cat" matches
+		// words starting with "cat" but NOT random positions.
+		{"cat in cat.jpg", "cat.jpg", []string{"cat"}, true},
+		{"cat in cat-photo.jpg", "cat-photo.jpg", []string{"cat"}, true},
+		{"cat in my_cat.webp", "my_cat.webp", []string{"cat"}, true},
+		{"cat in category-icon.svg", "category-icon.svg", []string{"cat"}, true},
+		{"cat in catfish.jpg", "catfish.jpg", []string{"cat"}, true},
+		// scatter: word "scatter" does NOT start with "cat"
+		// (it starts with "s"). No match in word mode.
+		{"cat in scatter.png (NOT a word match)", "scatter.png", []string{"cat"}, false},
+		// catnip: word "catnip" starts with "cat" — match.
+		{"cat in catnip.jpg (word starts with cat)", "catnip.jpg", []string{"cat"}, true},
+		// dog in scatter.png: word "scatter" doesn't start with dog.
+		{"dog in scatter.png (no match)", "scatter.png", []string{"dog"}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := filenameMatchesQuery(tc.filename, tc.query, "word")
+			if got != tc.want {
+				t.Errorf(`filenameMatchesQuery(%q, %v, word) = %v, want %v`, tc.filename, tc.query, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFilenameMatchesQuery_DefaultMode verifies that an
+// empty or invalid mode defaults to substring (the
+// documented default). Per user request 2026-06-27.
+func TestFilenameMatchesQuery_DefaultMode(t *testing.T) {
+	// scatter.png contains "cat" — substring match returns
+	// true; word match returns false. With the default
+	// (empty string), we should get the substring behavior.
+	got := filenameMatchesQuery("scatter.png", []string{"cat"}, "")
+	if !got {
+		t.Error(`expected default (empty mode) to match scatter.png with "cat" (substring behaviour)`)
+	}
+	// Invalid mode value also defaults to substring.
+	got = filenameMatchesQuery("scatter.png", []string{"cat"}, "invalid-mode")
+	if !got {
+		t.Error(`expected invalid mode to default to substring`)
 	}
 }
