@@ -4512,3 +4512,29 @@ func TestRenderPage_PageSizeAllViaURL(t *testing.T) {
 		t.Error("expected NO pagination nav when ?page_size=all is in URL")
 	}
 }
+
+// TestRenderPage_PageSizeAllDropdownSelected verifies the
+// per-page dropdown shows "all" as selected when the
+// visitor has chosen "all". Per user request 2026-06-28.
+func TestRenderPage_PageSizeAllDropdownSelected(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 50; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	q := url.Values{"page_size": {"all"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The "all" option should have the selected attribute
+	if !strings.Contains(html, `<option value="all" selected>all</option>`) {
+		t.Error(`expected <option value="all" selected>all</option> in the page-size dropdown when ?page_size=all`)
+	}
+	// The "30" option should NOT be selected
+	if strings.Contains(html, `<option value="30" selected`) {
+		t.Error(`expected <option value="30" selected> NOT in HTML (the dropdown should show "all" as selected, not 30)`)
+	}
+}

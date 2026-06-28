@@ -3449,7 +3449,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{- /* with both values when the form submits. */ -}}
     {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
     <select name="page_size" class="page-size-select" onchange="this.form.submit()">
-      {{$pageSizeStr := printf "%d" $.PageSize}}
+      {{/* Per user request 2026-06-28: when PageSize is 0 (the
+           "all" token from pageSizeFromQuery), compare
+           against "all" instead of the string "0" so the
+           dropdown shows "all" as selected (previously it
+           fell back to the first item, which was the
+           document default 30). pageSizeStr is set to "all"
+           when PageSize is 0, otherwise to the decimal
+           string of PageSize. */}}
+      {{$pageSizeStr := "all"}}
+      {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
       {{range .PageSizes}}
       <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
       {{end}}
