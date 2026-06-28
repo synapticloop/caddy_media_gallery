@@ -4268,14 +4268,14 @@ func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
 	}
 	// The server filters by ?q=zzz FIRST, so the file list
 	// is empty before the header is rendered. The header
-	// shows "Media (0)" with NO "Showing" range. This is
-	// the correct behaviour per user request 2026-06-27:
-	// "if there are no search results it should just show (N)".
-	if !strings.Contains(html, "Media (0)") {
-		t.Error("expected header to show 'Media (0)' when search has no results")
-	}
-	if strings.Contains(html, "Showing") {
-		t.Error("expected NO 'Showing X-Y' range when 0 images on page")
+	// shows "search showing 0 of N <em>This page</em>".
+	// Per user request 2026-06-28: the new search header
+	// format replaces the old "Media (0)" / "Media (showing
+	// N of M)" with "search showing M of N <em>This page</em>"
+	// where M = matches on this page (0) and N = on-page
+	// total without filter.
+	if !strings.Contains(html, "search showing 0 of ") || !strings.Contains(html, "This page</em>") {
+		t.Error("expected header to show 'search showing 0 of N <em>This page</em>' when search has no results")
 	}
 	// Also verify the "no images match" empty state is shown.
 	if !strings.Contains(html, "No images match the current filter") {
@@ -4561,10 +4561,16 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Both "cat" matches fit on one page (pageSize=30). So
-	// the header should be "Media (showing 2 of 2)".
-	if !strings.Contains(html, "Media (showing 2 of 2)") {
-		t.Error(`expected "Media (showing 2 of 2)" in HTML when ?q=cat matches 2 files`)
+	// Per user request 2026-06-28: the new search header
+	// format is "search showing M of N <em>This page</em>"
+	// where M = matches on this page, N = on-page total
+	// without filter. With 10 files (8 don't match "cat",
+	// 2 do), pageSize=30, all on page 1: M=2, N=10.
+	if !strings.Contains(html, "search showing 2 of 10") {
+		t.Error(`expected "search showing 2 of 10" in HTML when ?q=cat matches 2 files of 10 total`)
+	}
+	if !strings.Contains(html, "This page</em>") {
+		t.Error(`expected "<em>This page</em>" suffix in the search header`)
 	}
 }
 
@@ -4584,8 +4590,8 @@ func TestRenderPage_SearchHeader_FormNoResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, "Media (0)") {
-		t.Error(`expected "Media (0)" in HTML when ?q= matches nothing`)
+	if !strings.Contains(html, "search showing 0 of") {
+		t.Error(`expected "search showing 0 of N" in HTML when ?q= matches nothing`)
 	}
 }
 
@@ -4606,5 +4612,42 @@ func TestRenderPage_SearchHeader_NoSearch(t *testing.T) {
 	}
 	if !strings.Contains(html, "Media (200 - Showing 1-30)") {
 		t.Error(`expected "Media (200 - Showing 1-30)" in HTML (default header, no search)`)
+	}
+}
+
+// TestRenderPage_SearchHeader_FormatWithThisPage verifies the
+// new search header format includes "<em>This page</em>" and
+// the per-page counts. Per user request 2026-06-28.
+func TestRenderPage_SearchHeader_FormatWithThisPage(t *testing.T) {
+	// 10 files, 3 of which match "cat"
+	var files []FileInfo
+	for i := 0; i < 7; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "cat-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "my-cat.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "another-cat.webp", ModTime: 102, Size: 1024, Kind: KindImage,
+	})
+	// pageSize=30, so all 10 fit on one page. 3 match "cat".
+	q := url.Values{"q": {"cat"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// M=3 (matches on this page), N=10 (on-page total without filter)
+	// Format: "search showing 3 of 10 <em>This page</em>"
+	if !strings.Contains(html, "search showing 3 of 10") {
+		t.Error(`expected "search showing 3 of 10" in HTML when 3 of 10 files match "cat"`)
+	}
+	if !strings.Contains(html, "<em>This page</em>") {
+		t.Error(`expected "<em>This page</em>" suffix in the search header`)
 	}
 }

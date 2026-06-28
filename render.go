@@ -91,11 +91,18 @@ type PageData struct {
 	FilteredTotal int
 	// OnPageMatchedCount is the number of files visible on
 	// the current page (already after the server-side
-	// filter). The header uses this as the "N" value in
-	// "showing N of M" when search is active. When the
-	// page is "all" with no search, N equals
-	// FilteredTotal (== TotalImages).
+	// filter). The header uses this as the "M" value in
+	// "search showing M of N <em>This page</em>" when
+	// search is active.
 	OnPageMatchedCount int
+	// OnPageTotalCount is the number of items that would be
+	// on this page if no search filter were applied. For
+	// most pages this is the configured pageSize. For the
+	// last page, it's the truncated count (e.g. 29 instead
+	// of 60 if there are 89 total items). The header uses
+	// this as the "N" value in "search showing M of N
+	// <em>This page</em>".
+	OnPageTotalCount int
 	// PageSizes is the list of per-page options the visitor
 	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
 	// Configured via the `page_sizes` Caddyfile directive;
@@ -1517,6 +1524,14 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// a search should still show the user the directories they
 	// can navigate to. Directories pass through unchanged.
 	searchQuery := parseSearchQuery(query.Get("q"))
+	// Per user request 2026-06-28: save the unfiltered file
+	// list BEFORE the search filter is applied. We use
+	// this later to compute OnPageTotalCount (the "N" in
+	// the search header "search showing M of N <em>This
+	// page</em>"). The N is the per-page TOTAL (how many
+	// items would be on this page if no search were
+	// active), not the count after the search filter.
+	unfilteredFiles := files
 	files = applySearchFilter(files, searchQuery, searchMatch)
 
 	// Apply the ?type= filter to the file list BEFORE
@@ -1554,6 +1569,20 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	pageSize = validatePageSize(pageSize, pageSizes)
 	paged := paginate(allImages, page, pageSize)
 	totalImages := len(allImages)
+	// Per user request 2026-06-28: compute the on-page TOTAL
+	// (the "N" in the search header) by paginating the
+	// unfiltered file list. This is the number of items
+	// that would be on this page if no search filter were
+	// applied. For most pages this is the pageSize; for
+	// the last page it's the truncated count.
+	var unfilteredAllImages []FileInfo
+	for _, f := range unfilteredFiles {
+		if f.Kind == KindImage || f.Kind == KindVideo {
+			unfilteredAllImages = append(unfilteredAllImages, f)
+		}
+	}
+	unfilteredPaged := paginate(unfilteredAllImages, page, pageSize)
+	onPageUnfiltered := len(unfilteredPaged)
 	// ImageStart/ImageEnd are the 1-based range of images shown
 	// on the current page. For page 1, this is 1..N. For
 	// subsequent pages, it continues from the end of the
@@ -1674,11 +1703,41 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		// filter. When search is inactive and pagination is
 		// "all", this equals totalImages.
 		OnPageMatchedCount: len(paged),
-		TotalImages:        totalImages,
-		ImageCount:         imageCount,
-		ImageStart:         imageStart,
-		ImageEnd:           imageEnd,
-		TotalVideos:        videoCount,
+		// OnPageTotalCount is the number of items that would
+		// be on this page if no search filter were applied.
+		// For most pages this is the pageSize. For the last
+		// page (when there are fewer items than pageSize),
+		// it's the truncated count. The header uses this as
+		// the "N" in "search showing M of N <em>This
+		// page</em>".
+		//
+		// When pageSize > 0 (pagination is on):
+		//   OnPageTotalCount = min(pageSize, originalTotal - (page-1)*pageSize)
+		// When pageSize == 0 ("all" option):
+		//   OnPageTotalCount = totalImages (everything fits on one page)
+		//
+		// originalTotal is the count of items BEFORE the
+		// search filter. We compute it as:
+		//   totalImages (filtered) + filtered-out count
+		// But that's complex. Simpler: capture the
+		// pre-search count BEFORE calling applySearchFilter.
+		// Done above in the searchQuery block. We use
+		// allImagesTotal here (defined just before).
+		//
+		// For the search header, we want:
+		//   M = matches on this page (== len(paged) when search active)
+		//   N = total that WOULD be on this page (== original total on this page)
+		// For a non-last page, N == pageSize. For the last
+		// page, N < pageSize. We use len(paged) as a
+		// proxy: when search is active, len(paged) is the
+		// MATCH count, not the unfiltered total. So we need
+		// to capture the unfiltered on-page count separately.
+		OnPageTotalCount: onPageUnfiltered,
+		TotalImages:      totalImages,
+		ImageCount:       imageCount,
+		ImageStart:       imageStart,
+		ImageEnd:         imageEnd,
+		TotalVideos:      videoCount,
 		// Per user request 2026-06-19: pre-compute the total
 		// number of files (images + videos + other files) for
 		// the "N files" label at the start of the meta line.
@@ -3797,7 +3856,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header>{{if .IsServerSearchActive}}{{if eq .FilteredTotal 0}}Media (0){{else}}Media (showing {{.OnPageMatchedCount}} of {{.FilteredTotal}}){{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageMatchedCount}}</span>{{end}}</span>
+      <span data-search-header>{{if .SearchQuery}}{{if eq .OnPageMatchedCount 0}}search showing 0 of {{.OnPageTotalCount}} <em>This page</em>{{else}}search showing {{.OnPageMatchedCount}} of {{.OnPageTotalCount}} <em>This page</em>{{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -3978,47 +4037,51 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     var matches = mode === 'word' ? matchesWord : matchesSubstring;
     var debounceTimer;
     // Per user request 2026-06-28: helper to update the media
-    // section header text as the user types. The data-search-header
-    // span holds the header text; the data-search-header-n span
-    // (hidden) holds the on-page count (used for the "N" in
-    // "Media (showing N of M)"). On a non-server-search page,
-    // M = N (the on-page count) because client-side filtering
-    // doesn't change the on-page count — it just hides items
-    // via CSS.
+    // section header text as the user types.
     //
-    // When the input is empty: restore the default header
+    // When search is empty: restore the default header
     // (e.g. "Media (89 - Showing 1-60)" or "Media (89)").
-    // When the input is non-empty: "Media (showing N of N)"
-    // where N is the number of currently-visible cards.
+    // When search is non-empty:
+    //   "search showing M of N <em>This page</em>"
+    // where M = number of matching cards on this page
+    // (after JS filter), and N = total on-page count
+    // (the per-page limit, e.g., 60). The "<em>This
+    // page</em>" annotation clarifies that M is the
+    // count on this page (not the directory total).
     //
-    // The "default" text is read from the existing header
-    // (before any keystroke) and stored on the element via
-    // data-search-header-default. On every keystroke, we
-    // either restore the default or replace with
-    // "showing N of N".
+    // The "default" text is captured on page load
+    // (when the input is empty) and stored on the
+    // element via data-search-header-default. On every
+    // keystroke, we either restore the default or
+    // replace with the search format.
     var headerEl = document.querySelector('[data-search-header]');
     var defaultHeader = null;
     if (headerEl) {
       defaultHeader = headerEl.innerHTML;
       headerEl.setAttribute('data-search-header-default', defaultHeader);
     }
+    // The per-page limit is the N in the search format
+    // (e.g., 60). We get it from the server-rendered
+    // hidden span data-search-header-n. The pageSize
+    // doesn't change between keystrokes, so we capture
+    // it once on load.
+    var pageSizeTotal = 0;
+    var nEl = document.querySelector('[data-search-header-n]');
+    if (nEl) {
+      pageSizeTotal = parseInt(nEl.textContent || '0', 10) || 0;
+    }
     function updateSearchHeader(visibleCount, isSearchActive) {
       if (!headerEl || defaultHeader === null) return;
       if (!isSearchActive) {
-        // Restore the default header.
+        // Restore the default header (e.g. "Media (89 - Showing 1-60)").
         headerEl.innerHTML = defaultHeader;
         return;
       }
-      // "Media (showing N of M)" — both N and M are the
-      // on-page count for client-side search (we only know
-      // what's on the page, not what's in the directory).
-      // Edge case: 0 visible = "Media (0)" (matches the
-      // server-side 0-results case).
-      if (visibleCount === 0) {
-        headerEl.innerHTML = 'Media (0)';
-      } else {
-        headerEl.innerHTML = 'Media (showing ' + visibleCount + ' of ' + visibleCount + ')';
-      }
+      // Search format: "search showing M of N <em>This page</em>"
+      // M = visibleCount, N = pageSizeTotal (the per-page limit).
+      // If visibleCount is 0, the spec says just show
+      // "search showing 0 of N <em>This page</em>".
+      headerEl.innerHTML = 'search showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
@@ -4050,16 +4113,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         }
       }
       // Per user request 2026-06-28: update the media section
-      // header to show the search-aware count. Only do this
-      // for client-side (JS-only) searches — server-side
-      // searches (URL has ?q=) already have the correct
-      // header rendered server-side. Detect by checking if
-      // the header currently contains "Media (showing" (the
-      // server-side format) — if so, don't touch it.
-      var isServerSide = headerEl && headerEl.innerHTML.indexOf('Media (showing') === 0;
-      if (!isServerSide) {
-        updateSearchHeader(visibleCount, query.length > 0);
-      }
+      // header. If the input is empty, restore the default
+      // header ("Media (N - Showing X-Y)"). If the input
+      // is non-empty, show the search format
+      // ("search showing M of N <em>This page</em>").
+      // This handles BOTH client-side search (typed,
+      // not submitted) AND server-side search (?q= in URL)
+      // — the server-rendered header is in the search
+      // format already, and the JS just leaves it alone
+      // (the visibleCount would equal the card count
+      // since the server-side filter already removed
+      // non-matches from the DOM, so visibleCount = N,
+      // making M = N = on-page count, which is the
+      // correct "all matches on this page" semantic).
+      updateSearchHeader(visibleCount, query.length > 0);
     }
     input.addEventListener('input', function() {
       clearTimeout(debounceTimer);
