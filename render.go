@@ -59,6 +59,12 @@ type PageData struct {
 	// images). Per user request 2026-06-17: separate video
 	// indicator in the header.
 	ImageCount int
+	// ImageStart and ImageEnd are the 1-based range of images
+	// shown on the current page (e.g. 1-60 for page 1, 61-89
+	// for page 2). Used in the media section header: "Media
+	// (89 - Showing 1-60)". Both are 0 if there are no images.
+	ImageStart int
+	ImageEnd   int
 	// TotalVideos is the count of video files only — shown in
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
@@ -1381,8 +1387,18 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// is configured).
 	pageSize = validatePageSize(pageSize, pageSizes)
 	paged := paginate(allImages, page, pageSize)
-
 	totalImages := len(allImages)
+	// ImageStart/ImageEnd are the 1-based range of images shown
+	// on the current page. For page 1, this is 1..N. For
+	// subsequent pages, it continues from the end of the
+	// previous page. If there are no images, both are 0.
+	// Per user request 2026-06-27: the media header shows
+	// "Media (TotalImages - Showing ImageStart-ImageEnd)".
+	var imageStart, imageEnd int
+	if totalImages > 0 {
+		imageStart = (page-1)*pageSize + 1
+		imageEnd = imageStart + len(paged) - 1
+	}
 	// Split the media count by type so the header meta line
 	// can show "N images" (actual image count) and "M videos"
 	// (video count) separately. Per user request 2026-06-17:
@@ -1463,6 +1479,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		SearchQuery: query.Get("q"),
 		TotalImages: totalImages,
 		ImageCount:  imageCount,
+		ImageStart:  imageStart,
+		ImageEnd:    imageEnd,
 		TotalVideos: videoCount,
 		// Per user request 2026-06-19: pre-compute the total
 		// number of files (images + videos + other files) for
@@ -3499,10 +3517,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   </section>
   {{end}}
 
-  {{if gt .TotalImages 0}}
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span>Media ({{.TotalImages}})</span>
+      <span>Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -3564,10 +3581,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     </nav>
     {{end}}
     </div>
+    {{if eq (len .Images) 0}}
+    <p class="empty">No images match the current filter.</p>
+    {{end}}
   </section>
-  {{else}}
-  <p class="empty">No images in this directory.</p>
-  {{end}}
 </main>
 <footer class="site-footer">
   proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>

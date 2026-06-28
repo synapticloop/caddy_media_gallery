@@ -340,8 +340,13 @@ func TestRenderPage_EmptyDirShowsEmptyMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, "No images in this directory.") {
-		t.Error("expected 'No images' message for empty directory")
+	// Per user request 2026-06-27: changed from
+	// "No images in this directory." to "No images match
+	// the current filter." — the section is now ALWAYS
+	// rendered (even with 0 images), so the empty state
+	// message is inside the section.
+	if !strings.Contains(html, "No images match the current filter.") {
+		t.Error("expected 'No images match the current filter.' for empty directory")
 	}
 }
 
@@ -3730,8 +3735,17 @@ func TestRenderPage_MediaSectionHasToggle(t *testing.T) {
 	if !strings.Contains(html, "media-body") {
 		t.Error("expected section-body wrapper with id=media-body")
 	}
-	if !strings.Contains(html, "Media (2)") {
-		t.Error("expected heading to show Media (N) where N is the file count")
+	// Per user request 2026-06-27: the media heading now
+	// shows the count and the current page's range
+	// (e.g. "Media (2 - Showing 1-2)" for 2 images on a 60-per-page
+	// page). The total count is the first number; the range is
+	// appended when ImageStart and ImageEnd are both > 0.
+	if !strings.Contains(html, "Media (2 - Showing 1-2)") {
+		t.Error("expected heading to show 'Media (2 - Showing 1-2)'")
+	}
+	// Also verify the underlying format pieces are there.
+	if !strings.Contains(html, "Showing 1-2") {
+		t.Error("expected heading to contain 'Showing 1-2'")
 	}
 }
 func substringAround(s, needle string, width int) string {
@@ -4141,3 +4155,127 @@ func TestRenderPage_ThumbDimensions_AppearsForVideo(t *testing.T) {
 		t.Error("expected video dimensions text `1920 × 1080`")
 	}
 }
+
+// TestRenderPage_MediaHeader_RangeForPage1 verifies the
+// "Showing X-Y" range is correct for the first page.
+// Per user request 2026-06-27: the media section header
+// shows "Media (TotalImages - Showing ImageStart-ImageEnd)"
+// so the visitor can see both the total count AND which
+// slice of it is on the current page.
+func TestRenderPage_MediaHeader_RangeForPage1(t *testing.T) {
+	// 100 images, pageSize=60 → page 1 shows 1-60
+	var files []FileInfo
+	for i := 0; i < 100; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (100 - Showing 1-60)") {
+		t.Error("expected header to show 'Media (100 - Showing 1-60)' on page 1")
+	}
+}
+
+// TestRenderPage_MediaHeader_RangeForPage2 verifies the
+// range continues from the end of page 1. With 100 images
+// and pageSize=60, page 2 shows 61-100.
+func TestRenderPage_MediaHeader_RangeForPage2(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 100; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	q := url.Values{"page": {"2"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (100 - Showing 61-100)") {
+		t.Error("expected header to show 'Media (100 - Showing 61-100)' on page 2")
+	}
+}
+
+// TestRenderPage_MediaHeader_ExactFit verifies the range
+// when the total is an exact multiple of pageSize. 60 images
+// on a 60-per-page page = 1 page, "Showing 1-60".
+func TestRenderPage_MediaHeader_ExactFit(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 60; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (60 - Showing 1-60)") {
+		t.Error("expected header to show 'Media (60 - Showing 1-60)' for exact-fit case")
+	}
+}
+
+// TestRenderPage_MediaHeader_SingleImage verifies a
+// single-image case. "Media (1 - Showing 1-1)".
+func TestRenderPage_MediaHeader_SingleImage(t *testing.T) {
+	files := []FileInfo{
+		{Name: "only.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (1 - Showing 1-1)") {
+		t.Error("expected header to show 'Media (1 - Showing 1-1)' for single image")
+	}
+}
+
+// TestRenderPage_MediaHeader_SearchApplied verifies the
+// header still shows the full total (NOT the search-filtered
+// count) when the user has applied a server-side search filter
+// via ?q=foo. Per user request 2026-06-27: when the search
+// form has been submitted, 'M' is the total media in the
+// directory. (In this test we use 5 images and 0 matching,
+// so the page shows 0 images. The header should still show
+// "Media (5)" without a Showing range, since there are no
+// images on the page.)
+func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
+	files := []FileInfo{
+		{Name: "alpha.jpg", ModTime: 1, Size: 100, Kind: KindImage},
+		{Name: "beta.jpg", ModTime: 2, Size: 100, Kind: KindImage},
+		{Name: "gamma.jpg", ModTime: 3, Size: 100, Kind: KindImage},
+		{Name: "delta.jpg", ModTime: 4, Size: 100, Kind: KindImage},
+		{Name: "epsilon.jpg", ModTime: 5, Size: 100, Kind: KindImage},
+	}
+	// Server-side search: ?q=zzz (no matches)
+	q := url.Values{"q": {"zzz"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server filters by ?q=zzz FIRST, so the file list
+	// is empty before the header is rendered. The header
+	// shows "Media (0)" with NO "Showing" range. This is
+	// the correct behaviour per user request 2026-06-27:
+	// "if there are no search results it should just show (N)".
+	if !strings.Contains(html, "Media (0)") {
+		t.Error("expected header to show 'Media (0)' when search has no results")
+	}
+	if strings.Contains(html, "Showing") {
+		t.Error("expected NO 'Showing X-Y' range when 0 images on page")
+	}
+	// Also verify the "no images match" empty state is shown.
+	if !strings.Contains(html, "No images match the current filter") {
+		t.Error("expected 'No images match the current filter' message when 0 results")
+	}
+}
+
+// debug
