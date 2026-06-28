@@ -4563,11 +4563,13 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	}
 	// Per user request 2026-06-28: the new search header
 	// format is "search showing M of N <em>This page</em>"
-	// where M = matches on this page, N = on-page total
-	// without filter. With 10 files (8 don't match "cat",
-	// 2 do), pageSize=30, all on page 1: M=2, N=10.
-	if !strings.Contains(html, "search showing 2 of 10") {
-		t.Error(`expected "search showing 2 of 10" in HTML when ?q=cat matches 2 files of 10 total`)
+	// where M = matches on this page, N = total search
+	// results in the directory (for form-submitted search;
+	// for JS-only, N would be the on-page capacity).
+	// With 10 files (8 don't match "cat", 2 do), pageSize=30,
+	// all on page 1: M=2, N=2 (the 2 matching files).
+	if !strings.Contains(html, "search showing 2 of 2") {
+		t.Error(`expected "search showing 2 of 2" in HTML when ?q=cat matches 2 files`)
 	}
 	if !strings.Contains(html, "This page</em>") {
 		t.Error(`expected "<em>This page</em>" suffix in the search header`)
@@ -4642,10 +4644,12 @@ func TestRenderPage_SearchHeader_FormatWithThisPage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// M=3 (matches on this page), N=10 (on-page total without filter)
-	// Format: "search showing 3 of 10 <em>This page</em>"
-	if !strings.Contains(html, "search showing 3 of 10") {
-		t.Error(`expected "search showing 3 of 10" in HTML when 3 of 10 files match "cat"`)
+	// M=3 (matches on this page), N=3 (total in directory after
+	// search filter — the user clarified N is "total search
+	// results" for form-submitted). With 10 files, 3 match
+	// "cat", pageSize=30, all on page 1: M=3, N=3.
+	if !strings.Contains(html, "search showing 3 of 3") {
+		t.Error(`expected "search showing 3 of 3" in HTML when 3 files match "cat"`)
 	}
 	if !strings.Contains(html, "<em>This page</em>") {
 		t.Error(`expected "<em>This page</em>" suffix in the search header`)
