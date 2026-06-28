@@ -38,6 +38,7 @@ The `media_gallery` directive accepts one inline option:
 | `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. |
 | `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule. |
+| `max_cache_size_mb` | integer &gt;= 0 | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). See [Caching & performance](#caching--performance) below for the full story. |
 
 Example with a themed subdir:
 
@@ -243,7 +244,8 @@ of the `media_gallery` handler, with realistic values:
   "no_thumbs": false,
   "no_video_thumbs": false,
   "template": "gallery.tmpl",
-  "search_match": "substring"
+  "search_match": "substring",
+  "max_cache_size_mb": 1024
 }
 ```
 
@@ -271,6 +273,7 @@ the same default value applies.
 | `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
 | `template <name>` | `"template"` | string | `gallery.tmpl` |
 | `search_match <word\|substring>` | `"search_match"` | string | `substring` |
+| `max_cache_size_mb <N>` | `"max_cache_size_mb"` | int (MB) | `1024` (1 GB; `0` = no cap) |
 | `thumb_width <N>` | `"thumb_width"` | int | `320` |
 | `thumb_height <N>` | `"thumb_height"` | int | `320` |
 | `thumb_format <webp\|jpeg\|png>` | `"thumb_format"` | string | `"webp"` |

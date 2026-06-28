@@ -53,6 +53,7 @@ handle_path /images/* {
         cache_scan 5
         thumb_ttl 60
         search_match word
+        max_cache_size_mb 1024
         template themes/dark/gallery.tmpl
     }
     file_server

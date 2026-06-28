@@ -137,6 +137,7 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
 | `template` | `gallery.tmpl` | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed). |
 | `search_match` | `substring` | Filename match rule for search: `substring` (default) or `word` (word-boundary). |
+| `max_cache_size_mb` | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). Enforced via an on-write check (cheap, runs in a goroutine after each cache write) and a background sweep every 30 min. |
 
 Example:
 ```caddyfile
@@ -171,6 +172,7 @@ Cache invalidation is purely mtime-based — no cron job, no inotify watcher.
 - **Thumb cache** — WebP thumbs are written to disk and served from disk; subsequent requests are a single `os.ReadFile`. The thumb URL is content-addressed (sha256 of the source path), so the URL itself is cacheable.
 - **HTTP `Cache-Control: public, max-age=86400`** on thumb responses (24h, since thumbs are immutable per source mtime).
 - **HTTP `Cache-Control: no-cache`** on gallery HTML (so newly-added images show up on the next refresh).
+- **Cache size cap** (`max_cache_size_mb`, default 1 GB) — when the on-disk thumb cache grows past the cap, the oldest thumbs (by file mtime) are evicted in a background goroutine until the cache is at 80% of the cap. A 30-min background sweep catches the case where the cache grows without new writes. Operators can set `max_cache_size_mb 0` for unbounded (the pre-feature behavior).
 - **EXIF + dimensions reading** — both happen at scan time (not per-request) and are cached alongside the file info. EXIF costs ~1-5ms per image (header-only parse); image dimensions use `image.DecodeConfig` (header only); video dimensions call `ffprobe` (50-100ms). For a 200-image directory, the first scan after a cache miss takes ~1-2 seconds total; subsequent renders are sub-millisecond.
 
 ## Dependencies

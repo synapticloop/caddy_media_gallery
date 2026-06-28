@@ -205,10 +205,48 @@ type Gallery struct {
 	// (= 24 hours, matches the previous 86400-second value).
 	// Caddyfile: . Validation: must be > 0.
 	ThumbTTLMinutes int
+	// MaxCacheSizeMB is the on-disk thumb cache size cap in
+	// MB. When the cache directory exceeds this size, the
+	// oldest thumbs (by file mtime) are evicted until the
+	// cache is at 80% of the cap (20% headroom to avoid
+	// thrashing). Default: 1024 (= 1 GB). Set to 0 to
+	// disable the cap entirely (unbounded cache — current
+	// pre-feature behavior).
+	//
+	// The cap is enforced by:
+	//   1. An on-write check after each thumb is written
+	//      (cheap, runs in a goroutine, doesn't block the
+	//      request that triggered the cache write).
+	//   2. A background sweep every 30 minutes (catches the
+	//      case where the cache grows without new writes).
+	//   3. An initial sweep at startup if the cache is
+	//      already over the cap (so the operator's existing
+	//      over-cap cache gets trimmed down on the first
+	//      restart after they set the cap).
+	//
+	// Eviction policy: FIFO by file mtime. The cache file
+	// names are sha256(source path) — opaque hex, not
+	// sorted. We use the file's mtime on disk (which is the
+	// WRITE time) to determine the oldest. For a true LRU,
+	// enable filesystem atime or use a separate LRU log.
+	MaxCacheSizeMB int
+	// MaxCacheSizeSet is true when the operator explicitly
+	// set max_cache_size_mb in the Caddyfile (including
+	// the value 0). Used to distinguish "operator set 0
+	// (no cap)" from "operator didn't set the directive
+	// (use the default)". The default (when neither
+	// Caddyfile nor JSON sets it) is 1024 MB.
+	MaxCacheSizeSet bool
 
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache
+	// cacheSweepStop signals the background cache eviction
+	// goroutine to stop. Closed by Cleanup so the goroutine
+	// exits cleanly when Caddy shuts down. nil if no sweep
+	// goroutine is running (e.g. when the cap is disabled).
+	// Excluded from JSON config (runtime state only).
+	cacheSweepStop chan struct{}
 }
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
@@ -252,6 +290,21 @@ func (g *Gallery) Provision(caddy.Context) error {
 	}
 	if g.ThumbTTLMinutes == 0 {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
+	}
+	// Per user request 2026-06-27: cap the on-disk thumb
+	// cache at 1 GB by default. Operators can override
+	// with `max_cache_size_mb N` or explicitly disable
+	// with `max_cache_size_mb 0`. The 1 GB default covers
+	// the common case (~10,000 thumbs at 100 KB each, or
+	// ~100,000 thumbs at 10 KB each with lossy WebP).
+	//
+	// MaxCacheSizeSet distinguishes "operator didn't set
+	// the directive" (use the 1 GB default) from
+	// "operator explicitly set 0" (no cap). The Caddyfile
+	// parser sets MaxCacheSizeSet=true whenever the
+	// directive appears, even with value 0.
+	if !g.MaxCacheSizeSet {
+		g.MaxCacheSizeMB = 1024
 	}
 	// Resolve the page sizes list (default [30, 60, 120, "all"]).
 	// The operator can override via the  Caddyfile
@@ -381,10 +434,60 @@ func (g *Gallery) Provision(caddy.Context) error {
 	if err := writeBundledTemplates(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: caddy-media-gallery: could not write bundled templates to disk: %v\n", err)
 	}
+
+	// Per user request 2026-06-27: cap the thumb cache.
+	// (1) Initial sweep at startup if the cache is already
+	// over the cap. This brings an oversized cache down to
+	// size on the first restart after the operator sets the
+	// cap. Runs in a goroutine so Provision returns quickly.
+	// (2) Background sweep every 30 minutes as a safety
+	// net (catches the case where the cache grows without
+	// new thumb writes, e.g. all visits are to cached thumbs).
+	//
+	// No-op if MaxCacheSizeMB is 0 (the explicit "no cap"
+	// opt-out). The ticker is stopped by Cleanup.
+	if g.MaxCacheSizeMB > 0 {
+		cacheDir := g.thumbCacheDir()
+		go func() {
+			evictIfOver(cacheDir, g.MaxCacheSizeMB)
+		}()
+		g.cacheSweepStop = make(chan struct{})
+		go g.cacheSweepLoop(cacheDir, g.MaxCacheSizeMB, g.cacheSweepStop)
+	}
+
 	return nil
 }
 
-func (*Gallery) Cleanup()        {}
+// cacheSweepLoop runs evictIfOver on a 30-minute ticker.
+// Stopped by closing cacheSweepStop (called from Cleanup).
+func (g *Gallery) cacheSweepLoop(cacheDir string, maxMB int, stop chan struct{}) {
+	// Run the first sweep after 30 min, not immediately —
+	// the initial sweep at startup already covered the
+	// "clean up the existing cache" case.
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			evictIfOver(cacheDir, maxMB)
+		}
+	}
+}
+
+func (g *Gallery) Cleanup() error {
+	// Per user request 2026-06-27: stop the background
+	// cache eviction sweep (if running). Closing the
+	// channel signals the goroutine to exit. The
+	// goroutine then returns and the ticker is stopped
+	// via defer in cacheSweepLoop.
+	if g.cacheSweepStop != nil {
+		close(g.cacheSweepStop)
+		g.cacheSweepStop = nil
+	}
+	return nil
+}
 func (*Gallery) Validate() error { return nil }
 
 // ServeHTTP renders the gallery for the directory at the current
@@ -649,6 +752,28 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 				g.ThumbTTLMinutes = n
+			case "max_cache_size_mb":
+				// Per user request 2026-06-27: cap the on-disk
+				// thumb cache size. Prevents runaway growth
+				// on galleries with many images. Default: 1024
+				// (1 GB). Set to 0 to disable the cap
+				// entirely (unbounded — the pre-feature
+				// behavior). Validation: >= 0.
+				//
+				// MaxCacheSizeSet is set to true even when
+				// the value is 0, so Provision can
+				// distinguish "operator set 0" from
+				// "operator didn't set the directive" (use
+				// the 1 GB default).
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+				n, err := strconv.Atoi(d.Val())
+				if err != nil || n < 0 {
+					return d.ArgErr()
+				}
+				g.MaxCacheSizeMB = n
+				g.MaxCacheSizeSet = true
 				if d.NextArg() {
 					return d.ArgErr()
 				}

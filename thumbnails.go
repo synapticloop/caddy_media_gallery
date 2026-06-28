@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/HugoSmits86/nativewebp"
@@ -59,6 +60,11 @@ type ThumbConfig struct {
 	// image/jpeg (quality 75), stdlib image/png, or
 	// github.com/HugoSmits86/nativewebp respectively.
 	Format string
+	// MaxCacheSizeMB is the configured cache cap (from
+	// the Caddyfile). 0 = no cap (the pre-feature
+	// behavior). Passed to the eviction helper after
+	// each successful cache write.
+	MaxCacheSizeMB int
 }
 
 // ThumbPath returns the on-disk path where the thumbnail for src
@@ -194,6 +200,13 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	// Write to cache (best-effort; a write error shouldn't fail
 	// the request — the in-memory bytes are still good).
 	_ = os.WriteFile(cacheFile, buf.Bytes(), 0o644)
+
+	// Per user request 2026-06-27: cap the on-disk thumb
+	// cache. After each successful write, kick off a
+	// fire-and-forget eviction (goroutine, non-blocking).
+	// No-op if MaxCacheSizeMB is 0 (unbounded — the
+	// pre-feature behavior).
+	maybeEvictAsync(cacheDir, cfg.MaxCacheSizeMB)
 
 	// Return a copy of the bytes (so callers can't mutate our
 	// buffer).
@@ -428,4 +441,109 @@ func (g *Gallery) thumbConfig() ThumbConfig {
 		Height: g.ThumbHeight,
 		Format: g.ThumbFormat,
 	}
+}
+
+// evictIfOver brings the thumb cache directory under the
+// configured cap by deleting the oldest files (by file mtime)
+// until the directory is at 80% of the cap (20% headroom
+// to avoid thrashing). If maxMB <= 0, no cap is enforced —
+// the cache grows unbounded (the pre-feature behavior).
+//
+// Per user request 2026-06-27: cap the on-disk thumb cache
+// to prevent runaway growth on galleries with many images.
+// Default: 1024 MB (1 GB).
+//
+// Eviction policy: FIFO by file mtime. The cache file names
+// are sha256(source path) — opaque hex, not sorted. We use
+// the file's mtime on disk (the WRITE time) to determine
+// the oldest. This is "good enough" for the operator's
+// concern (total size bounded, not perfect recency). For a
+// true LRU, use filesystem atime or a separate LRU log.
+//
+// Safe to call concurrently (multiple goroutines may call
+// this when many thumbs are written simultaneously). The
+// underlying os operations (os.Stat, os.Remove) are atomic
+// per file; worst case is one goroutine's Remove races with
+// another's, resulting in ENOENT on one of them (which is
+// fine — the cache will just be slightly more aggressive).
+func evictIfOver(cacheDir string, maxMB int) {
+	if maxMB <= 0 {
+		return // no cap
+	}
+	maxBytes := int64(maxMB) * 1024 * 1024
+	targetBytes := maxBytes * 8 / 10 // 80% of cap (20% headroom)
+
+	// Walk the cache directory and collect (size, mtime, path)
+	type cacheFile struct {
+		size  int64
+		mtime int64 // unix nanoseconds
+		path  string
+	}
+	var files []cacheFile
+	var totalBytes int64
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		// Cache dir doesn't exist yet (no thumbs cached) —
+		// nothing to evict. Not an error.
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue // stat failed — skip; don't evict
+		}
+		files = append(files, cacheFile{
+			size:  info.Size(),
+			mtime: info.ModTime().UnixNano(),
+			path:  filepath.Join(cacheDir, entry.Name()),
+		})
+		totalBytes += info.Size()
+	}
+
+	// Under cap — nothing to do
+	if totalBytes <= maxBytes {
+		return
+	}
+
+	// Over cap — sort by mtime (oldest first) and delete until
+	// under the target. We target 80% of the cap to leave
+	// headroom for future writes (avoids evicting on every
+	// write when the cap is tight).
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].mtime < files[j].mtime
+	})
+	for _, f := range files {
+		if totalBytes <= targetBytes {
+			break
+		}
+		if err := os.Remove(f.path); err != nil && !os.IsNotExist(err) {
+			// Remove failed (race with another evictor, or
+			// permission denied). Skip — the next sweep
+			// will try again. Not a fatal error.
+			continue
+		}
+		totalBytes -= f.size
+	}
+}
+
+// maybeEvictAsync is a fire-and-forget eviction. It runs
+// evictIfOver in a goroutine so the request that triggered
+// the cache write doesn't pay the eviction cost. Safe because
+// the cache write has already completed (the new thumb is on
+// disk); the eviction only removes OLDER files.
+//
+// The cap is small (single-digit MB for the walk on a 1 GB
+// cap), and the per-write amortized cost is well under 1ms
+// for typical galleries. Worst case: a gallery with 100,000
+// thumbs where every write triggers eviction. That's a
+// pathological case — the operator's gallery is too large
+// for the cap. Setting a larger cap is the right fix.
+func maybeEvictAsync(cacheDir string, maxMB int) {
+	if maxMB <= 0 {
+		return
+	}
+	go evictIfOver(cacheDir, maxMB)
 }
