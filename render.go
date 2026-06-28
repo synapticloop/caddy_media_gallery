@@ -2648,8 +2648,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
+/* Per user request 2026-06-28: the previous hover state
+   used background: var(--bg-hover) which is the LIGHT
+   card-hover color (light grey). In light mode, that
+   produced light text on light grey — nearly invisible.
+   filter: brightness() lightens the bg slightly while
+   keeping the active color inversion intact (light text
+   on dark bg in light mode; dark text on light bg in
+   dark mode). Works in both modes without per-mode CSS. */
 .filter-apply:hover {
-  background: var(--bg-hover);
+  filter: brightness(1.2);
   color: var(--active-fg);
   border-color: var(--active-border);
 }
@@ -2735,8 +2743,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
+/* Per user request 2026-06-28: same fix as .filter-apply
+   — filter: brightness() instead of background: --bg-hover
+   so the text remains readable in light mode. */
 .search-reset-button:hover {
-  background: var(--bg-hover);
+  filter: brightness(1.2);
   color: var(--active-fg);
   border-color: var(--active-border);
 }
