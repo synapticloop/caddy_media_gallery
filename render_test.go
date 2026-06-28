@@ -4538,3 +4538,73 @@ func TestRenderPage_PageSizeAllDropdownSelected(t *testing.T) {
 		t.Error(`expected <option value="30" selected> NOT in HTML (the dropdown should show "all" as selected, not 30)`)
 	}
 }
+
+// TestRenderPage_SearchHeader_FormSubmitted verifies the media
+// header shows "Media (showing N of M)" when the visitor submits
+// the search form (URL has ?q=). Per user request 2026-06-28.
+func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 8; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "cat-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "my-cat.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	q := url.Values{"q": {"cat"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Both "cat" matches fit on one page (pageSize=30). So
+	// the header should be "Media (showing 2 of 2)".
+	if !strings.Contains(html, "Media (showing 2 of 2)") {
+		t.Error(`expected "Media (showing 2 of 2)" in HTML when ?q=cat matches 2 files`)
+	}
+}
+
+// TestRenderPage_SearchHeader_FormNoResults verifies the media
+// header shows "Media (0)" when the server-side search returns
+// no results. Per user request 2026-06-28.
+func TestRenderPage_SearchHeader_FormNoResults(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 5; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	q := url.Values{"q": {"zzz_no_match_zzz"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (0)") {
+		t.Error(`expected "Media (0)" in HTML when ?q= matches nothing`)
+	}
+}
+
+// TestRenderPage_SearchHeader_NoSearch verifies the default
+// header (no search at all) is unchanged: "Media (N - Showing
+// X-Y)" for paginated views. Per user request 2026-06-28.
+func TestRenderPage_SearchHeader_NoSearch(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 200; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, "Media (200 - Showing 1-30)") {
+		t.Error(`expected "Media (200 - Showing 1-30)" in HTML (default header, no search)`)
+	}
+}

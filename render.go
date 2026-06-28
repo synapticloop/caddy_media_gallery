@@ -74,6 +74,28 @@ type PageData struct {
 	// the search input; the inline JS reads the attribute
 	// and switches the matching rule accordingly.
 	SearchMatch string
+	// IsServerSearchActive is true when the page was
+	// rendered with ?q= in the URL (the visitor clicked
+	// "Search all" or typed into the URL bar). In this case
+	// the file list is ALREADY filtered server-side; the
+	// header shows "Media (showing N of M)" where M is the
+	// total filtered count in the directory. False when
+	// the visitor is just typing in the search box (the
+	// client-side filter is doing the work, M = N).
+	IsServerSearchActive bool
+	// FilteredTotal is the total number of files in the
+	// directory that match the active ?q= search. Only
+	// meaningful when IsServerSearchActive is true; zero
+	// otherwise. The header uses this as the "M" value in
+	// "showing N of M".
+	FilteredTotal int
+	// OnPageMatchedCount is the number of files visible on
+	// the current page (already after the server-side
+	// filter). The header uses this as the "N" value in
+	// "showing N of M" when search is active. When the
+	// page is "all" with no search, N equals
+	// FilteredTotal (== TotalImages).
+	OnPageMatchedCount int
 	// PageSizes is the list of per-page options the visitor
 	// can choose from in the dropdown (e.g. [30, 60, 120, "all"]).
 	// Configured via the `page_sizes` Caddyfile directive;
@@ -1632,11 +1654,31 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Query:       query,
 		SearchQuery: query.Get("q"),
 		SearchMatch: searchMatch,
-		TotalImages: totalImages,
-		ImageCount:  imageCount,
-		ImageStart:  imageStart,
-		ImageEnd:    imageEnd,
-		TotalVideos: videoCount,
+		// Per user request 2026-06-28: populate the
+		// search-aware header fields.
+		//
+		// IsServerSearchActive is true when the page was
+		// rendered with ?q= in the URL (i.e. the visitor
+		// submitted the "Search all" form). The client-side
+		// filter alone (typed but not submitted) does NOT
+		// set this — the search is still in progress.
+		IsServerSearchActive: len(searchQuery) > 0,
+		// FilteredTotal is the total number of media files
+		// in the directory after the search filter. When
+		// no search is active, this is just len(allImages)
+		// (which is the same as TotalImages for the media
+		// section).
+		FilteredTotal: totalImages,
+		// OnPageMatchedCount is the number of items visible
+		// on the current page after the search + pagination
+		// filter. When search is inactive and pagination is
+		// "all", this equals totalImages.
+		OnPageMatchedCount: len(paged),
+		TotalImages:        totalImages,
+		ImageCount:         imageCount,
+		ImageStart:         imageStart,
+		ImageEnd:           imageEnd,
+		TotalVideos:        videoCount,
 		// Per user request 2026-06-19: pre-compute the total
 		// number of files (images + videos + other files) for
 		// the "N files" label at the start of the meta line.
@@ -3755,7 +3797,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span>Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})</span>
+      <span data-search-header>{{if .IsServerSearchActive}}{{if eq .FilteredTotal 0}}Media (0){{else}}Media (showing {{.OnPageMatchedCount}} of {{.FilteredTotal}}){{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageMatchedCount}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -3935,10 +3977,54 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     }
     var matches = mode === 'word' ? matchesWord : matchesSubstring;
     var debounceTimer;
+    // Per user request 2026-06-28: helper to update the media
+    // section header text as the user types. The data-search-header
+    // span holds the header text; the data-search-header-n span
+    // (hidden) holds the on-page count (used for the "N" in
+    // "Media (showing N of M)"). On a non-server-search page,
+    // M = N (the on-page count) because client-side filtering
+    // doesn't change the on-page count — it just hides items
+    // via CSS.
+    //
+    // When the input is empty: restore the default header
+    // (e.g. "Media (89 - Showing 1-60)" or "Media (89)").
+    // When the input is non-empty: "Media (showing N of N)"
+    // where N is the number of currently-visible cards.
+    //
+    // The "default" text is read from the existing header
+    // (before any keystroke) and stored on the element via
+    // data-search-header-default. On every keystroke, we
+    // either restore the default or replace with
+    // "showing N of N".
+    var headerEl = document.querySelector('[data-search-header]');
+    var defaultHeader = null;
+    if (headerEl) {
+      defaultHeader = headerEl.innerHTML;
+      headerEl.setAttribute('data-search-header-default', defaultHeader);
+    }
+    function updateSearchHeader(visibleCount, isSearchActive) {
+      if (!headerEl || defaultHeader === null) return;
+      if (!isSearchActive) {
+        // Restore the default header.
+        headerEl.innerHTML = defaultHeader;
+        return;
+      }
+      // "Media (showing N of M)" — both N and M are the
+      // on-page count for client-side search (we only know
+      // what's on the page, not what's in the directory).
+      // Edge case: 0 visible = "Media (0)" (matches the
+      // server-side 0-results case).
+      if (visibleCount === 0) {
+        headerEl.innerHTML = 'Media (0)';
+      } else {
+        headerEl.innerHTML = 'Media (showing ' + visibleCount + ' of ' + visibleCount + ')';
+      }
+    }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
       var query = raw.length ? raw.split(/\s+/) : [];
       var cards = document.querySelectorAll('.media-grid .card[data-filename]');
+      var visibleCount = 0;
       for (var i = 0; i < cards.length; i++) {
         var c = cards[i];
         var fn = c.getAttribute('data-filename') || '';
@@ -3946,6 +4032,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           c.classList.remove('filtered-out');
           c.removeAttribute('aria-hidden');
           c.setAttribute('tabindex', c.getAttribute('data-orig-tabindex') || '0');
+          visibleCount++;
         } else {
           c.classList.add('filtered-out');
           c.setAttribute('aria-hidden', 'true');
@@ -3961,6 +4048,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         } else {
           r.classList.add('filtered-out');
         }
+      }
+      // Per user request 2026-06-28: update the media section
+      // header to show the search-aware count. Only do this
+      // for client-side (JS-only) searches — server-side
+      // searches (URL has ?q=) already have the correct
+      // header rendered server-side. Detect by checking if
+      // the header currently contains "Media (showing" (the
+      // server-side format) — if so, don't touch it.
+      var isServerSide = headerEl && headerEl.innerHTML.indexOf('Media (showing') === 0;
+      if (!isServerSide) {
+        updateSearchHeader(visibleCount, query.length > 0);
       }
     }
     input.addEventListener('input', function() {
@@ -4006,6 +4104,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     var hidden = document.querySelectorAll('.filtered-out');
     for (var i = 0; i < hidden.length; i++) {
       hidden[i].classList.remove('filtered-out');
+    }
+    // 2b. Per user request 2026-06-28: restore the default
+    // media header. Read the default from the data attribute
+    // (captured on page load by the search IIFE) and reset
+    // the visible text. This is for the client-side reset
+    // case (the URL doesn't have ?q=); the server-side
+    // case reloads the page below so the header is
+    // re-rendered fresh.
+    var headerEl = document.querySelector('[data-search-header]');
+    if (headerEl) {
+      var defaultHeader = headerEl.getAttribute('data-search-header-default');
+      if (defaultHeader !== null) {
+        headerEl.innerHTML = defaultHeader;
+      }
     }
     // 3. If ?q= is in the URL, navigate to the same URL
     //    without ?q= (full reload)
