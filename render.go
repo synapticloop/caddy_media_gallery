@@ -3257,7 +3257,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
     {{- /* so changing page size always resets to page 1 (the */ -}}
     {{- /* current page number might not exist in the new size). */ -}}
-    {{- queryToHiddenInputsExclude $.Query "page" -}}
+    {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
+    {{- /* it, otherwise the form would have a duplicate "page_size" -}}
+    {{- /* field (hidden input + select), which builds a messy URL -}}
+    {{- /* with both values when the form submits. */ -}}
+    {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
     <select name="page_size" class="page-size-select" onchange="this.form.submit()">
       {{$pageSizeStr := printf "%d" $.PageSize}}
       {{range .PageSizes}}

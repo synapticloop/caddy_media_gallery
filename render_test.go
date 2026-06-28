@@ -4314,6 +4314,14 @@ func TestRenderPage_PageSizeChangeResetsToPage1(t *testing.T) {
 	if strings.Contains(html, `name="page"`) {
 		t.Error("expected the page-size form to NOT include a hidden page input (so changing page size resets to page 1)")
 	}
+	// The form should also NOT include a hidden page_size
+	// input — the dropdown supplies it. Otherwise the form
+	// has duplicate "page_size" fields (hidden + select),
+	// which builds a messy URL with both values on submit.
+	// Per user report 2026-06-27.
+	if strings.Contains(html, `<input type="hidden" name="page_size"`) {
+		t.Error("expected the page-size form to NOT include a hidden page_size input (the dropdown supplies it)")
+	}
 	// The form's other hidden inputs (sort, etc.) should
 	// still be preserved.
 	if !strings.Contains(html, `<form method="get" action="" class="page-size-form">`) {
