@@ -65,6 +65,12 @@ type ThumbConfig struct {
 	// behavior). Passed to the eviction helper after
 	// each successful cache write.
 	MaxCacheSizeMB int
+	// CacheStatsTracker records eviction counts so the
+	// footer can show peak evictions per period. nil is
+	// safe (recordEvictions is a no-op). Set in
+	// Provision; passed through ThumbConfig to
+	// GenerateOrLoadThumb.
+	CacheStatsTracker *cacheStatsTracker
 }
 
 // ThumbPath returns the on-disk path where the thumbnail for src
@@ -206,7 +212,7 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	// fire-and-forget eviction (goroutine, non-blocking).
 	// No-op if MaxCacheSizeMB is 0 (unbounded — the
 	// pre-feature behavior).
-	maybeEvictAsync(cacheDir, cfg.MaxCacheSizeMB)
+	maybeEvictAsync(cacheDir, cfg.MaxCacheSizeMB, cfg.CacheStatsTracker)
 
 	// Return a copy of the bytes (so callers can't mutate our
 	// buffer).
@@ -437,9 +443,11 @@ func (g *Gallery) thumbCacheDir() string {
 // the Caddyfile directives or defaults).
 func (g *Gallery) thumbConfig() ThumbConfig {
 	return ThumbConfig{
-		Width:  g.ThumbWidth,
-		Height: g.ThumbHeight,
-		Format: g.ThumbFormat,
+		Width:             g.ThumbWidth,
+		Height:            g.ThumbHeight,
+		Format:            g.ThumbFormat,
+		MaxCacheSizeMB:    g.MaxCacheSizeMB,
+		CacheStatsTracker: g.CacheStatsTracker,
 	}
 }
 
@@ -466,9 +474,9 @@ func (g *Gallery) thumbConfig() ThumbConfig {
 // per file; worst case is one goroutine's Remove races with
 // another's, resulting in ENOENT on one of them (which is
 // fine — the cache will just be slightly more aggressive).
-func evictIfOver(cacheDir string, maxMB int) {
+func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	if maxMB <= 0 {
-		return // no cap
+		return // no cap (unbounded)
 	}
 	maxBytes := int64(maxMB) * 1024 * 1024
 	targetBytes := maxBytes * 8 / 10 // 80% of cap (20% headroom)
@@ -541,9 +549,9 @@ func evictIfOver(cacheDir string, maxMB int) {
 // thumbs where every write triggers eviction. That's a
 // pathological case — the operator's gallery is too large
 // for the cap. Setting a larger cap is the right fix.
-func maybeEvictAsync(cacheDir string, maxMB int) {
+func maybeEvictAsync(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	if maxMB <= 0 {
 		return
 	}
-	go evictIfOver(cacheDir, maxMB)
+	go evictIfOver(cacheDir, maxMB, tracker)
 }

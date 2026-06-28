@@ -15,8 +15,8 @@ func TestEvictIfOver_NoLimit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "x.webp"), []byte("AAAA"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	evictIfOver(tmp, 0)
-	evictIfOver(tmp, -1)
+	evictIfOver(tmp, 0, nil)
+	evictIfOver(tmp, -1, nil)
 	if _, err := os.Stat(filepath.Join(tmp, "x.webp")); err != nil {
 		t.Error("expected file to still exist with no limit")
 	}
@@ -30,7 +30,7 @@ func TestEvictIfOver_UnderLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 4 bytes, cap 1 MB → under cap
-	evictIfOver(tmp, 1)
+	evictIfOver(tmp, 1, nil)
 	if _, err := os.Stat(filepath.Join(tmp, "a.webp")); err != nil {
 		t.Error("expected file to still exist under cap")
 	}
@@ -40,13 +40,13 @@ func TestEvictIfOver_UnderLimit(t *testing.T) {
 // for an empty cache directory.
 func TestEvictIfOver_EmptyDir(t *testing.T) {
 	tmp := t.TempDir()
-	evictIfOver(tmp, 1) // should not error, should not panic
+	evictIfOver(tmp, 1, nil) // should not error, should not panic
 }
 
 // TestEvictIfOver_NonexistentDir verifies the no-error case
 // for a directory that doesn't exist (no thumbs cached yet).
 func TestEvictIfOver_NonexistentDir(t *testing.T) {
-	evictIfOver("/nonexistent/path/that/does/not/exist/evict", 1)
+	evictIfOver("/nonexistent/path/that/does/not/exist/evict", 1, nil)
 	// Should silently return — not an error.
 }
 
@@ -77,7 +77,7 @@ func TestEvictIfOver_OverLimit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	evictIfOver(tmp, 1) // 1 MB cap
+	evictIfOver(tmp, 1, nil) // 1 MB cap
 	// Both files should be evicted (total 2 MB > 0.8 MB target).
 	entries, _ := os.ReadDir(tmp)
 	remaining := 0
@@ -104,7 +104,7 @@ func TestEvictIfOver_UnderCapNoEviction(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	evictIfOver(tmp, 5) // 5 MB cap, 1 MB used
+	evictIfOver(tmp, 5, nil) // 5 MB cap, 1 MB used
 	entries, _ := os.ReadDir(tmp)
 	remaining := 0
 	for _, e := range entries {
@@ -140,7 +140,7 @@ func TestEvictIfOver_OldestFirst(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	evictIfOver(tmp, 1) // 1 MB cap → 0.8 MB target
+	evictIfOver(tmp, 1, nil) // 1 MB cap → 0.8 MB target
 	// 2 MB > 0.8 MB target → BOTH files evicted.
 	// (To test "oldest first" with a single file surviving,
 	// we'd need 2.5 MB of data — but the helper only takes
@@ -172,7 +172,7 @@ func TestEvictIfOver_FIFOOrder(t *testing.T) {
 	}
 	// Total: 2.1 MB. Cap: 1 MB. Target: 0.8 MB. Should
 	// evict 2 oldest (leaving i=2, the newest).
-	evictIfOver(tmp, 1)
+	evictIfOver(tmp, 1, nil)
 	// The newest file (02.webp) should still exist.
 	for i := 0; i < 2; i++ {
 		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
@@ -197,7 +197,7 @@ func TestEvictIfOver_OnlyFilesNotSubdirs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "x.webp"), make([]byte, 1024*1024), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	evictIfOver(tmp, 1) // 1 MB cap, 1 MB used (over the 0.8 MB target)
+	evictIfOver(tmp, 1, nil) // 1 MB cap, 1 MB used (over the 0.8 MB target)
 	// Subdir should still exist
 	if _, err := os.Stat(filepath.Join(tmp, "sub")); err != nil {
 		t.Error("expected subdirectory to still exist after eviction")

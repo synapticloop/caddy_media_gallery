@@ -122,7 +122,7 @@ func TestRenderPage_SearchInputInFilterForm(t *testing.T) {
 		{Name: "cat.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
-		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring")
+		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestRenderPage_SearchQueryFiltersFiles(t *testing.T) {
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
 		[]string{"30", "60", "120", "all"}, files,
-		url.Values{"q": []string{"cat"}}, nil, nil, "", "", "substring")
+		url.Values{"q": []string{"cat"}}, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestRenderPage_EmptySearchShowsAllFiles(t *testing.T) {
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
 		[]string{"30", "60", "120", "all"}, files,
-		url.Values{"q": []string{""}}, nil, nil, "", "", "substring")
+		url.Values{"q": []string{""}}, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestRenderPage_DataFilenameAttribute(t *testing.T) {
 		{Name: "notes.txt", ModTime: 2, Size: 200, Kind: KindOther},
 	}
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
-		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring")
+		[]string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}

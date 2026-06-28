@@ -40,6 +40,28 @@ type PageData struct {
 	PageSize int
 	// Query is the current URL query (sort, filter, page, breadcrumb, etc.) — passed to the template so the page-size form can include hidden inputs to preserve other params on submit.
 	Query url.Values
+	// CacheStatsXX, CacheStatsYY, CacheStatsZZ, CacheStatsAA
+	// are the four hex values displayed in the footer:
+	//
+	//   XX  = cache usage percent, 00-FF (or "∞" if
+	//         MaxCacheSizeMB is 0 / unbounded)
+	//   YY  = peak evictions in any 1-hour bucket in the
+	//         last 24 hours, 00-FF
+	//   ZZ  = peak evictions in any 1-hour bucket in the
+	//         last 7 days, 00-FF
+	//   AA  = peak evictions in any 1-hour bucket in the
+	//         last 28 days (4 weeks), 00-FF
+	//
+	// When MaxCacheSizeMB is 0, XX is rendered as the
+	// infinity symbol (∞) and YY/ZZ/AA are always "00".
+	//
+	// Per user request 2026-06-27. Refreshed every 30 sec
+	// by the stats-refresh goroutine in Provision (atomic
+	// pointer swap; readers don't lock).
+	CacheStatsXX string
+	CacheStatsYY string
+	CacheStatsZZ string
+	CacheStatsAA string
 	// SearchQuery is the raw ?q= value (for the search
 	// input's `value=""` attribute and for hidden inputs
 	// that preserve the query on form submit).
@@ -1407,7 +1429,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch string, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 	// Per user request 2026-06-27: read ?page_size=N from the
@@ -1579,6 +1601,16 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		FilterImageOptions: imgGroup,
 		FilterVideoOptions: vidGroup,
 		FilterOtherOptions: otherGroup,
+		// Per user request 2026-06-27: footer cache stats.
+		// Pre-formatted hex strings passed in from the
+		// caller (gallery.go) which has access to the
+		// cacheStatsTracker. The format is "%02X" for
+		// numeric values and "∞" for the unbounded XX
+		// (when MaxCacheSizeMB is 0).
+		CacheStatsXX: cacheStatsXX,
+		CacheStatsYY: cacheStatsYY,
+		CacheStatsZZ: cacheStatsZZ,
+		CacheStatsAA: cacheStatsAA,
 	}
 
 	tmpl, err := loadTemplate(tmplName)
@@ -3047,6 +3079,22 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      visual breathing room. */
   margin-top: 1rem;
 }
+/* Per user request 2026-06-27: the cache stats line under
+   "proudly served by caddy + synapticloop // media gallery".
+   Small monospace text — four hex values separated by //
+   (XX // YY // ZZ // AA). Light opacity to keep it out of
+   the way but still readable. The whole line has a
+   tooltip explaining the values. */
+.site-footer-brand {
+  margin-bottom: 0.4rem;
+}
+.site-footer-cache-stats {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  opacity: 0.75;
+  letter-spacing: 0.05em;
+}
 .site-footer a {
   color: var(--accent);
   text-decoration: none;
@@ -3673,7 +3721,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   </section>
 </main>
 <footer class="site-footer">
-  proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
+  <div class="site-footer-brand">
+    proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
+  </div>
+  {{/* Per user request 2026-06-27: cache stats footer.
+       XX // YY // ZZ // AA where XX is cache usage percent
+       (00-FF, or "∞" if unbounded), YY/ZZ/AA are peak
+       evictions per 1-hour bucket in last 24h / 7d / 28d.
+       Refreshed every 30 sec by the stats-refresh goroutine. */}}
+  <div class="site-footer-cache-stats" title="cache usage % // peak evictions in any 1h bucket in last 24h // 7d // 28d">{{.CacheStatsXX}} // {{.CacheStatsYY}} // {{.CacheStatsZZ}} // {{.CacheStatsAA}}</div>
 </footer>
 <script>
 

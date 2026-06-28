@@ -247,6 +247,16 @@ type Gallery struct {
 	// goroutine is running (e.g. when the cap is disabled).
 	// Excluded from JSON config (runtime state only).
 	cacheSweepStop chan struct{}
+	// cacheStatsRefreshStop signals the 30-sec stats-refresh
+	// goroutine to stop. Closed by Cleanup. nil if no
+	// goroutine is running.
+	cacheStatsRefreshStop chan struct{}
+	// CacheStatsTracker records evictions and exposes the
+	// most recent cacheStats snapshot via atomic.Pointer.
+	// Initialised in Provision. Used by evictIfOver
+	// (recordEvictions) and the stats-refresh goroutine
+	// (snapshot + atomic swap). Excluded from JSON config.
+	CacheStatsTracker *cacheStatsTracker
 }
 
 func (Gallery) CaddyModule() caddy.ModuleInfo {
@@ -446,14 +456,32 @@ func (g *Gallery) Provision(caddy.Context) error {
 	//
 	// No-op if MaxCacheSizeMB is 0 (the explicit "no cap"
 	// opt-out). The ticker is stopped by Cleanup.
+	// Initialise the cache stats tracker. We ALWAYS create
+	// one (even when MaxCacheSizeMB == 0) so the footer can
+	// show current size + file count without a cap. With
+	// MaxCacheSizeMB == 0, the eviction calls are no-ops
+	// and the peaks stay at 0 — the footer renders the
+	// infinity symbol for XX and 00 for YY/ZZ/AA.
+	if g.CacheStatsTracker == nil {
+		g.CacheStatsTracker = newCacheStatsTracker(g.MaxCacheSizeMB)
+	}
 	if g.MaxCacheSizeMB > 0 {
 		cacheDir := g.thumbCacheDir()
+		// Initial sweep at startup brings an oversized
+		// cache down to size. Runs once.
 		go func() {
-			evictIfOver(cacheDir, g.MaxCacheSizeMB)
+			evictIfOver(cacheDir, g.MaxCacheSizeMB, g.CacheStatsTracker)
 		}()
 		g.cacheSweepStop = make(chan struct{})
 		go g.cacheSweepLoop(cacheDir, g.MaxCacheSizeMB, g.cacheSweepStop)
 	}
+	// Stats-refresh goroutine: refreshes the snapshot every
+	// 30 sec (one os.ReadDir walk + compute the three peaks
+	// from the in-memory events list). Always running —
+	// even when MaxCacheSizeMB == 0, we still want the
+	// footer to show the current cache size and file count.
+	g.cacheStatsRefreshStop = make(chan struct{})
+	go g.cacheStatsRefreshLoop(g.CacheStatsTracker, g.cacheStatsRefreshStop)
 
 	return nil
 }
@@ -471,7 +499,36 @@ func (g *Gallery) cacheSweepLoop(cacheDir string, maxMB int, stop chan struct{})
 		case <-stop:
 			return
 		case <-ticker.C:
-			evictIfOver(cacheDir, maxMB)
+			evictIfOver(cacheDir, maxMB, g.CacheStatsTracker)
+		}
+	}
+}
+
+// cacheStatsRefreshLoop refreshes the cacheStats snapshot
+// every 30 sec. Stops via cacheStatsRefreshStop (closed
+// by Cleanup). Always runs (regardless of whether the
+// eviction cap is enabled), because the visitor's footer
+// shows the current size and file count even with the cap
+// disabled (XX becomes ∞ in that case).
+//
+// Cost: one os.ReadDir + one os.Stat per file in the cache.
+// For a 1 GB cache with ~5,000 thumbs, that's ~50 ms on
+// an SSD. Negligible.
+func (g *Gallery) cacheStatsRefreshLoop(tracker *cacheStatsTracker, stop chan struct{}) {
+	cacheDir := g.thumbCacheDir()
+	capMB := g.MaxCacheSizeMB
+	// Refresh immediately so the first page render after
+	// startup shows a populated footer (rather than zeros
+	// for the first 30 sec).
+	tracker.snapshot(cacheDir, capMB)
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			tracker.snapshot(cacheDir, capMB)
 		}
 	}
 }
@@ -485,6 +542,14 @@ func (g *Gallery) Cleanup() error {
 	if g.cacheSweepStop != nil {
 		close(g.cacheSweepStop)
 		g.cacheSweepStop = nil
+	}
+	// Also stop the stats-refresh loop. Same close(channel)
+	// pattern. The tracker is kept in memory until the
+	// Gallery struct is GC'd — visitors don't read it
+	// anymore at this point so no race.
+	if g.cacheStatsRefreshStop != nil {
+		close(g.cacheStatsRefreshStop)
+		g.cacheStatsRefreshStop = nil
 	}
 	return nil
 }
@@ -592,7 +657,16 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	if title == "." || title == "" {
 		title = filepath.Base(root)
 	}
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch)
+	// Per user request 2026-06-27: format the cache stats
+	// snapshot into the four hex strings for the footer.
+	// XX is the cache usage percent (00-FF) or "∞" if
+	// unbounded. YY/ZZ/AA are peak eviction counts per
+	// hour bucket, clamped to 0xFF so the hex is always
+	// two digits. Read the snapshot via atomic load (no
+	// lock contention with the eviction goroutine).
+	stats := g.CacheStatsTracker.load()
+	cacheXX, cacheYY, cacheZZ, cacheAA := formatCacheStatsFooter(stats)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, cacheXX, cacheYY, cacheZZ, cacheAA)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
