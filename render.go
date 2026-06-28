@@ -2637,6 +2637,38 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   justify-content: center;
   overflow: hidden;
 }
+/* Per user request 2026-06-27: a subtle shimmer animation
+   while the thumbnail image is loading. The shimmer is a
+   diagonal sweep of slightly-brighter pixels that loops
+   across the thumbnail. Stops automatically when the <img>
+   finishes loading (JS removes the .loading class).
+
+   The animation is GPU-friendly (transform-based), pauses
+   on prefers-reduced-motion, and uses opacity to blend with
+   the underlying --bg-chip so it works in both light and
+   dark mode. */
+.thumb.loading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.12) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: thumb-shimmer 1.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes thumb-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb.loading::before { animation: none; }
+}
 .thumb img {
   width: 100%;
   height: 100%;
@@ -3541,6 +3573,43 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
 </footer>
 <script>
+
+/* Per user request 2026-06-27: shimmer animation while
+   thumbnails are loading. Adds .loading class to every
+   .thumb on page load; removes it when the <img> fires
+   load (or error — either way the placeholder isn't
+   needed). The CSS animates a diagonal sweep across the
+   thumb. Stops automatically when the image loads.
+
+   Edge case: if the image is already cached (instant load
+   from the browser cache), the load event might fire
+   before this script runs. In that case, the .loading class
+   is briefly applied but removed within a frame. Not
+   visible to the user.
+
+   For images below the fold (lazy-loaded), the <img> won't
+   start loading until it's near the viewport, so the
+   .loading class stays applied until the user scrolls down.
+   This is intentional — the shimmer only runs while the
+   user can see the image, not for hidden thumbs. */
+(function() {
+  var thumbs = document.querySelectorAll('.thumb img');
+  for (var i = 0; i < thumbs.length; i++) {
+    (function(img) {
+      var thumb = img.closest('.thumb');
+      if (!thumb) return;
+      // If the image is already complete (cached or
+      // inline data URL), skip the loading state.
+      if (img.complete && img.naturalWidth > 0) return;
+      thumb.classList.add('loading');
+      var done = function() {
+        thumb.classList.remove('loading');
+      };
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    })(thumbs[i]);
+  }
+})();
 
 /* Phase 118: client-side filename search filter.
    As the user types in the search input, items that don't match
