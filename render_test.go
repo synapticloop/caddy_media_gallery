@@ -4279,3 +4279,51 @@ func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
 }
 
 // debug
+
+// TestRenderPage_PageSizeChangeResetsToPage1 verifies that
+// changing the page size from the dropdown resets the page
+// to 1 (the current page might not exist in the new size).
+// Per user request 2026-06-27: "if the page_size changes,
+// then always reset the page to number 1".
+func TestRenderPage_PageSizeChangeResetsToPage1(t *testing.T) {
+	// 100 images, pageSize=60, currently on page 2.
+	var files []FileInfo
+	for i := 0; i < 100; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	// Visitor is on page 2. The form currently has a hidden
+	// <input name="page" value="2"> that would carry over
+	// to the new size. With page_size=120, page 2 would
+	// exist (100 images / 120 per page = 1 page) but the
+	// visitor is sent to page 1 anyway.
+	q := url.Values{
+		"page":      {"2"},
+		"page_size": {"60"},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The page-size form should NOT include a hidden page
+	// input (because we exclude it). The current page param
+	// is in the URL but the form's hidden inputs should not
+	// include it.
+	if strings.Contains(html, `name="page"`) {
+		t.Error("expected the page-size form to NOT include a hidden page input (so changing page size resets to page 1)")
+	}
+	// The form's other hidden inputs (sort, etc.) should
+	// still be preserved.
+	if !strings.Contains(html, `<form method="get" action="" class="page-size-form">`) {
+		t.Error("expected page-size form to be present")
+	}
+	// The header should show "Media (100 - Showing 1-60)"
+	// because the server was called with ?page=2&page_size=60
+	// (visitor is on page 2 of 60-per-page). The header
+	// reflects the CURRENT state, not the post-change state.
+	if !strings.Contains(html, "Media (100 - Showing 61-100)") {
+		t.Error("expected header to reflect current page 2 of 60-per-page (61-100)")
+	}
+}

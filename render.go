@@ -1034,10 +1034,31 @@ func queryForPage(query url.Values, sort SortSpec, page int) url.Values {
 // form preserves other URL parameters (sort, filter, page,
 // etc.) when submitting. Skips the page_size key (the
 // dropdown itself supplies that).
+//
+// Convenience wrapper around queryToHiddenInputsExcluding.
+// Kept for backward compatibility with existing templates.
 func queryToHiddenInputs(query url.Values) template.HTML {
+	return queryToHiddenInputsExcluding(query, "page_size")
+}
+
+// queryToHiddenInputsExcluding renders url.Values as hidden
+// <input> elements, skipping the listed keys. The exclude
+// list is variadic so callers can omit any number of keys.
+//
+// Per user request 2026-06-27: the page-size form uses
+// this helper with "page" in the exclude list — changing
+// the page size always resets the visitor to page 1 (the
+// current page number might not exist after the size
+// change).
+func queryToHiddenInputsExcluding(query url.Values, exclude ...string) template.HTML {
+	// Build a set of excluded keys for O(1) lookup.
+	excluded := make(map[string]bool, len(exclude))
+	for _, k := range exclude {
+		excluded[k] = true
+	}
 	var buf strings.Builder
 	for k, vs := range query {
-		if k == "page_size" {
+		if excluded[k] {
 			continue
 		}
 		for _, v := range vs {
@@ -3232,8 +3253,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   <span>·</span>
   <span>Show</span>
   <form method="get" action="" class="page-size-form">
-    {{- /* Preserve other URL params (sort, filter, page, breadcrumb) when submitting */ -}}
-    {{- queryToHiddenInputs $.Query -}}
+    {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
+    {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
+    {{- /* so changing page size always resets to page 1 (the */ -}}
+    {{- /* current page number might not exist in the new size). */ -}}
+    {{- queryToHiddenInputsExclude $.Query "page" -}}
     <select name="page_size" class="page-size-select" onchange="this.form.submit()">
       {{$pageSizeStr := printf "%d" $.PageSize}}
       {{range .PageSizes}}
@@ -4239,7 +4263,15 @@ var galleryFuncs = template.FuncMap{
 	// excluding the page_size key (which the dropdown supplies).
 	// Used by the page-size form to preserve other URL params
 	// (sort, filter, page) when the visitor changes page size.
-	"queryToHiddenInputs": queryToHiddenInputs,
+	//
+	// Per user request 2026-06-27: queryToHiddenInputsExclude
+	// is the more general version — it takes a variadic list
+	// of keys to exclude. The page-size form uses it with
+	// "page" in the exclude list so changing the page size
+	// always resets to page 1 (the current page number might
+	// not exist after the visitor changes page size).
+	"queryToHiddenInputs":        queryToHiddenInputs,
+	"queryToHiddenInputsExclude": queryToHiddenInputsExcluding,
 	"sortLabel": func(field string) string {
 		switch field {
 		case "name":
