@@ -2392,7 +2392,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
+  /* Per user request 2026-06-28: the gap is 0 because
+     .breadcrumb-sep has its own margins (0.4rem left +
+     right). Using gap would add EXTRA space around each
+     sep, making the breadcrumb look sparse. */
+  gap: 0;
   font-size: 0.85rem;
   padding: 0.75rem 0 0.5rem 0;
   border-bottom: 1px solid var(--border);
@@ -2412,7 +2416,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    border-* properties). Collapsed to one line for
    readability - the block has no per-side variations, so
    the shorthand is the clearest expression. */
-.breadcrumb-link { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; margin-right: 0.25rem; background: var(--bg-card); color: var(--fg-muted); text-decoration: none; border: 1px solid var(--border); border-radius: 3px; transition: background 0.12s, color 0.12s; }
+.breadcrumb-link { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; background: var(--bg-card); color: var(--fg-muted); text-decoration: none; border: 1px solid var(--border); border-radius: 3px; transition: background 0.12s, color 0.12s; }
+/* Per user request 2026-06-28: a large-ish "/" between
+   each breadcrumb segment, and one at the start. The sep
+   is its own element so the font size can be larger than
+   the chip text without affecting the chip layout. Color
+   is the muted fg to keep it readable but not visually
+   loud. Vertical alignment: middle so it sits on the
+   same baseline as the chip text. The user said "large-ish
+   20px" — that's bigger than the breadcrumb's 0.85rem
+   (~13.6px) chip text. */
+.breadcrumb-sep {
+  font-size: 20px;
+  color: var(--fg-muted);
+  font-weight: 400;
+  margin: 0 0.4rem;
+  user-select: none;
+  vertical-align: middle;
+}
 .breadcrumb-link:hover {
   background: var(--bg-hover);
   color: var(--fg);
@@ -3445,11 +3466,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        doesn't lose their filter state when navigating up. */}}
     {{if gt (len .Breadcrumb) 0}}
     <nav class="breadcrumb" aria-label="Directory path">
+      {{/* Per user request 2026-06-28: large-ish "/" character
+           between each segment, and one at the start. The
+           separator is a separate <span> with its own font
+           size (20px) and color so it stands out from the
+           chips without competing visually. */}}
+      <span class="breadcrumb-sep" aria-hidden="true">/</span>
       {{range $i, $seg := .Breadcrumb}}
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
           <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <span class="breadcrumb-sep" aria-hidden="true">/</span>
         {{end}}
       {{end}}
     </nav>

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -4436,5 +4437,58 @@ func TestRenderPage_SearchResetButtonPresent(t *testing.T) {
 	// would submit the form)
 	if !strings.Contains(html, `type="button"`) {
 		t.Error("expected type=button on Reset button")
+	}
+}
+
+// TestRenderPage_BreadcrumbHasSlashSeparators verifies the
+// breadcrumb renders "/" between each segment AND one at
+// the start. Per user request 2026-06-28.
+func TestRenderPage_BreadcrumbHasSlashSeparators(t *testing.T) {
+	files := []FileInfo{}
+	html, err := RenderPage("animals", "./", "./_thumbs/", "animals/", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "images", "images", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the breadcrumb nav is rendered
+	if !strings.Contains(html, `class="breadcrumb"`) {
+		t.Fatal("expected breadcrumb nav in HTML")
+	}
+	// Verify breadcrumb-sep class is present
+	if !strings.Contains(html, `class="breadcrumb-sep"`) {
+		t.Error("expected breadcrumb-sep class for / separators")
+	}
+	// Verify the literal "/" character appears as a separator
+	// (could be in other places too, but should appear at
+	// least once inside a breadcrumb-sep span)
+	seps := strings.Count(html, `<span class="breadcrumb-sep"`)
+	if seps < 2 {
+		// Root + one for each non-current segment.
+		// For animals/, that's root + "images" = 2 seps
+		t.Errorf("expected at least 2 breadcrumb-sep spans (root + segments), got %d", seps)
+	}
+}
+
+// TestRenderPage_BreadcrumbSlashAriaHidden verifies the
+// separator spans are aria-hidden so screen readers
+// don't read "/" literally.
+func TestRenderPage_BreadcrumbSlashAriaHidden(t *testing.T) {
+	files := []FileInfo{}
+	html, err := RenderPage("animals", "./", "./_thumbs/", "animals/", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "images", "images", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// All breadcrumb-sep spans should be aria-hidden so
+	// screen readers don't read out the "/" character.
+	import_re := regexp.MustCompile(`<span class="breadcrumb-sep"[^>]*>`)
+	matches := import_re.FindAllString(html, -1)
+	if len(matches) == 0 {
+		t.Fatal("no breadcrumb-sep spans found")
+	}
+	for _, m := range matches {
+		if !strings.Contains(m, "aria-hidden") {
+			t.Errorf("breadcrumb-sep span missing aria-hidden: %q", m)
+		}
 	}
 }
