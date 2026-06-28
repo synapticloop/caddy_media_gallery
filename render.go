@@ -2711,6 +2711,35 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-color: var(--border-strong);
   color: var(--fg);
 }
+/* Per user request 2026-06-28: the search Reset button.
+   Uses the inverted color scheme — dark bg in light mode,
+   light bg in dark mode — via --active-bg / --active-fg /
+   --active-border (same tokens as .filter-apply). The
+   inversion makes the button stand out as a "destructive"
+   action (same visual weight as the Apply button, which
+   is the intended "this resets what you've done"
+   affordance). Margin-left: 0.4rem to separate from the
+   Search all button. */
+.search-reset-button {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--active-border);
+  border-radius: 4px;
+  background: var(--active-bg);
+  color: var(--active-fg);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.search-reset-button:hover {
+  background: var(--bg-hover);
+  color: var(--active-fg);
+  border-color: var(--active-border);
+}
 
 /* Phase 118: cards that don't match the current search get
    this class. visibility: collapse is the grid-aware collapse
@@ -3494,6 +3523,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
             autocomplete="off"
             aria-label="Search filenames in this directory">
           <button type="submit" class="search-button">Search all</button>
+          {{/* Per user request 2026-06-28: a Reset button next
+               to "Search all" that clears the search input
+               AND the ?q= URL parameter (if one is present).
+               Uses the inverted color scheme — dark in light
+               mode, light in dark mode — via --active-bg /
+               --active-fg / --active-border tokens (the same
+               tokens as the Apply button). type="button" so
+               it doesn't trigger the form submit. The click
+               handler is in the inline JS at the bottom of
+               the page (searchReset IIFE). */}}
+          <button type="button" class="search-reset-button"
+            aria-label="Clear search and reset filter">Reset</button>
         </div>
       </div>
     </form>
@@ -3872,6 +3913,47 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       applyFilter();
     }
   }
+})();
+
+/* Per user request 2026-06-28: search reset button. Wired
+   to the Reset button next to "Search all". On click:
+
+   1. Clear the search input value.
+   2. Remove the "filtered-out" class from every card and
+      table row so the client-side filter no longer hides
+      any items (the visitor sees the full directory again).
+   3. If the URL has a ?q= parameter, navigate to the same
+      URL without ?q= (full reload — needed to clear the
+      server-side filter that was applied when the visitor
+      clicked "Search all").
+   4. If the URL does NOT have a ?q=, no navigation is
+      needed (the client-side filter is all we need to
+      reset; the visitor stays on the same page).
+
+   We use type="button" on the Reset button so it does NOT
+   trigger the form submit (which would clear other params
+   like type/sort). The navigation in step 3 uses
+   URL.searchParams.delete so other params are preserved. */
+(function() {
+  var btn = document.querySelector('.search-reset-button');
+  if (!btn) return;
+  btn.addEventListener('click', function() {
+    // 1. Clear the search input value
+    var input = document.querySelector('.search-input');
+    if (input) input.value = '';
+    // 2. Remove filtered-out from every card + table row
+    var hidden = document.querySelectorAll('.filtered-out');
+    for (var i = 0; i < hidden.length; i++) {
+      hidden[i].classList.remove('filtered-out');
+    }
+    // 3. If ?q= is in the URL, navigate to the same URL
+    //    without ?q= (full reload)
+    var url = new URL(window.location.href);
+    if (url.searchParams.has('q')) {
+      url.searchParams.delete('q');
+      window.location.href = url.toString();
+    }
+  });
 })();
 
 /* Phase 163: click-to-sort table column headers.

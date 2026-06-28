@@ -4413,3 +4413,28 @@ func TestRenderPage_SearchQueryServerSide_SubstringMode(t *testing.T) {
 		t.Error("expected scatter.png to be INCLUDED in substring mode")
 	}
 }
+
+// TestRenderPage_SearchResetButtonPresent verifies the
+// "Reset" button is rendered next to "Search all" so
+// visitors can clear their search without a manual page
+// reload. Per user request 2026-06-28.
+func TestRenderPage_SearchResetButtonPresent(t *testing.T) {
+	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Verify the button is in the HTML
+	if !strings.Contains(html, `class="search-reset-button"`) {
+		t.Error("expected search-reset-button class in HTML")
+	}
+	if !strings.Contains(html, ">Reset<") {
+		t.Error("expected Reset button label in HTML")
+	}
+	// type="button" (not submit — otherwise clicking Reset
+	// would submit the form)
+	if !strings.Contains(html, `type="button"`) {
+		t.Error("expected type=button on Reset button")
+	}
+}
