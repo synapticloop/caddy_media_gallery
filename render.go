@@ -2427,12 +2427,22 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    20px" — that's bigger than the breadcrumb's 0.85rem
    (~13.6px) chip text. */
 .breadcrumb-sep {
-  font-size: 20px;
-  color: var(--fg-muted);
+  /* Per user request 2026-06-28: bigger and darker. The
+     original was 20px with --fg-muted (light grey), which
+     was too pale to stand out as a path separator. Bumped
+     to 28px (roughly twice the chip text size) and --fg
+     (primary text, near-black in light mode, near-white
+     in dark mode) so the "/" reads as a clear path
+     separator. Vertical-align: middle keeps it centred
+     with the chip text. Line-height: 1 so the taller
+     glyph doesn't add vertical padding. */
+  font-size: 28px;
+  color: var(--fg);
   font-weight: 400;
-  margin: 0 0.4rem;
+  margin: 0 0.5rem;
   user-select: none;
   vertical-align: middle;
+  line-height: 1;
 }
 .breadcrumb-link:hover {
   background: var(--bg-hover);
