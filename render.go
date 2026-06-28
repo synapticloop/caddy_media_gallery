@@ -649,11 +649,17 @@ func sortFiles(files []FileInfo, spec SortSpec) {
 // Per user request 2026-06-20: the default page size changed
 // from 50 to 60 (nicely divisible by 2, 3, 4, 5, 6).
 func paginate(files []FileInfo, page, pageSize int) []FileInfo {
-	if pageSize <= 0 {
-		pageSize = 60
-	}
 	if page < 1 {
 		page = 1
+	}
+	// Per user request 2026-06-28: pageSize == 0 means "no
+	// pagination limit" (the "all" option in the per-page
+	// dropdown). Return all files. Previously the function
+	// defaulted to 60, which silently undid the "all"
+	// selection — the visitor would pick "all" and see
+	// only 60 items per page.
+	if pageSize <= 0 {
+		return files
 	}
 	start := (page - 1) * pageSize
 	if start >= len(files) {
@@ -674,24 +680,45 @@ func paginate(files []FileInfo, page, pageSize int) []FileInfo {
 // Returns the validated pageSize, or the first item in the
 // list (parsed as int, or 0 if it is "all") if the requested
 // value is not in the list.
+// validatePageSize ensures the requested pageSize is in the
+// pageSizes list (the operator-configured dropdown options).
+//
+// Contract:
+//   - requested < 0  → "no preference" (use the first valid
+//     value in the list, or 60 if the list is empty)
+//   - requested == 0 → "show all on one page" (only valid if
+//     "all" is in the list; falls back to the first valid
+//     value otherwise)
+//   - requested > 0  → match against the list; fall back to
+//     the first valid value if not in the list
+//
+// Per user request 2026-06-28: previously requested == 0
+// was treated as "all" OR the first valid value (whichever
+// came first in the loop). That made tests that passed
+// pageSize=0 with ["30", "60", "120", "all"] return 0
+// (showing all items) instead of 30 (the documented
+// default). Now requested < 0 is the explicit sentinel
+// for "no preference", and requested == 0 only means
+// "all" if "all" is in the list.
 func validatePageSize(requested int, pageSizes []string) int {
 	if len(pageSizes) == 0 {
 		// No operator override; accept any positive int.
+		// requested <= 0 here means "use default" (the
+		// function is called by RenderPage which doesn't
+		// know the operator-configured default).
 		if requested <= 0 {
 			return 60
 		}
 		return requested
 	}
-	// Parse the configured sizes (skip "all" for the "find"
-	// step - it represents no pagination limit).
+	// Parse the configured sizes. Track the first valid
+	// (positive-int) entry as our fallback default.
 	var firstValid int
 	firstSet := false
+	hasAll := false
 	for _, s := range pageSizes {
 		if s == "all" {
-			if !firstSet {
-				firstValid = 0
-				firstSet = true
-			}
+			hasAll = true
 			continue
 		}
 		n, err := strconv.Atoi(s)
@@ -706,18 +733,15 @@ func validatePageSize(requested int, pageSizes []string) int {
 			return n
 		}
 	}
-	// Special-case: requested = 0 means "all" (no pagination).
-	hasAll := false
-	for _, s := range pageSizes {
-		if s == "all" {
-			hasAll = true
-			break
-		}
-	}
+	// requested == 0 → "all" semantic (only if the operator
+	// added "all" to their list).
 	if requested == 0 && hasAll {
 		return 0
 	}
-	// Not found: fall back to the first valid value.
+	// requested < 0 (sentinel for "no preference") OR
+	// requested == 0 but no "all" in the list OR
+	// requested > 0 but not in the list → fall back to the
+	// first valid value in the list.
 	if firstSet {
 		return firstValid
 	}
@@ -1438,8 +1462,22 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// then uses the operator-configured default). The "all"
 	// token is converted to 0 (which means "no pagination"
 	// downstream — paginate() returns all items).
+	//
+	// Per user request 2026-06-28: if no ?page_size is
+	// specified AND the caller passed 0 as the function
+	// parameter (the legacy "no preference" sentinel),
+	// override it to -1. Otherwise leave the caller's
+	// value alone (so tests that explicitly pass 50 or
+	// 30 still get that page size). Without this guard,
+	// the previous code passed pageSize=0 to validatePageSize,
+	// which interpreted 0 as "all" (or fell back to 60 if
+	// "all" wasn't in the list). With -1 as the explicit
+	// sentinel, validatePageSize knows "0 was not an
+	// operator-configured value — use the default".
 	if ps := pageSizeFromQuery(query); ps >= 0 {
 		pageSize = ps
+	} else if pageSize == 0 {
+		pageSize = -1
 	}
 
 	// Per user request 2026-06-20: compute the filter UI
@@ -1476,9 +1514,16 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// user picked for the image grid. The dirs are NOT sorted
 	// here (splitFiles keeps them alphabetical).
 	sortFiles(others, sortSpec)
-	if pageSize <= 0 {
-		pageSize = 60
-	}
+	// Per user request 2026-06-28: REMOVED the previous guard
+	//   if pageSize <= 0 { pageSize = 60 }
+	// that was reverting the "all" selection back to 60.
+	// validatePageSize below already handles the "all" case
+	// (returns 0 if "all" is in the operator's pageSizes
+	// list). The paginate() helper treats pageSize=0 as
+	// "no pagination limit" (return all files). The
+	// totalPages computation also handles pageSize=0
+	// explicitly (1 page when all items fit).
+	//
 	// Per user request 2026-06-20: validate the requested page
 	// size against the operator-configured pageSizes list. If
 	// the requested value is not in the list, fall back to the
@@ -1521,7 +1566,17 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	for _, f := range others {
 		totalAllBytes += f.Size
 	}
-	totalPages := (totalImages + pageSize - 1) / pageSize
+	// Per user request 2026-06-28: totalPages must handle
+	// pageSize=0 (the "all" option) without panicking on
+	// division by zero. When pageSize=0, there's exactly 1
+	// "page" containing all items — no pagination nav is
+	// shown because there's nothing to paginate.
+	var totalPages int
+	if pageSize <= 0 {
+		totalPages = 1
+	} else {
+		totalPages = (totalImages + pageSize - 1) / pageSize
+	}
 	if totalPages < 1 {
 		totalPages = 1
 	}

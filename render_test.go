@@ -106,7 +106,12 @@ func TestRenderPage_DirectoriesAlwaysRendered(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	// Per user request 2026-06-28: pass pageSize=30 (the first
+	// item in the pageSizes list, the documented default) so
+	// validatePageSize doesn't fall back to 60 or "all" for
+	// the unspecified value. With 30/page of 200 images, the
+	// pagination nav shows "Page 1 of 7".
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,19 +120,19 @@ func TestRenderPage_DirectoriesAlwaysRendered(t *testing.T) {
 			t.Errorf("expected directory %q in HTML", d)
 		}
 	}
-	// The pagination block should be present (200 images, 50/page = 4 pages)
-	if !strings.Contains(html, "Page 1 of 4") {
-		t.Error("expected pagination to show 4 pages for 200 images")
+	// The pagination block should be present (200 images, 30/page = 7 pages)
+	if !strings.Contains(html, "Page 1 of 7") {
+		t.Error("expected pagination to show 7 pages for 200 images")
 	}
 }
 
 func TestRenderPage_PaginationLinksPresent(t *testing.T) {
-	// 200 images, 50 per page = 4 pages
+	// 200 images, 30 per page = 7 pages (30 * 6 = 180, then 20 more = page 7)
 	var files []FileInfo
 	for i := 0; i < 200; i++ {
 		files = append(files, FileInfo{Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,12 +142,12 @@ func TestRenderPage_PaginationLinksPresent(t *testing.T) {
 	}
 	// Test page 2
 	q := url.Values{"page": {"2"}}
-	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, q, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html2, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30, []string{"30", "60", "120", "all"}, files, q, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html2, "Page 2 of 4") {
-		t.Error("expected 'Page 2 of 4' on page 2")
+	if !strings.Contains(html2, "Page 2 of 7") {
+		t.Error("expected 'Page 2 of 7' on page 2")
 	}
 	if !strings.Contains(html2, `href="?order=desc&amp;page=1&amp;sort=mtime"`) {
 		t.Error("expected Prev link to page 1 on page 2")
@@ -4170,7 +4175,7 @@ func TestRenderPage_MediaHeader_RangeForPage1(t *testing.T) {
 			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
 		})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
 		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
@@ -4191,7 +4196,7 @@ func TestRenderPage_MediaHeader_RangeForPage2(t *testing.T) {
 		})
 	}
 	q := url.Values{"page": {"2"}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
 		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
@@ -4211,7 +4216,7 @@ func TestRenderPage_MediaHeader_ExactFit(t *testing.T) {
 			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
 		})
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
 		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
@@ -4227,7 +4232,7 @@ func TestRenderPage_MediaHeader_SingleImage(t *testing.T) {
 	files := []FileInfo{
 		{Name: "only.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
 		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
@@ -4420,7 +4425,7 @@ func TestRenderPage_SearchQueryServerSide_SubstringMode(t *testing.T) {
 // reload. Per user request 2026-06-28.
 func TestRenderPage_SearchResetButtonPresent(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 60,
 		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
@@ -4436,5 +4441,74 @@ func TestRenderPage_SearchResetButtonPresent(t *testing.T) {
 	// would submit the form)
 	if !strings.Contains(html, `type="button"`) {
 		t.Error("expected type=button on Reset button")
+	}
+}
+
+// TestRenderPage_PageSizeAll verifies the "all" option in the
+// per-page dropdown actually shows ALL items on one page (no
+// pagination). Previously the pageSize=0 was treated as
+// invalid by paginate() and silently defaulted to 60, so
+// selecting "all" was a no-op. Per user request 2026-06-28.
+func TestRenderPage_PageSizeAll(t *testing.T) {
+	// 100 images, ?page_size=all = show all
+	var files []FileInfo
+	for i := 0; i < 100; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	// Per user request 2026-06-28: the "all" semantic is
+	// triggered by ?page_size=all in the URL, NOT by passing
+	// pageSize=0 to RenderPage (pageSize=0 is the "no
+	// preference" sentinel — uses the default, which is the
+	// first valid item in the list). The "all" case:
+	q := url.Values{"page_size": {"all"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The pagination nav should NOT render (only 1 page).
+	if strings.Contains(html, `<nav class="pagination">`) {
+		t.Error("expected NO pagination nav when 'all' is selected (1 page)")
+	}
+	// Note: "Showing 1-100" IS in the header when "all" is
+	// selected (it shows the full range). The KEY indicator
+	// that "all" is active is the ABSENCE of the pagination
+	// nav (only 1 page).
+	if !strings.Contains(html, "Showing 1-100") {
+		t.Error("expected header to show 'Showing 1-100' when all 100 items fit on one page")
+	}
+	// All 100 image filenames should appear in the rendered HTML.
+	for i := 0; i < 5; i++ { // spot-check the first 5
+		name := imageName(i)
+		if !strings.Contains(html, name) {
+			t.Errorf("expected %q to be in HTML (all items should render)", name)
+		}
+	}
+}
+
+// TestRenderPage_PageSizeAllViaURL verifies the ?page_size=all
+// URL parameter triggers the same "show all items" behavior as
+// passing pageSize=0 directly. Per user request 2026-06-28.
+func TestRenderPage_PageSizeAllViaURL(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 50; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	q := url.Values{"page_size": {"all"}}
+	// Use pageSize=30 (the first item in the list — the
+	// "documented default"). validatePageSize ignores this
+	// when the URL has ?page_size=all and converts it to 0.
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should be no pagination nav (all 50 items on 1 page)
+	if strings.Contains(html, `<nav class="pagination">`) {
+		t.Error("expected NO pagination nav when ?page_size=all is in URL")
 	}
 }
