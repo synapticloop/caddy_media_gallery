@@ -1,9 +1,9 @@
 # Sort & Pagination
 
-The gallery's image grid respects three URL query parameters.
-All three are optional. They're a stable URL API — bookmarking
-a `?sort=size&order=desc&page=3` link works and gives the same
-view on every visit.
+The gallery's image grid respects a small set of URL query
+parameters. All are optional. They're a stable URL API —
+bookmarking `?sort=size&order=desc&page=3` works and gives the
+same view on every visit.
 
 ## Query parameters
 
@@ -12,39 +12,50 @@ view on every visit.
 | `?sort=` | `name` / `type` / `size` / `mtime` | `mtime` | What field to sort images by. The URL also accepts `?sort=date` (treated as `?sort=mtime`) for back-compat. See "Aliases" below. |
 | `?order=` | `asc` / `desc` | `desc` | Sort direction. `desc` for `mtime` is newest-first; `desc` for `name`/`type`/`size` is Z-A / largest-first. |
 | `?page=` | integer &gt;= 1 | `1` | Which page of results to show. 1-based. Out-of-range or non-numeric values fall back to 1. |
+| `?page_size=` | any value in the operator-configured `page_sizes` list | first item | Per-page size (driven by the dropdown). Changing this **resets the visitor to page 1** (the current `?page=` is dropped from the form's hidden inputs). Unknown values fall back to the first item. |
+| `?q=` | free text (URL-encoded) | (none) | Server-side filename search. The match rule (`word` or `substring`) is operator-configured via `search_match`. |
+| `?type=` | comma-separated extensions (e.g. `jpg,png`) | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). |
 
-The URL parameter is preserved across sort changes: clicking
+The URL parameters are preserved across changes: clicking
 "Name" on `?sort=mtime&order=desc&page=2` becomes
-`?sort=name&order=asc&page=2` (the toggle flips the order for the
-new field; the page stays the same).
+`?sort=name&order=asc&page=2` (the toggle flips the order for
+the new field; the page stays the same). Same for the type
+filter, the search box, and the page-size dropdown — all
+preserve the other params via hidden inputs in their forms.
 
-The **directory strip and other-files strip are NOT affected**
-by the sort. They always render in:
-- Directories: case-insensitive alphabetical (`splitFiles`
-  re-sorts them on every render)
-- Other files: scanner order (same default as the image list
-  — newest-first by mtime)
+The **directory strip and other-files strip have their own
+sort behaviour**:
 
-This is intentional: the dirs strip is a navigation aid and
-should be stable, not reshuffle when the user changes the image
-sort. See Phase 15 in the plan for the reasoning.
+- Directories: always rendered, case-insensitive alphabetical.
+  The Directories table has its own click-to-sort headers
+  (name, # items, # sub-dirs, size, modified). Sort state
+  persists in `localStorage` (per table) and in the URL
+  (`?dirs_sort=...&dirs_order=...`).
+- Other files: scanner order (newest-first by mtime). The
+  Other Files table has its own click-to-sort headers
+  (name, type, size, modified). Same persistence as Directories.
+
+The main image sort does NOT affect the dirs/other-files
+sorts. This is intentional: the dirs strip is a navigation
+aid and should be stable, not reshuffle when the user changes
+the image sort.
 
 ## Sort indicator in the header
 
 The header shows the current sort + a reset link:
 
 - On the **default sort** (`mtime desc`), the indicator is a
-  plain `<span>` — clicking it would just reload the same page,
-  so it's not a link. It reads `Sort: Modified $\downarrow$`.
+  plain `<span>` — clicking it would just reload the same
+  page, so it's not a link. It reads `Sort: Modified $\downarrow$`.
 - On **any other sort**, the indicator is a link to `?` (no
   query params, which is the default). It reads e.g. `Sort: Size $\uparrow$`.
 
 ## Sort buttons
 
 The sort bar at the top of the header has four buttons: Name,
-Type, Modified, Size. Each shows a `$\uparrow$` or `$\downarrow$` arrow if it's the
-currently active sort. Clicking the active button toggles the
-order; clicking an inactive button switches to that field at
+Type, Modified, Size. Each shows a `$\uparrow$` or `$\downarrow$` arrow if it's
+the currently active sort. Clicking the active button toggles
+the order; clicking an inactive button switches to that field at
 the direction that's the "natural" opposite of the current
 order (so you don't get the same direction twice in a row).
 
@@ -62,8 +73,23 @@ visible button.
 
 ## Pagination
 
-50 images per page (constant `PageSize = 50` in render.go, not
-configurable via env var or Caddyfile — it's a code constant).
+The per-page size is configured via the `page_sizes` Caddyfile
+directive (default: `60 30 120 all`). The FIRST item in the
+list is the default per-page count (used when `?page_size=`
+isn't in the URL). The dropdown is rendered in the meta line
+of the gallery HTML so the visitor can switch the per-page
+size live.
+
+**Page-size change resets to page 1.** When the visitor changes
+the per-page size via the dropdown, the form omits the `?page=`
+hidden input. The next page load is page 1 — the visitor
+doesn't end up on a non-existent page (e.g. changing from
+60-per-page to 120-per-page on page 2 of a 100-image dir
+would otherwise land on an empty page 2).
+
+The "Showing 1-60" range in the media header shows the
+visitor the slice of items they're seeing — e.g. for a
+200-image gallery, page 2 shows "Media (200 - Showing 61-120)".
 
 Pagination links in the live template:
 - The "First" and "Prev" pagination buttons (rendered by the template with double- and single-left-arrow icons, when `{{.HasPrev}}` is true)
@@ -73,14 +99,45 @@ Pagination links in the live template:
 The page numbers in the URL are 1-based, not 0-based. `?page=0`
 falls back to `?page=1`.
 
+## Search
+
+The search box in the header does two things:
+
+- **As the visitor types** (client-side filter): items that
+  don't match get the `.filtered-out` class. Visibility
+  collapse + opacity 0 fade hides them. The URL doesn't
+  change.
+- **"Search all" button** (server-side filter): submits the
+  form with `?q=foo`. The page re-loads with the matched
+  files only. The form preserves the other URL params.
+
+The match rule is the same on both sides: `word` (default
+"substring" without config) or `word` (when the operator sets
+`search_match word`). The visitor doesn't need to know — the
+match just works.
+
+## Type filter
+
+The "Type Filter" dropdown has checkboxes for Images / Videos /
+Other, with the count of each type next to the label. Checking
+"Images" + "Videos" (unchecking "Other") filters out non-media
+files. The "All" pill resets the filter.
+
+The filter is applied both server-side (when the form is
+submitted) and via the URL (`?type=jpg&type=png`). Directories
+are never filtered (the user can always navigate).
+
 ## Examples
 
 ```
-/images/                           # default: mtime desc, page 1
-/images/?sort=name&order=asc      # alphabetical
-/images/?sort=size&order=desc     # largest first
-/images/?page=3                    # third page of default sort
+/images/                                 # default: mtime desc, page 1
+/images/?sort=name&order=asc            # alphabetical
+/images/?sort=size&order=desc           # largest first
+/images/?page=3                          # third page of default sort
 /images/?sort=type&order=asc&page=2
+/images/?page_size=120                   # change per-page to 120
+/images/?q=cat                           # server-side search for "cat"
+/images/?type=jpg,png                   # only JPG and PNG
 ```
 
 ## Aliases
@@ -129,15 +186,19 @@ just pick one and stick with it for consistency.
 ## Stability guarantees
 
 - The URL parameter API is **stable**. Bookmarking works. The
-  four sort fields and two orders are part of the public
+  four sort fields, two orders, the search query, the type
+  filter, and the per-page size are part of the public
   contract; renaming or removing one is a breaking change.
 - Adding a new sort field is non-breaking (just adds a new
   option).
 - The default sort may change in a future major version, but
   the `?sort=mtime` URL will always be honored.
-- Page size is a code constant and may change in future
-  versions. URLs with `?page=N` are stable relative to the
-  *current* page size — if the page size changes from 50 to
-  100, page 3 of the old URL might now be page 2 of the new
-  layout, but no image is lost or duplicated (it's the same
-  image set, just packed differently).
+- Page size may change between versions, but URLs with
+  `?page=N` are stable relative to the *current* page size —
+  if the page size changes from 60 to 100, page 3 of the old
+  URL might now be page 2 of the new layout, but no image is
+  lost or duplicated (it's the same image set, just packed
+  differently).
+- Search match mode (`?q=...`) is stable; the operator can
+  change the match rule (word/substring) at any time and old
+  bookmarks still work the same way.

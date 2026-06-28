@@ -87,16 +87,33 @@ reference from `{{...}}` are listed below.
 | `{{.Title}}` | `string` | The page title (rendered in `<title>` and the `<h1>`). Currently the directory name. |
 | `{{.PathPrefix}}` | `string` | Prefix for relative links to files in the same directory. Usually `"./"`. |
 | `{{.ThumbPrefix}}` | `string` | Prefix for thumbnail URLs. Usually `"./_thumbs/"`. |
-| `{{.Directories}}` | `[]FileView` | Subdirectory entries. Always rendered in full (not paginated), case-insensitive alphabetical. |
+| `{{.Up}}` | `*FileView` | The synthetic "Up" entry for the parent directory. nil at the gallery root. |
+| `{{.Subdirs}}` | `[]FileView` | Subdirectory entries. Always rendered in full (not paginated), case-insensitive alphabetical. |
 | `{{.OtherFiles}}` | `[]FileView` | Non-media files (HTML, txt, etc.). Always rendered in full (not paginated). |
 | `{{.Images}}` | `[]FileView` | The image + video tiles for the **current page only**. Paginated, sorted per the user's `?sort=&order=` choice. |
 | `{{.Page}}` | `int` | Current page number (1-based). |
-| `{{.PageSize}}` | `int` | Images per page (constant; default 50). |
-| `{{.TotalImages}}` | `int` | Total images in the directory (across all pages). |
+| `{{.PageSize}}` | `int` | Current per-page count (driven by the dropdown / `?page_size=` query). |
+| `{{.PageSizes}}` | `[]string` | The visitor's per-page dropdown options (e.g. `["30", "60", "120", "all"]`). |
+| `{{.ImageStart}}` | `int` | 1-based start of the current page's image range (e.g. 1 for page 1, 61 for page 2). |
+| `{{.ImageEnd}}` | `int` | 1-based end of the current page's image range (e.g. 60 for page 1 of 60-per-page, 89 for page 2 of 60-per-page of a 89-image dir). |
+| `{{.TotalImages}}` | `int` | Total images in the directory (across all pages, after type/q filters). |
 | `{{.TotalPages}}` | `int` | Total page count. |
+| `{{.TotalFiles}}` | `int` | Total files in the directory (images + videos + other files). |
+| `{{.TotalVideos}}` | `int` | Total video files in the directory. |
+| `{{.ImageCount}}` | `int` | Count of image files only (videos excluded). |
+| `{{.TotalAllFilesSize}}` | `string` | Human-readable total size of all files. |
 | `{{.HasPrev}}` | `bool` | True if `{{.Page}} > 1`. |
 | `{{.HasNext}}` | `bool` | True if `{{.Page}} < {{.TotalPages}}`. |
+| `{{.PageNumbers}}` | `[]int` | Google-style page-number list for the pagination nav. May contain 0 (a "..." ellipsis). |
 | `{{.Sort}}` | `SortSpec` | The current sort. See below. |
+| `{{.SearchQuery}}` | `string` | The raw `?q=` value (preserved across sort changes). |
+| `{{.SearchMatch}}` | `string` | The operator-configured search match mode (`"word"` or `"substring"`). Used to render a `data-search-match` attribute on the search input so the inline JS uses the same rule as the server. |
+| `{{.TypeFilter}}` | `map[string]bool` | The active type filter (e.g. `{"jpg": true, "png": true}` for `?type=jpg,png`). |
+| `{{.IsTypeFilterActive}}` | `bool` | True if any type filter is active. |
+| `{{.TypeFilterQuery}}` | `string` | The raw `?type=` value (the canonical, comma-separated form). |
+| `{{.FilterImageOptions}}` / `{{.FilterVideoOptions}}` / `{{.FilterOtherOptions}}` | structs | Per-type filter groups (each option's extension, label, count, selected). |
+| `{{.Breadcrumb}}` | `[]BreadcrumbSegment` | Breadcrumb trail from gallery root to current dir. Each segment has `Name`, `Href`, `IsCurrent`. |
+| `{{.Query}}` | `url.Values` | Raw URL query — useful for the per-page form to preserve all params except the ones it overrides. |
 
 ### `{{.Sort}}` (a `SortSpec` struct)
 
@@ -131,7 +148,16 @@ The template engine has a few helper functions registered:
 |---|---|---|
 | `minus1` | `minus1 n int to int` | Returns `n - 1`. Used for prev-page link targets. |
 | `plus1` | `plus1 n int to int` | Returns `n + 1`. Used for next-page link targets. |
+| `lastIndex` | `lastIndex s []T to int` | Returns `len(s) - 1`. Used for the breadcrumb. |
 | `sortLabel` | `sortLabel field string to string` | Maps a sort field code to its display label: `"name"to"Name"`, `"type"to"Type"`, `"mtime"to"Modified"`, `"size"to"Size"`, `"date"to"Date"`. Unknown fields fall back to the raw field name capitalised. Empty string to `"Modified"` (the default). |
+| `queryString` | `queryString q url.Values to template.URL` | Renders `url.Values` as a `key=val&key=val` query string. Used for building pagination / sort / filter links. Returns empty string if no params. |
+| `queryWith` | `queryWith q url.Values, key, value string to url.Values` | Returns a new `url.Values` with the given key replaced (or removed if value is empty). |
+| `queryForPage` | `queryForPage q url.Values, sort SortSpec, page int to url.Values` | Pagination-specific: keeps the effective sort/order, replaces `page`. |
+| `sortURL` | `sortURL q url.Values, field, order string to url.Values` | Sort-toggle-specific: sets `sort` + `order`, resets `page` to 1. |
+| `sortOrder` | `sortOrder currentField, field, currentOrder string to string` | Returns the toggled order (asc → desc if same field, else the new field's default). |
+| `queryToHiddenInputs` | `queryToHiddenInputs q url.Values to template.HTML` | Renders `url.Values` as hidden `<input>` elements. Used by the per-page form to preserve other params on submit. |
+| `queryToHiddenInputsExclude` | `queryToHiddenInputsExclude q url.Values, exclude ...string to template.HTML` | Like above, but with a variadic list of keys to exclude. Used by the per-page form to omit `page` (so changing size resets to page 1) and `page_size` (the dropdown supplies it). |
+| `formatDimensions` | `formatDimensions w, h int to string` | Returns `"WIDTH × HEIGHT"` (e.g. `"1024 × 1024"`) or empty if either is 0. |
 
 ## Editing the templates — the basics
 

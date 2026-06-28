@@ -16,6 +16,12 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **Drop-in replacement** for `file_server browse` in a `handle_path` block.
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime.
+- **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos.
+- **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata.
+- **Filename search** with two operator-configurable match modes (`search_match word|substring`, default `substring`). Live (client-side) as the visitor types, plus a "Search all" button for server-side full-directory search.
+- **Type filter** — Images / Videos / Other checkboxes in the header. Combined with the search filter via the URL (`?type=jpg&type=png` or `?ext=jpg&ext=png`).
+- **Pagination** with a configurable per-page dropdown (operator sets the list, e.g. `page_size 30 60 120 all`; the first item is the default). Changing the page size resets to page 1 so the visitor doesn't end up on a non-existent page.
+- **Click-to-sort table headers** on the Directories and Other Files tables. Sort state persists in the URL AND localStorage so the visitor's choice is remembered.
 - **Vanilla JS lightbox** for click-to-expand, no external JS dependencies.
 
   ![Lightbox view](docs/screenshots/synapticloop-caddy_media_gallery_lightbox.png)
@@ -23,9 +29,10 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
   Click any media tile (image or video) to open it fullscreen. The lightbox supports keyboard navigation (Esc closes, arrow keys go back/forward), a click-outside-to-close behaviour, and a play/pause control for videos. Videos show a poster (the first frame, extracted by `ffmpeg` if available) before the video plays, so the click area is always meaningful even before playback.
 
 - **Light + dark mode** with a visitor-toggleable theme (auto / light / dark), persisted in localStorage. White card on grey background in light mode, dark card on near-black in dark mode. Blue accent links.
-- **Native `loading="lazy"`** on every thumbnail.
-- **Video support** — videos show a play-button overlay and link to the raw file.
-- **"Directories" section** for sub-directories and a link to the parent directory if available.
+- **No-flash theme** — a tiny inline script reads the visitor's saved theme preference and applies it BEFORE the page renders, so there's no "white flash" when the visitor uses dark mode.
+- **Native `loading="lazy"`** on every thumbnail, plus a subtle shimmer animation while the image loads.
+- **Video support** — videos show a play-button overlay and link to the raw file. ffmpeg extracts the first frame for the poster thumbnail.
+- **"Directories" section** for sub-directories with breadcrumbs (showing the path from the gallery root), counts (# items, # sub-dirs), and the directory's total size.
 - **"Other files" section** for non-image/non-video content in a directory.
 
 ## Install
@@ -110,13 +117,35 @@ The gallery slots behind any standard Caddy auth layer (basic_auth, forward_auth
 
 ## Caddyfile directive options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `sort`  | `mtime` | `mtime` (newest first by modification time) or `name` (alphabetical) |
+The `media_gallery` directive accepts these sub-options (full reference in [`docs/01-configuration.md`](docs/01-configuration.md)):
+
+| Subdirective | Default | Description |
+|---|---|---|
+| `sort` | `mtime` | Sort field: `mtime` (newest first) or `name` (alphabetical) |
+| `path_prefix` | (none) | URL mount prefix used in breadcrumbs (e.g. `images`). Defaults to the directory name. |
+| `root_name` | (none) | Display name for the root breadcrumb. Defaults to "media root". |
+| `image_types` | built-in list | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp svg avif heic`. |
+| `video_types` | built-in list | Space-separated list of video extensions. Default: `mp4 webm m4v mov mkv avi ogv ogg`. |
+| `page_size` | `60` | Per-page default (the first item in `page_sizes` if set). |
+| `page_sizes` | `60 30 120 all` | Space-separated list of dropdown options; the first item is the default. Use `all` for "show all on one page". |
+| `thumb_width` | `320` | Max width of generated thumbnails (px). |
+| `thumb_height` | `320` | Max height of generated thumbnails (px). |
+| `thumb_format` | `webp` | Output format: `webp`, `png`, `jpeg` (or `jpg`). |
+| `thumb_ttl` | `1440` | HTTP `Cache-Control: max-age` in minutes for thumb responses. |
+| `cache_scan` | `1` | In-memory scan cache TTL in minutes. |
+| `no_thumbs` | `false` | Skip thumbnail generation (use original file in `<img src>`). |
+| `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
+| `template` | `gallery.tmpl` | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed). |
+| `search_match` | `substring` | Filename match rule for search: `substring` (default) or `word` (word-boundary). |
 
 Example:
 ```caddyfile
-media_gallery { sort name }
+media_gallery {
+    sort name
+    page_sizes 30 60 120 all
+    search_match word
+    template themes/dark/gallery.tmpl
+}
 ```
 
 ## How thumbs work
@@ -142,12 +171,15 @@ Cache invalidation is purely mtime-based — no cron job, no inotify watcher.
 - **Thumb cache** — WebP thumbs are written to disk and served from disk; subsequent requests are a single `os.ReadFile`. The thumb URL is content-addressed (sha256 of the source path), so the URL itself is cacheable.
 - **HTTP `Cache-Control: public, max-age=86400`** on thumb responses (24h, since thumbs are immutable per source mtime).
 - **HTTP `Cache-Control: no-cache`** on gallery HTML (so newly-added images show up on the next refresh).
+- **EXIF + dimensions reading** — both happen at scan time (not per-request) and are cached alongside the file info. EXIF costs ~1-5ms per image (header-only parse); image dimensions use `image.DecodeConfig` (header only); video dimensions call `ffprobe` (50-100ms). For a 200-image directory, the first scan after a cache miss takes ~1-2 seconds total; subsequent renders are sub-millisecond.
 
 ## Dependencies
 
 - [caddyserver/caddy](https://github.com/caddyserver/caddy) v2.11.4 (compile-time)
-- [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) — for image resizing
+- [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) — for image resizing and WebP decoding (for dimension reading)
 - [HugoSmits86/nativewebp](https://github.com/HugoSmits86/nativewebp) — pure-Go lossless WebP encoder (no CGO, no libwebp)
+- [dsoprea/go-exif/v3](https://github.com/dsoprea/go-exif) — for EXIF metadata reading (JPEG, PNG, WebP). GPS data is intentionally never read.
+- `ffmpeg` (external binary, optional) — for video thumbnail extraction. If not present, the gallery falls back to a placeholder gradient.
 
 ## Build
 
@@ -168,7 +200,7 @@ go test ./... -v
 go test ./... -race       # race detector
 ```
 
-24 tests, all standard library + stdlib-friendly patterns. No test fixtures in the repo — the test for thumbnail generation uses a programmatically-generated 640x480 JPEG.
+330 tests, all standard library + stdlib-friendly patterns. No test fixtures in the repo — the test for thumbnail generation uses a programmatically-generated 640x480 JPEG. Tests cover rendering, EXIF parsing, dimension reading, search filter, sort, pagination, scan cache, and the Caddyfile parser.
 
 ## Architecture
 
@@ -177,9 +209,11 @@ caddy_media_gallery/
 ├── gallery.go          # Module registration, Caddyfile parser, ServeHTTP
 ├── scanner.go          # Directory walker + file classification (image/video/other)
 ├── scancache.go        # mtime-keyed in-memory cache of directory scans
-├── render.go           # HTML template + inlined dark CSS + inlined lightbox JS
+├── render.go           # HTML template + inlined CSS + inlined lightbox JS
 ├── thumbnails.go       # WebP thumb generation (decode → resize → encode), mtime cache
-├── *_test.go           # Go tests (24 total)
+├── exif.go              # EXIF metadata reader (CAMERA fields only, no GPS)
+├── dimensions.go       # Source dimensions reader (image.DecodeConfig + ffprobe)
+├── *_test.go           # Go tests (330 total)
 ├── build.sh            # xcaddy build + systemd restart
 └── README.md           # this file
 ```

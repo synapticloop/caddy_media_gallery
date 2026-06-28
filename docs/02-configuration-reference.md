@@ -18,15 +18,22 @@ Inside an `media_gallery { ... }` block:
 
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
-| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination to Aliases](04-sort-and-pagination.md#aliases)) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
-| `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
-| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
-| `page_size` | integer &gt;= 1 | `50` | Image entries per page. Nav only renders when `total pages > 1`. |
+| `path_prefix` | URL prefix (e.g. `images`) | directory basename | URL mount prefix used in breadcrumb links. |
+| `root_name` | display name | `media root` | Display name for the root breadcrumb segment. |
+| `image_types` | space-separated extensions (no leading dot) | built-in list | File extensions the gallery treats as images. |
+| `video_types` | space-separated extensions (no leading dot) | built-in list | File extensions the gallery treats as videos. |
+| `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime`) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
+| `page_size` | integer &gt;= 1 | (first item of `page_sizes`) | Default per-page count. Deprecated for new configs — use `page_sizes` (list form) instead. |
+| `page_sizes` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown. |
 | `thumb_width` | integer &gt;= 1 | `320` | Max width in pixels. Source is fit-within-bounds. |
 | `thumb_height` | integer &gt;= 1 | `320` | Max height in pixels. Source is fit-within-bounds. |
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
 | `cache_scan` | integer &gt;= 1 | `1` | Scan cache TTL in minutes. |
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
+| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
+| `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
+| `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary. `substring` = match anywhere. |
+| `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 
 **Full Caddyfile example** (every directive set):
 
@@ -34,15 +41,19 @@ Inside an `media_gallery { ... }` block:
 handle_path /images/* {
     root * /var/www/html/images
     media_gallery {
+        path_prefix images
+        root_name images
+        image_types jpg jpeg png webp
+        video_types mp4 webm
         sort name
-        template themes/dark/gallery.tmpl
-        no_thumbs false
-        page_size 100
+        page_sizes 30 60 120 all
         thumb_width 480
         thumb_height 320
         thumb_format jpeg
         cache_scan 5
         thumb_ttl 60
+        search_match word
+        template themes/dark/gallery.tmpl
     }
     file_server
 }
@@ -58,15 +69,22 @@ producer to set them:
 ```json
 {
   "root": "/var/www/html/images",
+  "path_prefix": "images",
+  "root_name": "images",
+  "image_types": ["jpg", "jpeg", "png", "webp"],
+  "video_types": ["mp4", "webm"],
   "sort": "name",
-  "template": "themes/dark/gallery.tmpl",
-  "no_thumbs": false,
-  "page_size": 100,
+  "page_size": 60,
+  "page_sizes": ["30", "60", "120", "all"],
   "thumb_width": 480,
   "thumb_height": 320,
   "thumb_format": "jpeg",
   "cache_scan": 5,
-  "thumb_ttl": 60
+  "thumb_ttl": 60,
+  "no_thumbs": false,
+  "no_video_thumbs": false,
+  "search_match": "word",
+  "template": "themes/dark/gallery.tmpl"
 }
 ```
 
@@ -78,16 +96,19 @@ producer to set them:
 
 | Param | Values | Default | Effect |
 |---|---|---|---|
-| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime` — see [Sort & Pagination to Aliases](04-sort-and-pagination.md#aliases)) | inherits from Caddyfile | Sort field |
+| `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime`) | inherits from Caddyfile | Sort field |
 | `order` | `asc` / `desc` | depends on `sort` | Sort direction |
-| `page` | integer &gt;= 1 | `1` | Which page (only meaningful when `page_size` causes pagination) |
+| `page` | integer &gt;= 1 | `1` | Which page (only meaningful when there are > 1 pages) |
+| `page_size` | any value in the operator-configured `page_sizes` list | first item | Visitor's per-page selection (driven by the dropdown). Changing this resets the visitor to page 1. Unknown values fall back to the first item. |
+| `q` | free text (URL-encoded) | (none) | Server-side filename search. Combined with the visitor's `search_match` mode. Directories are never filtered. |
+| `type` | comma-separated list of extensions (e.g. `jpg,png`) | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). |
+| `dirs_sort` / `dirs_order` | same as the main sort | `name asc` | Sort the Directories and Other Files tables. Header click is client-side (persists in `data-search-match`-style attributes + localStorage). |
 
 **Deliberately NOT query-overridable:**
-- `?page_size=N` — would let users request arbitrarily large pages and could DOS the server
 - `?thumb_format=N` — would let users force the server to recompute thumbs in any format
-- `?thumb_width=N` — same
+- `?thumb_width=N` / `?thumb_height=N` — same
 
-The page size, format, and thumb dimensions are set in the Caddyfile only.
+The thumb format and dimensions are set in the Caddyfile only. The page size IS now a query-overridable URL param (via the visitor's dropdown), but the operator can only set it to values in their pre-configured `page_sizes` list.
 
 ---
 
@@ -143,10 +164,19 @@ options if a use case comes up, but currently aren't:
 | Constant | Value | Where |
 |---|---|---|
 | Thumb JPEG quality (when `thumb_format jpeg`) | 75 | `thumbnails.go` |
-| Video thumbs | not generated (videos show play-button overlay in the template) | `thumbnails.go` (source extensions are image-only) |
-| Lightbox | page-scoped (50 images on the current page, not all 1,197) | `render.go` (lightbox JS in the template) |
-| Other-files strip on a subdir page | "Other files" rendered as horizontal chips above the image grid | `render.go` (splitFiles) |
-| Directories strip on every page | Always rendered, alphabetical, ignores sort | `render.go` (splitFiles + dirs sort) |
+| Video thumb extraction | uses `ffmpeg -vframes 1` (first frame), scaled to `thumb_width` × `thumb_height` | `thumbnails.go` |
+| Video thumb max retries | 1 (no retry; failed extraction leaves the placeholder) | `thumbnails.go` |
+| Lightbox | page-scoped (visits the current page only, not all pages in the directory) | `render.go` (lightbox JS in the template) |
+| EXIF fields extracted | CAMERA subset only (Make, Model, Lens, DateTimeOriginal, ExposureTime, FNumber, ISOSpeedRatings, FocalLength). GPS data is never read. | `exif.go` |
+| EXIF parser | `github.com/dsoprea/go-exif/v3` (supports JPEG, PNG, WebP) | `exif.go` |
+| Search match mode default | `substring` (most permissive; the operator can opt into `word` via `search_match word`) | `exif.go` + `gallery.go` (Provision) |
+| Dimensions reading | `image.DecodeConfig` (images, header-only) + `ffprobe` (videos, 10s timeout) | `dimensions.go` |
+| Per-page dropdown default list | `60 30 120 all` (first item is the default) | `gallery.go` (Provision) |
+| Page-size reset behaviour | changing the page size via the dropdown resets the visitor to page 1 (current `?page=` is dropped from the form's hidden inputs) | `render.go` (page-size form) |
+| Other-files strip on a subdir page | "Other files" rendered as a table above the image grid, with click-to-sort headers | `render.go` (splitFiles) |
+| Directories strip on every page | Always rendered, alphabetical, ignores sort. Has click-to-sort headers too (name / # items / # sub-dirs / size / modified). | `render.go` (splitFiles + dirs sort) |
+| Lightbox EXIF panel | shows Camera, Lens, Date, Exposure (Shutter · Aperture · ISO · Focal) — only when the image has EXIF | `render.go` (lightbox JS) |
+| Thumbnail loading indicator | subtle diagonal shimmer while the thumbnail image loads, removed on `load` / `error` events | `render.go` (inline JS) |
 
 ---
 
@@ -157,15 +187,27 @@ If you're wondering "where is this knob?":
 | Want to configure... | Use |
 |---|---|
 | Sort field (default + per-request) | `sort` directive + `?sort=` query |
-| Pagination | `page_size` directive + `?page=` query |
+| Sort direction | `?order=` query (`asc` / `desc`) |
+| Pagination | `page_size` (default) + `page_sizes` (dropdown list) + `?page=` query |
+| Per-page dropdown selection | `?page_size=` query (validated against `page_sizes` list; resets to page 1 on change) |
+| Type filter (server-side) | `?type=jpg,png` or repeated `?ext=jpg&ext=png` |
+| Filename search (server-side) | `?q=foo` (combined with the visitor's `search_match` mode) |
+| Search match mode | `search_match` directive (`word` or `substring`, default `substring`) |
 | Thumbnail on/off | `no_thumbs` directive |
+| Video thumbnail on/off | `no_video_thumbs` directive |
 | Thumbnail size | `thumb_width` / `thumb_height` directives |
 | Thumbnail format (jpeg/png/webp) | `thumb_format` directive |
 | Thumbnail browser cache TTL | `thumb_ttl` directive |
 | Directory scan cache TTL | `cache_scan` directive |
+| Image extensions | `image_types` directive (space-separated) |
+| Video extensions | `video_types` directive (space-separated) |
+| URL mount prefix (for breadcrumb) | `path_prefix` directive |
+| Root breadcrumb display name | `root_name` directive |
 | Template file (theme) | `template` directive (e.g. `themes/dark/gallery.tmpl`) |
 | Templates directory (where to find templates) | `GALLERY_TEMPLATES_DIR` env var |
 | Thumbnails cache directory | `GALLERY_THUMB_CACHE_DIR` env var (testing only) |
+| EXIF parsing | automatic (no config). CAMERA fields only; GPS data NEVER read. | `exif.go` |
+| Source dimensions in thumbnail | automatic (no config). Bottom-left watermark on every card. | `dimensions.go` |
 | Auth (who can view) | Caddyfile `basicauth` or `(auth)` snippet (external) |
 | Route (URL prefix) | Caddyfile `handle_path` or `route` (external) |
 | Image directory | Caddyfile `root *` (external) |

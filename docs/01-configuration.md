@@ -23,9 +23,21 @@ The `media_gallery` directive accepts one inline option:
 | Subdirective | Value | Default | Purpose |
 |---|---|---|---|
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
-| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. Useful for small galleries where you don't want a thumb cache. See `no_thumbs` walkthrough below. |
-| `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip on-the-fly WebP thumbnail generation for **videos** (extracted from the first frame via ffmpeg). When `true`, videos still display in the gallery (with the placeholder gradient + play button on each tile) but no per-frame thumbnail is generated. When `false` (default), video thumbs ARE generated IF ffmpeg is available on the host. If ffmpeg is missing, video thumbs fall back to the placeholder regardless of this setting (we can't decode a frame without a tool that can). Use `no_video_thumbs` to skip the ffmpeg invocation even when it's available (e.g., on hosts where you don't want the CPU cost of frame extraction). See "Video thumbnails (ffmpeg)" below. |
-| `page_size` | integer &gt;= 1 | `50` | How many image entries to show per page. Must be a positive integer; `page_size 0` is rejected (use no directive, or set the explicit value you want). The pagination nav only renders when total pages > 1, so a 30-media gallery at the default 50 shows all 30 on a single page with no nav. |
+| `path_prefix` | URL prefix (e.g. `images`) | directory basename | URL mount prefix used in breadcrumb links. Defaults to the basename of the root directory if not set. |
+| `root_name` | display name | `media root` | Display name for the root breadcrumb segment. |
+| `image_types` | space-separated extensions (no leading dot) | `jpg jpeg png gif webp svg avif heic` | File extensions the gallery treats as images. Case-insensitive. |
+| `video_types` | space-separated extensions (no leading dot) | `mp4 webm m4v mov mkv avi ogv ogg` | File extensions the gallery treats as videos. |
+| `sort` | `mtime` / `name` | `mtime` | Sort field for the image grid. `mtime` = newest first; `name` = case-insensitive alphabetical. |
+| `page_size` | integer &gt;= 1 | `60` (or first item in `page_sizes`) | Default per-page count. Deprecated: use `page_sizes` (list form) for the dropdown, which lets the visitor choose. |
+| `page_sizes` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown. |
+| `thumb_width` | integer &gt;= 1 | `320` | Max width (px) of generated thumbnails. |
+| `thumb_height` | integer &gt;= 1 | `320` | Max height (px) of generated thumbnails. |
+| `thumb_format` | `webp` / `png` / `jpeg` (or `jpg`) | `webp` | Output format for generated thumbnails. |
+| `thumb_ttl` | integer (minutes) &gt;= 1 | `1440` (24h) | HTTP `Cache-Control: max-age` for thumb responses. |
+| `cache_scan` | integer (minutes) &gt;= 1 | `1` | In-memory scan cache TTL. |
+| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. |
+| `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
+| `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule. |
 
 Example with a themed subdir:
 
@@ -165,7 +177,7 @@ handle_path /images/* {
 }
 ```
 
-This shows 100 image entries per page instead of the default 50. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. URL query override: append `?page=2` to the gallery URL to jump to a specific page. `?page_size=N` is NOT a query param — page size is set in the Caddyfile only (per-request override would let the user request arbitrarily large pages and could DOS the server).
+This shows 100 image entries per page instead of the default 60. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. (You can also use `page_sizes 100` to expose 100 in the dropdown and let the visitor switch back to 60.) URL query override: append `?page=2` to the gallery URL to jump to a specific page. ``?page_size=N` IS a valid URL query param: the visitor can switch the per-page size via the dropdown in the meta line. The value is validated against the operator-configured `page_sizes` list (an unknown value falls back to the first item). Changing the page size resets the visitor to page 1 (so they don't end up on a non-existent page).
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
@@ -216,16 +228,22 @@ of the `media_gallery` handler, with realistic values:
 {
   "handler": "media_gallery",
   "root": "/var/www/html/images",
+  "path_prefix": "images",
+  "root_name": "images",
+  "image_types": ["jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "heic"],
+  "video_types": ["mp4", "webm", "m4v", "mov", "mkv", "avi", "ogv", "ogg"],
   "sort": "name",
-  "template": "gallery.tmpl",
-  "no_thumbs": false,
-  "no_video_thumbs": false,
-  "page_size": 50,
+  "page_size": 60,
+  "page_sizes": ["60", "30", "120", "all"],
   "thumb_width": 320,
   "thumb_height": 320,
   "thumb_format": "webp",
   "thumb_ttl": 1440,
-  "cache_scan": 1
+  "cache_scan": 1,
+  "no_thumbs": false,
+  "no_video_thumbs": false,
+  "template": "gallery.tmpl",
+  "search_match": "substring"
 }
 ```
 
@@ -237,12 +255,22 @@ the same default value applies.
 
 | Caddyfile directive | JSON field | Type | Default |
 |---|---|---|---|
-| `root` (per-handle) | `"root"` | string | (per-request) |
-| `sort <name\|mtime\|type\|size>` | `"sort"` | string | `"mtime"` |
-| `template <name>` | `"template"` | string | `"gallery.tmpl"` |
-| `no_thumbs` | `"no_thumbs"` | bool | `false` |
-| `no_video_thumbs` | `"no_video_thumbs"` | bool | `false` |
-| `page_size <N>` | `"page_size"` | int | `50` |
+| `path_prefix <prefix>` | `"path_prefix"` | string | (directory basename) |
+| `root_name <name>` | `"root_name"` | string | `media root` |
+| `image_types <ext1 ext2 ...>` | `"image_types"` | `[]string` | built-in list |
+| `video_types <ext1 ext2 ...>` | `"video_types"` | `[]string` | built-in list |
+| `sort <mtime\|name>` | `"sort"` | string | `mtime` |
+| `page_size <N>` | `"page_size"` | int | (first item of `page_sizes`) |
+| `page_sizes <N1 N2 ...>` | `"page_sizes"` | `[]string` | `["60", "30", "120", "all"]` |
+| `thumb_width <N>` | `"thumb_width"` | int | `320` |
+| `thumb_height <N>` | `"thumb_height"` | int | `320` |
+| `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |
+| `thumb_ttl <N>` | `"thumb_ttl"` | int (minutes) | `1440` |
+| `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1` |
+| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | `false` |
+| `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
+| `template <name>` | `"template"` | string | `gallery.tmpl` |
+| `search_match <word\|substring>` | `"search_match"` | string | `substring` |
 | `thumb_width <N>` | `"thumb_width"` | int | `320` |
 | `thumb_height <N>` | `"thumb_height"` | int | `320` |
 | `thumb_format <webp\|jpeg\|png>` | `"thumb_format"` | string | `"webp"` |
