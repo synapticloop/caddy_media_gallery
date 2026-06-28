@@ -4655,3 +4655,41 @@ func TestRenderPage_SearchHeader_FormatWithThisPage(t *testing.T) {
 		t.Error(`expected "<em>This page</em>" suffix in the search header`)
 	}
 }
+
+// TestRenderPage_SearchHeader_ServerRendersCorrectly verifies
+// the server-rendered search header text is the correct
+// "search showing M of N <em>This page</em>" format with
+// N=FilteredTotal. The JS should LEAVE THIS TEXT ALONE on
+// page load (it captures the default for the reset button but
+// doesn't overwrite the visible text on page load when
+// ?q= is in the URL). Per user request 2026-06-28.
+func TestRenderPage_SearchHeader_ServerRendersCorrectly(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 8; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "stab-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "static.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	q := url.Values{"q": {"st"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server should render the visible text directly
+	// (not in a data-search-header-default attribute). The
+	// JS sets data-search-header-default on page load.
+	if !strings.Contains(html, "search showing 2 of 2") {
+		t.Error(`expected "search showing 2 of 2" in the visible search header text when ?q=st matches 2 files of 10`)
+	}
+	if !strings.Contains(html, "<em>This page</em>") {
+		t.Error(`expected "<em>This page</em>" suffix in the search header`)
+	}
+}
+

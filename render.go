@@ -4126,20 +4126,39 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         }
       }
       // Per user request 2026-06-28: update the media section
-      // header. If the input is empty, restore the default
-      // header ("Media (N - Showing X-Y)"). If the input
-      // is non-empty, show the search format
-      // ("search showing M of N <em>This page</em>").
-      // This handles BOTH client-side search (typed,
-      // not submitted) AND server-side search (?q= in URL)
-      // — the server-rendered header is in the search
-      // format already, and the JS just leaves it alone
-      // (the visibleCount would equal the card count
-      // since the server-side filter already removed
-      // non-matches from the DOM, so visibleCount = N,
-      // making M = N = on-page count, which is the
-      // correct "all matches on this page" semantic).
+      // header. Per the user clarification, M = matches shown
+      // on this page, N depends on the case:
+      //   - server-side search (?q= in URL): N = total in
+      //     directory (rendered correctly by the server, so
+      //     the JS should LEAVE THE TEXT ALONE)
+      //   - JS-only (typed, not submitted): N = per-page
+      //     capacity (pageSizeTotal)
+      //
+      // The JS distinguishes the two cases by reading
+      // isServerSearchActive from the data attribute on
+      // the page (set by the server when ?q= is in the URL).
+      // When server-side, the JS does NOT touch the header
+      // text. When JS-only, it computes M and N from the
+      // current DOM state.
+      if (isServerSearchActive()) {
+        // Server-rendered text is already correct. The JS
+        // only re-applies the .filtered-out class to keep
+        // the visual state consistent (e.g. when the user
+        // clicks Reset, the JS removes the filter class
+        // AND would need to update the header — handled
+        // by the Reset IIFE separately).
+        return;
+      }
       updateSearchHeader(visibleCount, query.length > 0);
+    }
+    // isServerSearchActive returns true if the page was
+    // server-rendered with ?q= in the URL. We detect this
+    // by checking the URL (the server doesn't pass a flag
+    // to the JS — the URL is the source of truth for the
+    // initial search state).
+    function isServerSearchActive() {
+      var url = new URL(window.location.href);
+      return url.searchParams.has('q');
     }
     input.addEventListener('input', function() {
       clearTimeout(debounceTimer);
