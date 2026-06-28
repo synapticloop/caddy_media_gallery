@@ -2331,7 +2331,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-card);
   transition: background 0.12s, border-color 0.12s;
 }
-.sort-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+/* Per user request 2026-06-28: the sort button hover state
+   should match the Search all button's hover state. Both
+   use --bg-hover background + --border-strong border, AND
+   now --fg text color (the Search all button already had
+   this; the sort button didn't). The --fg color is the
+   primary text color — slightly darker than the default
+   --fg-muted, giving the hovered button a subtle
+   "ready to click" emphasis. */
+.sort-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
 .sort-btn.active {
   /* Per Phase 85: the active sort button no longer uses
      --accent-bg (blue). It uses --active-bg / --active-fg
