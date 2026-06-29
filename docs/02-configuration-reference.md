@@ -32,6 +32,7 @@ Inside an `media_gallery { ... }` block:
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
 | `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
+| `no_exif` | no-arg = `true` / explicit `false` = `false` | `false` (EXIF on) | Skip EXIF metadata reading for image files. The "EXIF" pill on each card and the EXIF panel in the lightbox are hidden. Privacy-friendly; also a small perf win (skips ~1-5ms per image). |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary. `substring` = match anywhere. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 

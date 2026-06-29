@@ -122,6 +122,27 @@ type Gallery struct {
 	//             (re-enable).
 	NoVideoThumbs bool
 
+	// NoExif disables reading EXIF metadata from image files.
+	// When true, the scanner skips the readExif call entirely
+	// (no I/O, no parsing) — FileInfo.Exif is left nil for
+	// all files. The card overlay then shows no "EXIF" pill
+	// (the pill only renders when Exif is non-nil) and the
+	// lightbox shows no EXIF panel. When false (the default),
+	// EXIF is read for every image file at scan time (EAGER
+	// loading — see scanner.go and exif.go).
+	//
+	// Per user request 2026-06-29: the Caddyfile operator can
+	// disable EXIF entirely if they don't want the camera
+	// metadata surfaced in the gallery. Useful for:
+	//   - Privacy-sensitive deployments (no camera info exposed)
+	//   - Performance: skip the per-image EXIF read (~1-5ms each)
+	//   - Galleries that only need dimensions / thumbnails
+	// Note that EXIF does NOT include GPS by default (see
+	// exif.go — GPS is never extracted), so this is mainly
+	// for the camera/lens/exposure metadata.
+	// Caddyfile: no_exif (no arg → true) or no_exif false (re-enable).
+	NoExif bool
+
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
 	// NoVideoThumbs is true — we skip the lookup since it would
@@ -646,7 +667,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
@@ -714,6 +735,24 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					}
 					g.NoVideoThumbs = false
 				}
+
+		case "no_exif":
+			// Per user request 2026-06-29: operator can
+			// disable EXIF entirely. When true, the scanner
+			// skips the readExif call entirely (no I/O,
+			// no parsing). The EXIF pill on cards and the
+			// EXIF panel in the lightbox are skipped
+			// automatically because they only render
+			// when FileInfo.Exif is non-nil. Usage:
+			//   no_exif           # disable
+			//   no_exif false     # re-enable
+			g.NoExif = true
+			if d.NextArg() {
+				if d.Val() != "false" {
+					return d.ArgErr()
+				}
+				g.NoExif = false
+			}
 
 			case "page_size":
 				// Per user request 2026-06-27: the operator

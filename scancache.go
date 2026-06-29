@@ -57,7 +57,7 @@ func NewScanCache(ttl time.Duration) *ScanCache {
 // sets (used by Scanner.Classify to decide KindImage vs KindVideo vs
 // KindOther). They are part of the cache key because a Gallery
 // reconfigured to recognise a new extension should re-scan.
-func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool) ([]FileInfo, error) {
+func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif bool) ([]FileInfo, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 	c.mu.RLock()
 	entry, ok := c.items[dir]
 	c.mu.RUnlock()
-	extKey := extSetsKey(imageExts, videoExts)
+	extKey := extSetsKey(imageExts, videoExts, noExif)
 	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
 		// Return a copy so callers can't mutate the cached slice.
 		out := make([]FileInfo, len(entry.files))
@@ -88,7 +88,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 		return out, nil
 	}
 
-	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts}
+	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif}
 	files, err := scanner.Scan()
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 //
 // Cheap to compute (one sort + one string concat per cache lookup)
 // and cheap to compare (one string compare).
-func extSetsKey(imageExts, videoExts map[string]bool) string {
+func extSetsKey(imageExts, videoExts map[string]bool, noExif bool) string {
 	imgKeys := make([]string, 0, len(imageExts))
 	for k := range imageExts {
 		imgKeys = append(imgKeys, k)
@@ -131,5 +131,9 @@ func extSetsKey(imageExts, videoExts map[string]bool) string {
 		vidKeys = append(vidKeys, k)
 	}
 	sort.Strings(vidKeys)
-	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",")
+	noExifStr := "0"
+	if noExif {
+		noExifStr = "1"
+	}
+	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",") + "|e:" + noExifStr
 }

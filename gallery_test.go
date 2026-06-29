@@ -115,6 +115,56 @@ func TestUnmarshalCaddyfile_NoThumbs(t *testing.T) {
 //
 // Same pattern as no_thumbs, but for the video thumbnail
 // generator (which uses ffmpeg to extract the first frame).
+
+
+// TestUnmarshalCaddyfile_NoExif covers the `no_exif` Caddyfile
+// directive. Accepts:
+//   - `no_exif` (no arg) → true
+//   - `no_exif false`    → false
+//   - anything else → error
+func TestUnmarshalCaddyfile_NoExif(t *testing.T) {
+	t.Run("no_exif (no arg) → true", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_exif\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoExif {
+			t.Error("expected NoExif=true after `no_exif` directive")
+		}
+	})
+	t.Run("no_exif false → false", func(t *testing.T) {
+		g := Gallery{NoExif: true}
+		d := caddyfile.NewTestDispenser("media_gallery { no_exif false }")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.NoExif {
+			t.Error("expected NoExif=false after `no_exif false` directive")
+		}
+	})
+	t.Run("no_exif with bogus arg → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery { no_exif off }")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `no_exif off` (must be `false`, not `off`)")
+		}
+	})
+	t.Run("no_exif + no_thumbs both set", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_thumbs\n  no_exif\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoThumbs {
+			t.Error("expected NoThumbs=true")
+		}
+		if !g.NoExif {
+			t.Error("expected NoExif=true")
+		}
+	})
+}
+
 func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	t.Run("no_video_thumbs (no arg) → true", func(t *testing.T) {
 		g := Gallery{}

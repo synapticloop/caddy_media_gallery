@@ -116,6 +116,13 @@ type Scanner struct {
 	Sort      string // "mtime" (default) or "name"
 	ImageExts map[string]bool
 	VideoExts map[string]bool
+	// NoExif, when true, disables the readExif call for
+	// image files (no I/O, no parsing). Set by the
+	// Gallery's no_exif Caddyfile directive; passed
+	// through ScanCache.Get to the per-directory Scanner.
+	// When false (the default), EXIF is read eagerly at
+	// scan time. See gallery.go for the full rationale.
+	NoExif bool
 }
 
 // NewScanner returns a Scanner for the given root directory with
@@ -274,7 +281,15 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		// KindOther don't have EXIF in our scope. Errors are
 		// logged but not fatal — a malformed EXIF block
 		// shouldn't break the scan.
-		if kind == KindImage {
+		//
+		// Per user request 2026-06-29: the operator can
+		// disable EXIF entirely via the no_exif Caddyfile
+		// directive. When s.NoExif is true, we skip the
+		// readExif call entirely (no I/O, no parsing) —
+		// fi.Exif stays nil and the card overlay + lightbox
+		// both skip the EXIF UI (they only render when
+		// FileInfo.Exif is non-nil).
+		if kind == KindImage && !s.NoExif {
 			fullPath := filepath.Join(s.Root, e.Name())
 			exif, err := readExif(fullPath)
 			if err != nil {
