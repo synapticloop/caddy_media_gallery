@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"regexp"
 )
 
 // TestMain sets GALLERY_TEMPLATES_DIR to a non-existent temp
@@ -3495,6 +3496,60 @@ func TestRenderPage_Breadcrumb_PreservesFilter(t *testing.T) {
 
 // substringAround returns 200 chars of s centered on the
 // first occurrence of needle, or s if not found.
+
+// TestRenderPage_DirLinkHref_PreservesAllQueryParams verifies
+// that breadcrumb and dirs-table links preserve the current
+// query parameters (q, type, ext, sort, order, page_size,
+// etc.) but reset the page to 1. Per user request 2026-06-29.
+func TestRenderPage_DirLinkHref_PreservesAllQueryParams(t *testing.T) {
+	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
+	html, err := RenderPage("title-not-used", "./", "./_thumbs/", "photos/", "", false, false, 0, []string{"30", "60", "120", "all"}, files, url.Values{
+		"q":         {"tulip"},
+		"type":      {"jpg,png"},
+		"sort":      {"name"},
+		"order":     {"desc"},
+		"page_size": {"60"},
+		"page":      {"3"},
+	}, defaultImageExts, defaultVideoExts, "images", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Find the breadcrumb root link and dirs-table links.
+	// The root breadcrumb link should include all params
+	// (sorted alphabetically) and NO page param.
+	rootLinkRegex := regexp.MustCompile(`<a class="breadcrumb-link" href="\./\?([^"]+)"`)
+	matches := rootLinkRegex.FindStringSubmatch(html)
+	if matches == nil {
+		t.Fatal("root breadcrumb link not found")
+	}
+	qs := matches[1]
+	// Must contain: q=tulip, type=jpg%2cpng, sort=name, order=desc, page_size=60
+	for _, expected := range []string{"q=tulip", "type=jpg%2cpng", "sort=name", "order=desc", "page_size=60"} {
+		if !strings.Contains(qs, expected) {
+			t.Errorf("root breadcrumb link missing %q: got %q", expected, qs)
+		}
+	}
+	// Must NOT contain page= (reset to 1)
+	if strings.Contains(qs, "page=") {
+		t.Errorf("root breadcrumb link should reset page, got %q", qs)
+	}
+}
+
+// TestRenderPage_DirLinkHref_EmptyQuery verifies that when
+// no query params are set, the breadcrumb link is just the
+// path (no trailing "?").
+func TestRenderPage_DirLinkHref_EmptyQuery(t *testing.T) {
+	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
+	html, err := RenderPage("title-not-used", "./", "./_thumbs/", "photos/", "", false, false, 0, []string{"30", "60", "120", "all"}, files, url.Values{}, defaultImageExts, defaultVideoExts, "images", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The root breadcrumb link should just be "./" — no "?"
+	if !strings.Contains(html, `<a class="breadcrumb-link" href="./">`) {
+		t.Errorf("root breadcrumb link should be plain './' when no query; HTML excerpt: %s",
+			substringAround(html, "breadcrumb", 300))
+	}
+}
 
 // TestComputeFilterGroups verifies the filter data
 // construction:

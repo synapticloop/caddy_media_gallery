@@ -1135,6 +1135,67 @@ func sortURL(query url.Values, field, order string) url.Values {
 	return out
 }
 
+// dirLinkHref builds a URL for a directory link (breadcrumb
+// or dirs table row). It preserves the current Query
+// parameters (q, type, ext, sort, order, dirs_sort,
+// dirs_order, others_sort, others_order, page_size) so that
+// navigating to a subdir keeps the user's filter, search,
+// and sort state, but resets the page parameter (you start
+// fresh on page 1 of the new directory).
+//
+// Usage:
+//
+//	<a class="breadcrumb-link" href="{{dirLinkHref .Query $seg.Href}}">
+//	<a class="table-link"      href="{{dirLinkHref .Query .Href}}">
+//
+// The returned value is a template.URL (string-like) so the
+// Go template engine doesn't double-escape the &, =, ? URL
+// delimiters. The values are URL-encoded with url.QueryEscape
+// so commas in filter values (?type=jpg,png) become %2c as
+// required by HTML URL-context encoding rules.
+//
+// When query is empty, just returns the path (no "?").
+func dirLinkHref(query url.Values, dirPath string) template.URL {
+	if len(query) == 0 {
+		return template.URL(dirPath)
+	}
+	// Make a copy so we don't mutate the caller's query.
+	out := make(url.Values, len(query)+1)
+	for k, vs := range query {
+		newVs := make([]string, len(vs))
+		copy(newVs, vs)
+		out[k] = newVs
+	}
+	// Reset to page 1 — navigating into a subdir starts fresh.
+	out.Del("page")
+	if len(out) == 0 {
+		return template.URL(dirPath)
+	}
+	// Stable order (sorted keys) for testability.
+	keys := make([]string, 0, len(out))
+	for k := range out {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var parts []string
+	for _, k := range keys {
+		for _, v := range out[k] {
+			// HTMLEscape the key (defends against XSS via
+			// crafted URL keys); URL-encode the value
+			// (defends against malformed URLs + the
+			// comma-in-filter case where html/template's
+			// URL-context would otherwise encode it).
+			// Lowercase the percent-encoded hex digits to match
+			// what html/template's URL-context encoding produces
+			// (e.g. %2c not %2C). This keeps the rendered HTML
+			// consistent and test assertions stable.
+			parts = append(parts, template.HTMLEscaper(k)+"="+strings.ToLower(url.QueryEscape(v)))
+		}
+	}
+	return template.URL(dirPath + "?" + strings.Join(parts, "&"))
+}
+
+
 // queryForPage builds the URL query for a pagination link
 // that navigates to a specific page. It preserves the
 // EFFECTIVE sort/order (from the Sort field, which has
@@ -3613,7 +3674,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
         {{else}}
-          <a class="breadcrumb-link" href="{{$seg.Href}}{{if $.IsTypeFilterActive}}?type={{$.TypeFilterQuery}}{{end}}">{{$seg.Name}}</a>
+          <a class="breadcrumb-link" href="{{dirLinkHref $.Query $seg.Href}}">{{$seg.Name}}</a>
         {{end}}
       {{end}}
     </nav>
@@ -3784,7 +3845,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <table class="up-row-table">
       <tbody>
         <tr>
-          <td colspan="2"><a class="table-link" href="{{.Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
+          <td colspan="2"><a class="table-link" href="{{dirLinkHref $.Query .Up.Href}}"><span class="chip-icon">↑</span> <span class="chip-icon">📁</span> Up (../{{.Up.ParentDir}})</a></td>
         </tr>
       </tbody>
     </table>
@@ -3812,11 +3873,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <tbody>
         {{range .Subdirs}}
         <tr data-name="{{.Name}}" data-items="{{.CountItems}}" data-dirs="{{.CountDirs}}" data-size="{{.Size}}" data-date="{{.ModTime}}">
-          <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
-          <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountItems}}</a></td>
-          <td class="col-count"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.CountDirs}}</a></td>
-          <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
-          <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
+          <td class="col-name"><a class="table-link" href="{{dirLinkHref $.Query .Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
+          <td class="col-count"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.CountItems}}</a></td>
+          <td class="col-count"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.CountDirs}}</a></td>
+          <td class="col-size"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
+          <td class="col-date"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}
       </tbody>
@@ -4751,6 +4812,13 @@ var galleryFuncs = template.FuncMap{
 	// request 2026-06-27: pagination and sort links were
 	// not preserving type/q/page_size.
 	"queryString": queryString,
+	// dirLinkHref builds a URL for a directory link
+	// (breadcrumb or dirs table row) that preserves the
+	// current Query params (q, type, ext, sort, order,
+	// page_size, etc.) but resets page to 1. Returns a
+	// template.URL (string-like) so the template engine
+	// doesn't double-escape the &, =, etc.
+	"dirLinkHref": dirLinkHref,
 	// queryWith returns a new url.Values with the given key
 	// replaced (or removed if value is ""). Used with
 	// queryString to build links with overrides:
