@@ -3551,6 +3551,42 @@ func TestRenderPage_DirLinkHref_EmptyQuery(t *testing.T) {
 	}
 }
 
+// TestRenderPage_SortLinksPreservePage verifies that sort bar
+// links preserve the page parameter when toggling sort.
+// Per user request 2026-06-29: when the user changes sort,
+// keep them on the same page — the items are the same, just
+// in a different order, so "page 3" of Name asc and "page 3"
+// of Size desc show similar content.
+func TestRenderPage_SortLinksPreservePage(t *testing.T) {
+	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
+	html, err := RenderPage("title-not-used", "./", "./_thumbs/", "images/", "", false, false, 0, []string{"30", "60", "120", "all"}, files, url.Values{
+		"sort":      {"name"},
+		"order":     {"asc"},
+		"page":      {"3"},
+		"page_size": {"60"},
+	}, defaultImageExts, defaultVideoExts, "images", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The Size sort link should include page=3 (preserved)
+	sizeRegex := regexp.MustCompile(`<a class="sort-btn[^"]*" href="\?([^"]*)">Size<span class="arrow">`)
+	matches := sizeRegex.FindStringSubmatch(html)
+	if matches == nil {
+		t.Fatal("Size sort link not found")
+	}
+	qs := matches[1]
+	if !strings.Contains(qs, "page=3") {
+		t.Errorf("Size sort link should preserve page=3, got: %s", qs)
+	}
+	if !strings.Contains(qs, "page_size=60") {
+		t.Errorf("Size sort link should preserve page_size=60, got: %s", qs)
+	}
+	if !strings.Contains(qs, "sort=size") {
+		t.Errorf("Size sort link should set sort=size, got: %s", qs)
+	}
+}
+
+
 // TestComputeFilterGroups verifies the filter data
 // construction:
 //   - extensions are categorised by Image / Video / Other

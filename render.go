@@ -1118,10 +1118,13 @@ func sortOrder(currentField, field, currentOrder string) string {
 }
 
 // sortURL builds the URL query for a sort-toggle link.
-// It sets the new sort field+order, resets page to 1
-// (changing the sort should go back to the first page),
-// and preserves the active URL-only params (type filter,
-// search query, page_size).
+// It sets the new sort field+order and preserves all other
+// URL-only params (type filter, search query, page_size,
+// AND page). Per user request 2026-06-29: when the user
+// changes sort, keep them on the same page — the items
+// are the same, just in a different order, so "page 3"
+// of Name asc and "page 3" of Size desc show similar
+// content (different sort of the same items).
 func sortURL(query url.Values, field, order string) url.Values {
 	out := make(url.Values, len(query)+3)
 	for k, vs := range query {
@@ -1131,7 +1134,10 @@ func sortURL(query url.Values, field, order string) url.Values {
 	}
 	out.Set("sort", field)
 	out.Set("order", order)
-	out.Del("page")
+	// Note: we intentionally do NOT delete "page" here.
+	// Preserving it keeps the user on the same page when
+	// they toggle sort (the items are the same, just
+	// reordered).
 	return out
 }
 
@@ -4830,7 +4836,9 @@ var galleryFuncs = template.FuncMap{
 	// active URL-only params (type, q, page_size).
 	"queryForPage": queryForPage,
 	// sortURL builds the URL query for a sort-toggle link.
-	// Sets sort+order, resets page=1, preserves type+q+page_size.
+	// Sets sort+order, preserves type+q+page_size+page (per
+	// user request 2026-06-29: keep the user on the same
+	// page when they toggle sort).
 	"sortURL": sortURL,
 	// sortOrder returns the toggled order for a sort link
 	// (asc → desc if same field, else asc).
