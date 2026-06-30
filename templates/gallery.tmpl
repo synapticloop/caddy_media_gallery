@@ -795,7 +795,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 /* Per user request 2026-06-20 (Phase 4): the file-type
    filter UI sits between the breadcrumb and the media
    section. The row is a single horizontal bar of "pills"
-   (three dropdown triggers + the Apply button + the
+   (three dropdown triggers + the Filter button + the
    Reset button). Each dropdown opens to a vertical list of
    checkbox options (sub-type + count).
 
@@ -806,7 +806,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
    Visual style: matches the existing sort-bar / breadcrumb
    — small text (0.85rem), muted color for inactive state,
-   accent color for active. The Apply button is a primary
+   accent color for active. The Filter button is a primary
    CTA (slightly more prominent than the pills). */
 .filter-form {
   /* Per user request 2026-06-20: padding now matches .sort-bar
@@ -957,18 +957,22 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
-/* Per user request 2026-06-20: the Apply button uses the
-   --active-bg / --active-fg / --active-border colour scheme,
-   which is the OPPOSITE mode's page colour (light mode =
-   dark with light text; dark mode = light with dark text).
-   This matches the active sort button and active pagination
-   button — the three "primary action" elements across the
-   gallery share the same visual treatment, in both light
-   and dark mode.
+/* Per user request 2026-06-20: the Filter button (formerly
+   "Apply") uses the --active-bg / --active-fg /
+   --active-border colour scheme, which is the OPPOSITE
+   mode's page colour (light mode = dark with light text;
+   dark mode = light with dark text). This matches the
+   active sort button and active pagination button — the
+   three "primary action" elements across the gallery
+   share the same visual treatment, in both light and dark
+   mode.
+
+   Per user request 2026-06-30: renamed from "Apply" to
+   "Filter" (more descriptive of what the button does).
 
    The previous version used --accent (blue) which stood out
    but didn't match the rest of the action buttons. Now the
-   Apply button looks like the other active buttons, which
+   Filter button looks like the other active buttons, which
    is consistent and works in both colour schemes. */
 .filter-apply {
   display: inline-flex;
@@ -1051,7 +1055,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 /* Per user request 2026-06-30: the search-button now uses
-   the active color scheme (same as Apply), so the hover
+   the active color scheme (same as Filter), so the hover
    uses filter: brightness() like .filter-apply (rather
    than background: --bg-hover, which is for secondary
    buttons like .search-reset-button and .filter-pill). */
@@ -1074,7 +1078,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    like the "Reset" pill in the filter row un-anchors a
    specific filter). The "Search all" button
    is the primary action (using the active color scheme
-   like Apply). Margin-left: 0.4rem to separate from
+   like Filter). Margin-left: 0.4rem to separate from
    the Search all button. */
 .search-reset-button {
   display: inline-flex;
@@ -1884,7 +1888,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         </details>
         {{end}}
 
-        <button type="submit" class="filter-apply">Apply</button>
+        <button type="submit" class="filter-apply">Filter</button>
         {{/* Per user request 2026-06-30: moved here from
              before the filter dropdowns. Renamed from "All"
              to "Reset" (per user clarification: same function
@@ -1916,7 +1920,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                Uses the inverted color scheme — dark in light
                mode, light in dark mode — via --active-bg /
                --active-fg / --active-border tokens (the same
-               tokens as the Apply button). type="button" so
+               tokens as the Filter button). type="button" so
                it doesn't trigger the form submit. The click
                handler is in the inline JS at the bottom of
                the page (searchReset IIFE). */}}
