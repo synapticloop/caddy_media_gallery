@@ -4490,9 +4490,12 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 		t.Fatal(err)
 	}
 	// With 10 files (8 don't match "cat", 2 do), pageSize=30,
-	// all on page 1: M=2, N=2 (the 2 matching files).
-	if !strings.Contains(html, "search showing 2 of 2") {
-		t.Error(`expected "search showing 2 of 2" in HTML when ?q=cat matches 2 files`)
+	// all on page 1: M=2, N=2 (the 2 matching files). Per user
+	// request 2026-06-30: the header now keeps the "Media (N -"
+	// prefix so the visitor sees the directory size at a glance
+	// even while searching.
+	if !strings.Contains(html, "Media (10 - search showing 2 of 2)") {
+		t.Error(`expected "Media (10 - search showing 2 of 2)" in HTML when ?q=cat matches 2 files`)
 	}
 	// Per user request 2026-06-30: form-submitted search
 	// does NOT include "<em>This page</em>" — the pagination
@@ -4589,8 +4592,9 @@ func TestRenderPage_SearchHeader_FormatFormSubmitted(t *testing.T) {
 	// search filter). Per user request 2026-06-30: form-submitted
 	// search header has NO "<em>This page</em>" suffix — the
 	// pagination context already shows the total filtered count.
-	if !strings.Contains(html, "search showing 3 of 3") {
-		t.Error(`expected "search showing 3 of 3" in HTML when 3 files match "cat"`)
+	// The header keeps the "Media (N -" prefix.
+	if !strings.Contains(html, "Media (10 - search showing 3 of 3)") {
+		t.Error(`expected "Media (10 - search showing 3 of 3)" in HTML when 3 files match "cat"`)
 	}
 	// Check ONLY the rendered header span (data-search-header),
 	// not the entire HTML.

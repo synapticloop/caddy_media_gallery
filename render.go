@@ -109,9 +109,20 @@ type PageData struct {
 	// defaults to [30, 60, 120, "all"].
 	PageSizes []string
 	// TotalImages is the total media count (images + videos)
-	// — used for the pagination math and the visibility check
-	// on the images grid section.
+	// AFTER the search/type filters have been applied. Used
+	// for the pagination math and the visibility check on
+	// the images grid section. If the user has ?q=foo in
+	// the URL, this is the count of items matching "foo".
 	TotalImages int
+	// DirectoryTotal is the total media count in the
+	// directory BEFORE any search/type filters are applied.
+	// Used for the "Media (N -" prefix in the section
+	// header so the visitor sees the total directory size
+	// at a glance even while searching. Per user request
+	// 2026-06-30: the prefix should keep the directory
+	// total (not the filtered total) so the user knows
+	// they're seeing N out of TOTAL.
+	DirectoryTotal int
 	// ImageCount is the count of image files only — used for
 	// the "N images" label in the header meta line (so the
 	// label is accurate; videos are no longer miscounted as
@@ -1651,6 +1662,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 			unfilteredAllImages = append(unfilteredAllImages, f)
 		}
 	}
+	// DirectoryTotal is the total count of media files
+	// BEFORE the search/type filter. Used for the "Media
+	// (N -" prefix so the visitor sees the directory
+	// total at a glance even while searching. Per user
+	// request 2026-06-30: the prefix uses the directory
+	// total, not the filtered total.
+	directoryTotal := len(unfilteredAllImages)
 	unfilteredPaged := paginate(unfilteredAllImages, page, pageSize)
 	onPageUnfiltered := len(unfilteredPaged)
 	// If the page is out of range (visitor navigated beyond
@@ -1817,6 +1835,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		// to capture the unfiltered on-page count separately.
 		OnPageTotalCount: onPageUnfiltered,
 		TotalImages:      totalImages,
+		DirectoryTotal:   directoryTotal,
 		ImageCount:       imageCount,
 		ImageStart:       imageStart,
 		ImageEnd:         imageEnd,
@@ -3939,7 +3958,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header>{{if .SearchQuery}}search showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span>{{end}}</span>
+      <span data-search-header>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -4153,6 +4172,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (nEl) {
       pageSizeTotal = parseInt(nEl.textContent || '0', 10) || 0;
     }
+    // Total file count in this directory. Used for the "Media (N -"
+    // prefix on the search header (per user request 2026-06-30:
+    // the search header should keep the "Media (N -" prefix even
+    // when searching, so the visitor can see the total directory
+    // size at a glance).
+    var totalFiles = 0;
+    var totalEl = document.querySelector('[data-search-header-total]');
+    if (totalEl) {
+      totalFiles = parseInt(totalEl.textContent || '0', 10) || 0;
+    }
     function updateSearchHeader(visibleCount, isSearchActive) {
       if (!headerEl || defaultHeader === null) return;
       if (!isSearchActive) {
@@ -4160,11 +4189,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         headerEl.innerHTML = defaultHeader;
         return;
       }
-      // Search format: "search showing M of N <em>This page</em>"
-      // M = visibleCount, N = pageSizeTotal (the per-page limit).
-      // If visibleCount is 0, the spec says just show
-      // "search showing 0 of N <em>This page</em>".
-      headerEl.innerHTML = 'search showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>';
+      // Search format: "Media (TOTAL - search showing M of N <em>This page</em>)"
+      // where TOTAL = total file count in the directory,
+      // M = visibleCount (cards visible after JS filter),
+      // N = pageSizeTotal (the per-page limit, e.g. 60).
+      // The MEDIA prefix gives the visitor the directory
+      // size at a glance even while searching.
+      headerEl.innerHTML = 'Media (' + totalFiles + ' - search showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>)';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
