@@ -2203,7 +2203,68 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
+      {{- /* Per user request 2026-06-30: the data-search-header-default
+           attribute is ALWAYS the no-search format
+           ("Media (89 - Showing 1-60)" or similar) so the JS can
+           restore it when the visitor clears the search input.
+           The hidden spans data-search-header-n and
+           data-search-header-total are ALWAYS rendered (regardless
+           of whether there's a search query), so the JS can read
+           them to compute the JS-typed search format. Previously
+           these hidden spans were only in the no-search branch,
+           causing the JS to read them as 0 when the visitor typed
+           in the input on a form-submitted page (the JS then
+           produced wrong values like "Media (0 - search 'str' - showing 33 of 0)").
+      */ -}}
+      {{- /* Per user request 2026-06-30: the search header is
+           structured in three parts:
+
+           (1) The data-search-header-default attribute is
+               ALWAYS the no-search format ("Media (89 -
+               Showing 1-60)" or similar). The JS uses this
+               when the visitor clears the search input (via
+               Reset or by deleting all chars).
+
+           (2) The visible text is one of two formats:
+               - No search: "Media (89 - Showing 1-60)"
+               - Server search (?q=...): "Media (89 - search
+                 'st' - showing 33 of 33)" — NO <em>This page</em>
+
+           (3) The hidden spans are ALWAYS present (regardless
+               of whether there's a search query):
+               - data-search-header-n: the per-page limit
+                 (e.g. 60). Used by the JS as the N in the
+                 "search showing M of N <em>This page</em>"
+                 format.
+               - data-search-header-total: the directory total
+                 (e.g. 89). Used by the JS as the directory total
+                 in the search format.
+               - data-search-header-current: the current visible
+                 text (captures the server-rendered format
+                 including whether <em>This page</em> was
+                 rendered). Used by the JS to know what format
+                 was last rendered.
+
+               Previously the hidden spans were only in the
+               no-search branch, so the JS read them as 0
+               when the visitor typed in the input on a
+               form-submitted page, producing wrong values
+               like "Media (0 - search 'str' - showing 33 of 0)".
+      */ -}}
+      {{- /* Per user request 2026-06-30: data-search-header-default is ALWAYS
+           the no-search format (the "reset" state for the JS to restore to
+           when the visitor clears the search). Hidden spans n/total/current
+           are ALWAYS present so the JS can read them regardless of whether
+           there's a server-rendered search. The visible text is either
+           the no-search format (when input is empty) or the server-search
+           format (when ?q= is set, no <em>This page</em>).
+
+           The JS determines whether to render <em>This page</em> by comparing
+           the ?q= URL param with the input.value — if they match, the page is
+           in its server-rendered state; if they differ (visitor typed more
+           chars), the JS has taken over and the JS format applies.
+      */ -}}
+      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -2433,6 +2494,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (totalEl) {
       totalFiles = parseInt(totalEl.textContent || '0', 10) || 0;
     }
+    // Per user request 2026-06-30: determine the current
+    // header format by comparing the ?q= URL param with
+    // the input value:
+    // - If they match: the page is in its server-rendered
+    //   state. The visitor hasn't typed anything that
+    //   diverges from the server's search. We use the
+    //   server format ("of FilteredTotal", no <em>This
+    //   page</em>).
+    // - If they differ: the JS has taken over. We use the
+    //   JS format ("of pageSizeTotal" + <em>This page</em>).
+    function getSearchParam() {
+      var params = new URLSearchParams(window.location.search);
+      return params.get('q') || '';
+    }
     function updateSearchHeader(visibleCount, isSearchActive) {
       if (!headerEl || defaultHeader === null) return;
       if (!isSearchActive) {
@@ -2456,17 +2531,29 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
       }
-      // Search format: "Media (TOTAL - search showing M of N <em>This page</em>)"
-      // where TOTAL = total file count in the directory,
-      // M = visibleCount (cards visible after JS filter),
-      // N = pageSizeTotal (the per-page limit, e.g. 60).
-      // The MEDIA prefix gives the visitor the directory
-      // size at a glance even while searching. Per user
-      // request 2026-06-30: include the search phrase in
-      // single quotes (e.g. "search 'cat' - showing") so
-      // the visitor can see what they're searching for
-      // at a glance.
-      headerEl.innerHTML = 'Media (' + totalFiles + ' - search \'' + currentQuery + '\' - showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>)';
+      // Compare the ?q= URL param with the input value. If
+      // they match, we're in server-rendered mode (the
+      // server already filtered). If they differ, the JS
+      // is filtering the current page only (server would
+      // have shown a different set).
+      var urlQuery = getSearchParam();
+      var isServerRendered = (currentQuery === urlQuery);
+      // The "of N" part: if server-rendered, N is the total
+      // match count (the page shows all matches on one page).
+      // If JS-typed, N is the per-page limit and we add the
+      // <em>This page</em> suffix.
+      var ofPart = '';
+      if (isServerRendered) {
+        // Extract FilteredTotal from the server text. The
+        // server text is "Media (X - search 'Y' - showing M of N)".
+        var match = (defaultHeader.match(/ of (\d+)/) || []).concat(
+          (headerEl.textContent || '').match(/ of (\d+)/) || []);
+        // Fallback: if we can't extract, use visibleCount as N.
+        ofPart = ' of ' + (match[1] || visibleCount);
+      } else {
+        ofPart = ' of ' + pageSizeTotal + ' <em>This page</em>';
+      }
+      headerEl.innerHTML = 'Media (' + totalFiles + ' - search \'' + currentQuery + '\' - showing ' + visibleCount + ofPart + ')';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
