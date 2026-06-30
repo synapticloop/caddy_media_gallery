@@ -304,10 +304,11 @@ func TestReadDimensionsCached_FirstReadWritesSidecar(t *testing.T) {
 		t.Errorf("first read: got %dx%d, want 640x480", w, h)
 	}
 	// Verify the sidecar was written. Path matches dimsMetaPath
-	// (sha256 of abs path, truncated to 16 bytes, hex).
+	// (2-level nested layout: <cacheDir>/<aa>/<bb>/<rest>.webp.meta).
 	abs, _ := filepath.Abs(tmp.Name())
 	hashHex := sha256Sum16Helper(abs)
-	wantPath := filepath.Join(cacheDir, hashHex+".webp.meta")
+	subdir1, subdir2, rest := hashHex[:2], hashHex[2:4], hashHex[4:]
+	wantPath := filepath.Join(cacheDir, subdir1, subdir2, rest+".webp.meta")
 	data, err := os.ReadFile(wantPath)
 	if err != nil {
 		t.Errorf("sidecar not written at %s: %v", wantPath, err)

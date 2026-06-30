@@ -298,23 +298,61 @@ func formatFocalLengthMm(num, denom uint32) string {
 
 
 // exifMetaPath returns the sidecar EXIF metadata file path for
-// the given source file. Same scheme as dimsMetaPath and
-// thumbCachePath: SHA-256 of the absolute source path,
-// truncated to 16 bytes, hex-encoded. The sidecar sits next
-// to the thumb and dims sidecar in the cache dir.
+// the given source file. Uses the same nested layout as
+// thumbCachePath (see cachePath in thumbnails.go for the
+// layout rationale). The sidecar sits next to the thumb
+// and dims sidecar in the same subdir.
 //
-// Filename: "{hash}.{thumbExt}.exif" — the .exif suffix
-// distinguishes it from .meta (dimensions) and .webp (the
-// thumb itself). All three files for the same source share
-// the same hash, so they're colocated in the cache dir and
+// Filename: "<rest>.<thumbExt>.exif" — the .exif suffix
+// distinguishes it from .meta (dimensions) and the thumb
+// itself. All three files for the same source share the
+// same subdir, so they're colocated in the cache and
 // cache eviction handles them as a unit.
 func exifMetaPath(src, cacheDir, thumbExt string) string {
+	return cachePath(src, cacheDir, "."+thumbExt+".exif")
+}
+
+// legacyFlatExifMetaPath returns the OLD flat-layout path
+// for an EXIF sidecar. Used as a fallback for caches that
+// were populated before the nested layout was introduced.
+func legacyFlatExifMetaPath(src, cacheDir, thumbExt string) string {
 	abs, err := filepath.Abs(src)
 	if err != nil {
 		abs = src
 	}
 	h := sha256.Sum256([]byte(abs))
 	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".exif")
+}
+
+// readExifFile tries the new nested path first, then the
+// legacy flat-layout path. Returns (data, true) if the file
+// was found in either location, (nil, false) if neither.
+// When a legacy file is found, it's opportunistically
+// MOVED to the new nested location.
+func readExifFile(src, cacheDir, thumbExt string) ([]byte, bool) {
+	metaPath := exifMetaPath(src, cacheDir, thumbExt)
+	if data, err := os.ReadFile(metaPath); err == nil {
+		return data, true
+	}
+	oldPath := legacyFlatExifMetaPath(src, cacheDir, thumbExt)
+	if data, err := os.ReadFile(oldPath); err == nil {
+		go func() {
+			_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
+			_ = os.Rename(oldPath, metaPath)
+		}()
+		return data, true
+	}
+	return nil, false
+}
+
+// writeExifFile writes the .exif sidecar at the new nested
+// location, creating the subdir if needed.
+func writeExifFile(src, cacheDir, thumbExt string, data []byte) error {
+	metaPath := exifMetaPath(src, cacheDir, thumbExt)
+	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(metaPath, data, 0o644)
 }
 
 // readExifCached returns the EXIF data for the source file
@@ -362,8 +400,10 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 		// readExif which will return its own error.
 		return readExif(path)
 	}
-	// Try the sidecar first.
-	if data, err := os.ReadFile(metaPath); err == nil {
+	// Try the sidecar first. Uses the helper which falls
+	// back to the legacy flat-layout path and
+	// opportunistically migrates legacy files.
+	if data, ok := readExifFile(path, cacheDir, thumbExt); ok {
 		// Staleness check: if the source is newer than the
 		// sidecar, the sidecar is stale. Skip it.
 		sidecarFresh := true
@@ -394,9 +434,8 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 	// mtime so the staleness check on the NEXT read works
 	// cleanly (a sidecar with mtime = source.mtime is
 	// considered fresh until the source is modified again).
-	_ = os.MkdirAll(cacheDir, 0o755)
-	_ = os.WriteFile(metaPath, writeExifSidecar(exif), 0o644)
-	_ = os.Chtimes(metaPath, srcInfo.ModTime(), srcInfo.ModTime())
+	_ = writeExifFile(path, cacheDir, thumbExt, writeExifSidecar(exif))
+	_ = os.Chtimes(exifMetaPath(path, cacheDir, thumbExt), srcInfo.ModTime(), srcInfo.ModTime())
 	return exif, err
 }
 

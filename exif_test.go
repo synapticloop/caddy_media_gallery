@@ -412,7 +412,9 @@ func TestReadExifCached_NoExifCachesEmpty(t *testing.T) {
 	// Verify the sidecar was written (with has=false).
 	abs, _ := filepath.Abs(path)
 	h := sha256.Sum256([]byte(abs))
-	wantPath := filepath.Join(cacheDir, hex.EncodeToString(h[:16])+".webp.exif")
+	hashHex := hex.EncodeToString(h[:16])
+	subdir1, subdir2, rest := hashHex[:2], hashHex[2:4], hashHex[4:]
+	wantPath := filepath.Join(cacheDir, subdir1, subdir2, rest+".webp.exif")
 	data, err := os.ReadFile(wantPath)
 	if err != nil {
 		t.Errorf("sidecar not written at %s: %v", wantPath, err)
@@ -597,7 +599,10 @@ func TestReadExifCached_UsesTextFormat(t *testing.T) {
 Camera Make=Canon
 Camera Model=EOS R5
 `
-	if err := os.WriteFile(sidecarPath, []byte(sidecarContent), 0o644); err != nil {
+	// Use writeExifFile (not os.WriteFile) because the new
+	// nested layout requires MkdirAll on the parent subdir
+	// first. writeExifFile handles that.
+	if err := writeExifFile(srcPath, tmp, "webp", []byte(sidecarContent)); err != nil {
 		t.Fatal(err)
 	}
 	exif, err := readExifCached(srcPath, tmp, "webp")

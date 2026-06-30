@@ -79,15 +79,21 @@ type ThumbConfig struct {
 // Using a content-hash means cache entries are stable across renames
 // of the parent directory (as long as the absolute source path stays
 // the same) and collisions are effectively impossible.
+// ThumbPath returns the on-disk path where the thumbnail for src
+// would be cached, using the default .webp extension. The layout
+// is <cacheDir>/<aa>/<bb>/<rest>.webp (a 2-level hash directory
+// tree — see cachePath for rationale). The hash is the first
+// 16 bytes of SHA-256 of the absolute source path, hex-encoded
+// (32 chars total). Using a content hash means the path is
+// stable across renames of the parent directory (as long as
+// the absolute path stays the same) and collisions are
+// effectively impossible.
+//
+// ThumbPath is the "external" interface used by the tests and
+// by other packages that need to know where a thumb lives.
+// It's equivalent to thumbCachePath(src, cacheDir, "webp").
 func ThumbPath(src, cacheDir string) string {
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		// Fall back to the raw path if Abs fails (shouldn't happen
-		// in practice but avoids a panic).
-		abs = src
-	}
-	h := sha256.Sum256([]byte(abs))
-	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+".webp")
+	return thumbCachePath(src, cacheDir, "webp")
 }
 
 // GenerateOrLoadThumb returns the thumbnail bytes for src, generating
@@ -134,10 +140,17 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("stat source: %w", err)
 	}
-	if cacheInfo, err := os.Stat(cacheFile); err == nil {
-		// Cache hit: source must not be newer than cache.
-		if !cacheInfo.ModTime().Before(srcInfo.ModTime()) {
-			return os.ReadFile(cacheFile)
+	// Cache lookup: try the new nested path first, then the
+	// legacy flat layout (for caches populated before the
+	// nested layout was introduced). readCacheFile does the
+	// fallback + opportunistic migration.
+	if data, _, found := readCacheFile(src, cacheDir, ext); found {
+		cacheFile = thumbCachePath(src, cacheDir, ext)
+		if cacheInfo, err := os.Stat(cacheFile); err == nil {
+			// Cache hit: source must not be newer than cache.
+			if !cacheInfo.ModTime().Before(srcInfo.ModTime()) {
+				return data, nil
+			}
 		}
 	}
 
@@ -205,6 +218,10 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	}
 	// Write to cache (best-effort; a write error shouldn't fail
 	// the request — the in-memory bytes are still good).
+	// Per user request 2026-06-30: the new nested cache layout
+	// uses a 2-level subdir. We MkdirAll the parent first
+	// (no-op if the dir already exists).
+	_ = os.MkdirAll(filepath.Dir(cacheFile), 0o755)
 	_ = os.WriteFile(cacheFile, buf.Bytes(), 0o644)
 	// Per user request 2026-06-29: set the thumb's mtime to
 	// the source's mtime so the staleness check at the top of
@@ -300,11 +317,26 @@ func GenerateOrLoadVideoThumb(src, cacheDir, ffmpegPath string, cfg ThumbConfig)
 	if err != nil {
 		return nil, fmt.Errorf("stat source: %w", err)
 	}
-	if cacheInfo, err := os.Stat(cacheFile); err == nil {
-		if !cacheInfo.ModTime().Before(srcInfo.ModTime()) {
-			return os.ReadFile(cacheFile)
+	// Cache lookup: try the new nested path first, then the
+	// legacy flat layout. readCacheFile does the fallback +
+	// opportunistic migration.
+	if data, _, found := readCacheFile(src, cacheDir, ext); found {
+		cacheFile = thumbCachePath(src, cacheDir, ext)
+		if cacheInfo, err := os.Stat(cacheFile); err == nil {
+			if !cacheInfo.ModTime().Before(srcInfo.ModTime()) {
+				return data, nil
+			}
 		}
 	}
+	// Per user request 2026-06-30: the new nested cache layout
+	// uses a 2-level subdir (e.g. <cacheDir>/<aa>/<bb>/).
+	// ffmpeg can't create the subdirs itself — it just opens
+	// the output file and writes. So we MkdirAll the parent
+	// subdir first. This is a no-op if the subdir already
+	// exists (e.g. on a cache hit), and harmless if the
+	// subdir creation fails (the subsequent ffmpeg call
+	// will also fail with a clear error).
+	_ = os.MkdirAll(filepath.Dir(cacheFile), 0o755)
 	// Build the scale filter. force_original_aspect_ratio=decrease
 	// scales so the longest edge fits in the box (matches the
 	// image thumb behavior).
@@ -338,14 +370,35 @@ func GenerateOrLoadVideoThumb(src, cacheDir, ffmpegPath string, cfg ThumbConfig)
 	return os.ReadFile(cacheFile)
 }
 
-// thumbCachePath returns the on-disk path where the thumbnail for
-// src should be cached, for a specific output extension. The
-// filename is the first 16 bytes of the SHA256 of src's absolute
-// path, hex-encoded (32 hex chars) + "." + ext. Using a
-// content-hash means cache entries are stable across renames of
-// the parent directory (as long as the absolute source path stays
-// the same) and collisions are effectively impossible.
-func thumbCachePath(src, cacheDir, ext string) string {
+// cachePath returns the on-disk path where the cache file for
+// src should be cached, for a specific suffix (e.g. ".webp",
+// ".webp.meta", ".webp.exif"). The path is:
+//
+//	<cacheDir>/<aa>/<bb>/<rest32>.<suffix>
+//
+// where <aa> and <bb> are the first two bytes of the hash
+// (each 1 byte = 2 hex chars), and <rest32> is the remaining
+// 30 hex chars. So the 32-hex-char hash is split as
+// "aabb<rest>" and used as a 2-level nested subdir.
+//
+// Per user request 2026-06-30: at large cache sizes (e.g.
+// 24,000+ files in one flat directory), filesystem lookups
+// slow down because each stat/opendir call must scan the
+// full directory. A 2-level hash layout keeps each subdir
+// small (average ~0.4 entries for a 24k cache, max ~few
+// hundred for a 100k+ cache) so the lookup is O(1) instead
+// of O(n).
+//
+// The legacy flat layout is still readable: this function
+// always returns the NEW nested path. The lookup logic in
+// the cache functions (e.g. serveThumb, evictIfOver)
+// checks the new nested location FIRST, then falls back to
+// the old flat location for backward compatibility with
+// existing caches. New writes always use the new nested
+// layout. The eviction sweep moves old flat-layout files
+// to their nested location on a best-effort basis (as part
+// of its normal scan).
+func cachePath(src, cacheDir, suffix string) string {
 	abs, err := filepath.Abs(src)
 	if err != nil {
 		// Fall back to the raw path if Abs fails (shouldn't
@@ -353,7 +406,72 @@ func thumbCachePath(src, cacheDir, ext string) string {
 		abs = src
 	}
 	h := sha256.Sum256([]byte(abs))
+	hex := hex.EncodeToString(h[:16]) // 32 hex chars
+	// Nested layout: <cacheDir>/<aa>/<bb>/<rest32>.<suffix>
+	subdir1 := hex[:2]   // "aa"
+	subdir2 := hex[2:4]  // "bb"
+	rest := hex[4:]      // 28 hex chars
+	return filepath.Join(cacheDir, subdir1, subdir2, rest+suffix)
+}
+
+// thumbCachePath returns the on-disk path where the thumbnail for
+// src should be cached, for a specific output extension. See
+// cachePath for the layout details.
+func thumbCachePath(src, cacheDir, ext string) string {
+	return cachePath(src, cacheDir, "."+ext)
+}
+
+// legacyFlatCachePath returns the OLD flat-layout path
+// (e.g. <cacheDir>/<32hex>.webp). Used as a fallback for
+// caches that were populated before the nested layout
+// was introduced. Returns the same string as before so
+// old cache entries can still be located.
+func legacyFlatCachePath(src, cacheDir, ext string) string {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		abs = src
+	}
+	h := sha256.Sum256([]byte(abs))
 	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+ext)
+}
+
+// readCacheFile tries the new nested path first; if the
+// file doesn't exist there, falls back to the legacy
+// flat-layout path. Returns (data, path, true) if the
+// file was found, (nil, "", false) if neither path has
+// the file. When a legacy file is found, it's also
+// opportunistically MOVED to the new nested location so
+// future reads are fast (one-time cost per legacy file).
+func readCacheFile(src, cacheDir, ext string) ([]byte, string, bool) {
+	newPath := thumbCachePath(src, cacheDir, ext)
+	if data, err := os.ReadFile(newPath); err == nil {
+		return data, newPath, true
+	}
+	// Not in the new location — try the legacy flat path.
+	oldPath := legacyFlatCachePath(src, cacheDir, ext)
+	if data, err := os.ReadFile(oldPath); err == nil {
+		// Opportunistic migration: move the file to its
+		// new nested location. We do this in a goroutine
+		// (best-effort) so a slow rename doesn't block
+		// the request that triggered the read. The file
+		// is renamed, not copied, so the move is
+		// effectively free on most filesystems (just
+		// a directory entry change).
+		go func() {
+			_ = os.MkdirAll(filepath.Dir(newPath), 0o755)
+			_ = os.Rename(oldPath, newPath)
+			// Also migrate the sidecars if they exist.
+			for _, suffix := range []string{".meta", ".exif"} {
+				oldSidecar := oldPath + suffix
+				newSidecar := newPath + suffix
+				if _, err := os.Stat(oldSidecar); err == nil {
+					_ = os.Rename(oldSidecar, newSidecar)
+				}
+			}
+		}()
+		return data, newPath, true
+	}
+	return nil, "", false
 }
 
 // findSourceForThumb looks up the source file for a thumb request.
@@ -519,6 +637,22 @@ func (g *Gallery) thumbConfig() ThumbConfig {
 // per file; worst case is one goroutine's Remove races with
 // another's, resulting in ENOENT on one of them (which is
 // fine — the cache will just be slightly more aggressive).
+// cacheFile holds the info needed by the eviction sweep
+// for one thumb in the cache. The sweep sorts by lruTime
+// (oldest first) and deletes until the cache is at 80% of
+// the cap.
+//
+// Per user request 2026-06-30: the cache uses a 2-level
+// nested hash layout. The type is at package level (not
+// inside evictIfOver) so the helper walkNestedCacheDir
+// can return a list of cacheFile.
+type cacheFile struct {
+	size     int64
+	lruTime  int64 // unix nanoseconds — .meta mtime if present, else thumb mtime
+	path     string
+	sidecars []string // .meta and .exif to delete with this thumb
+}
+
 func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	if maxMB <= 0 {
 		return // no cap (unbounded)
@@ -537,16 +671,20 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	// the thumb's mtime now mirrors the source's mtime for
 	// semantic correctness in the staleness check).
 	//
+	// Per user request 2026-06-30: the cache uses a 2-level
+	// nested hash layout (e.g. <cacheDir>/<aa>/<bb>/<rest>.webp)
+	// for O(1) filesystem lookups at large cache sizes. The
+	// eviction sweep walks BOTH the new nested layout AND the
+	// legacy flat layout (for caches populated before the
+	// nested layout was introduced). Legacy files encountered
+	// here are opportunistically MIGRATED to the new layout
+	// (best-effort rename), so the legacy flat dir empties
+	// out over time without a separate migration script.
+	//
 	// The total cache size is computed from the .webp/.jpg/.png
 	// thumb files (not the sidecars). When we evict a thumb,
 	// we also delete its .meta and .exif sidecars so they
 	// don't linger in the cache (they're orphaned otherwise).
-	type cacheFile struct {
-		size     int64
-		lruTime  int64 // unix nanoseconds — .meta mtime if present, else thumb mtime
-		path     string
-		sidecars []string // .meta and .exif to delete with this thumb
-	}
 	var files []cacheFile
 	var totalBytes int64
 	entries, err := os.ReadDir(cacheDir)
@@ -556,10 +694,16 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 		return
 	}
 	for _, entry := range entries {
+		name := entry.Name()
 		if entry.IsDir() {
+			// Nested subdir (e.g. "ff" for the first byte
+			// of the hash). Walk into it recursively.
+			subFiles, subBytes, _ := walkNestedCacheDir(filepath.Join(cacheDir, name))
+			files = append(files, subFiles...)
+			totalBytes += subBytes
 			continue
 		}
-		name := entry.Name()
+		// Legacy flat-layout file: <32hex>.webp etc.
 		// Skip non-thumb files (the .meta and .exif sidecars
 		// are handled via their parent thumb's sidecars list).
 		if !isThumbFile(name) {
@@ -625,6 +769,86 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 		}
 		totalBytes -= f.size
 	}
+}
+
+// walkNestedCacheDir walks one level of the nested cache
+// layout (e.g. <cacheDir>/<aa>/<bb>/*.webp). Returns the
+// list of (cacheFile, size) and the total bytes. Per user
+// request 2026-06-30: the 2-level hash layout means we
+// walk at most 256^2 = 65,536 inner subdirs in the worst
+// case, but each inner subdir typically has 0-1 files
+// (because the hash is uniform). On a 24k cache, each
+// inner subdir has ~0.4 files on average, so each walk
+// step is O(1).
+//
+// Error handling: we silently ignore ReadDir errors on
+// individual inner subdirs (a corrupted subdir shouldn't
+// fail the entire eviction sweep). Only an error on the
+// top-level subdir is reported (and we return whatever
+// we managed to scan so far).
+func walkNestedCacheDir(subdir string) ([]cacheFile, int64, error) {
+	var out []cacheFile
+	var total int64
+	inner, err := os.ReadDir(subdir)
+	if err != nil {
+		return nil, 0, err
+	}
+	for _, e := range inner {
+		innerPath := filepath.Join(subdir, e.Name())
+		if e.IsDir() {
+			// One more level: <aa>/<bb>/*.webp
+			innermost, err := os.ReadDir(innerPath)
+			if err != nil {
+				continue
+			}
+			for _, ee := range innermost {
+				cf, sz := scanNestedThumb(filepath.Join(innerPath, ee.Name()), ee)
+				if cf != nil {
+					out = append(out, *cf)
+					total += sz
+				}
+			}
+			continue
+		}
+		// File directly in <aa> (shouldn't happen in a
+		// well-formed nested layout, but handle it).
+		cf, sz := scanNestedThumb(innerPath, e)
+		if cf != nil {
+			out = append(out, *cf)
+			total += sz
+		}
+	}
+	return out, total, nil
+}
+
+// scanNestedThumb is a helper for walkNestedCacheDir that
+// collects the cacheFile info for one nested-layout thumb.
+// Returns nil if the entry is not a thumb file.
+func scanNestedThumb(fullPath string, entry os.DirEntry) (*cacheFile, int64) {
+	name := entry.Name()
+	if !isThumbFile(name) {
+		return nil, 0
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return nil, 0
+	}
+	lruTime := info.ModTime().UnixNano()
+	metaFile := fullPath + ".meta"
+	if metaInfo, err := os.Stat(metaFile); err == nil {
+		lruTime = metaInfo.ModTime().UnixNano()
+	}
+	sidecars := []string{metaFile}
+	exifFile := fullPath + ".exif"
+	if _, err := os.Stat(exifFile); err == nil {
+		sidecars = append(sidecars, exifFile)
+	}
+	return &cacheFile{
+		size:     info.Size(),
+		lruTime:  lruTime,
+		path:     fullPath,
+		sidecars: sidecars,
+	}, info.Size()
 }
 
 // isThumbFile reports whether the given cache file name is

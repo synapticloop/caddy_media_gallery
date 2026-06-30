@@ -354,8 +354,11 @@ func TestTouchMetaAtUse_UpdatesMtime(t *testing.T) {
 	// Compute the meta path using the same function
 	// touchMetaAtUse uses internally.
 	metaPath := dimsMetaPath(srcPath, tmp, "webp")
-	// Create the .meta sidecar with an old mtime.
-	if err := os.WriteFile(metaPath, []byte("100 100\n"), 0o644); err != nil {
+	// Create the .meta sidecar with an old mtime. Use
+	// writeMetaFile (not os.WriteFile) because the new
+	// nested layout requires MkdirAll on the parent subdir
+	// first. writeMetaFile handles that for us.
+	if err := writeMetaFile(srcPath, tmp, "webp", []byte("100 100\n")); err != nil {
 		t.Fatal(err)
 	}
 	oldTime := time.Now().Add(-1 * time.Hour)

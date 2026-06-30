@@ -74,7 +74,20 @@ func readDimensions(path string) (width, height int, err error) {
 // dimensions in a sidecar file avoids re-parsing the source
 // image's header on every scan. For a 1000-image gallery,
 // this saves ~1-3 seconds of header reads per directory scan.
+// dimsMetaPath returns the sidecar metadata file path for the
+// cached thumb of src. Uses the same nested layout as
+// thumbCachePath (see cachePath in thumbnails.go for the
+// layout rationale). The sidecar sits next to its parent
+// thumb in the same subdir.
 func dimsMetaPath(src, cacheDir, thumbExt string) string {
+	return cachePath(src, cacheDir, "."+thumbExt+".meta")
+}
+
+// legacyFlatDimsMetaPath returns the OLD flat-layout path
+// for a dimensions sidecar. Used as a fallback when the new
+// nested layout doesn't have the file. See cachePath for the
+// layout rationale.
+func legacyFlatDimsMetaPath(src, cacheDir, thumbExt string) string {
 	abs, err := filepath.Abs(src)
 	if err != nil {
 		abs = src
@@ -83,9 +96,67 @@ func dimsMetaPath(src, cacheDir, thumbExt string) string {
 	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".meta")
 }
 
-// readDimensionsCached returns the pixel dimensions of the
-// source file at path, using a sidecar metadata file in the
-// thumb cache dir for fast lookups. Behaviour:
+// readMetaFile tries the new nested path first, then the
+// legacy flat-layout path. Returns (data, true) if the file
+// was found in either location, (nil, false) if neither.
+// When a legacy file is found, it's opportunistically
+// MOVED to the new nested location (so future reads are
+// fast and the eviction sweep can use the new layout).
+func readMetaFile(src, cacheDir, thumbExt string) ([]byte, bool) {
+	metaPath := dimsMetaPath(src, cacheDir, thumbExt)
+	if data, err := os.ReadFile(metaPath); err == nil {
+		return data, true
+	}
+	// Not in the new location — try the legacy flat path.
+	oldPath := legacyFlatDimsMetaPath(src, cacheDir, thumbExt)
+	if data, err := os.ReadFile(oldPath); err == nil {
+		// Opportunistic migration. Best-effort goroutine
+		// (same rationale as readCacheFile in thumbnails.go).
+		go func() {
+			_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
+			_ = os.Rename(oldPath, metaPath)
+		}()
+		return data, true
+	}
+	return nil, false
+}
+
+// writeMetaFile writes the .meta sidecar at the new nested
+// location, creating the subdir if needed. This is the
+// write side of readMetaFile — always uses the new layout.
+func writeMetaFile(src, cacheDir, thumbExt string, data []byte) error {
+	metaPath := dimsMetaPath(src, cacheDir, thumbExt)
+	if err := os.MkdirAll(filepath.Dir(metaPath), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(metaPath, data, 0o644)
+}
+
+// touchMetaAtUse updates the .meta sidecar's mtime to the
+// current time. This is called on every thumb serve to act
+// as an LRU timestamp — the eviction logic sorts by .meta
+// mtime (oldest first), so frequently-accessed thumbs stay
+// in the cache and rarely-accessed ones get evicted when the
+// cap is hit.
+//
+// The function is best-effort: any error (permission
+// denied, etc.) is silently ignored. The consequences of a
+// failed touch are just "this thumb looks older to the
+// eviction logic" — it might get evicted slightly sooner
+// than it should. No correctness impact.
+//
+// If the .meta sidecar doesn't exist (e.g. the thumb was
+// generated before this feature was added, or the
+// dimensions failed to be read on the initial scan), we
+// CREATE a minimal .meta with a single newline. The eviction
+// logic uses the .meta mtime as the LRU timestamp, so the
+// mtime is the only thing that matters here — the contents
+// are irrelevant. A single-byte file is enough.
+//
+// Why create the .meta on first serve? Because for a fresh
+// thumb (no prior scan), there's no .meta yet, but we still
+// want a valid LRU timestamp. The first serve IS the
+// first-known "last used" time, which is a fine LRU signal.
 //
 //  1. If a sidecar file exists at the expected cache path, read
 //     W × H from it (one small file read, no image parsing).
@@ -135,8 +206,11 @@ func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error)
 		return readDimensions(path)
 	}
 	// Try the sidecar first. A successful read avoids the
-	// ~1-5ms image header parse entirely.
-	if data, err := os.ReadFile(metaPath); err == nil {
+	// ~1-5ms image header parse entirely. Uses the helper
+	// which falls back to the legacy flat-layout path and
+	// opportunistically migrates legacy files to the new
+	// nested layout.
+	if data, ok := readMetaFile(path, cacheDir, thumbExt); ok {
 		// Staleness check: if the source is newer than the
 		// sidecar, the sidecar is stale. Skip it (don't
 		// trust its values).
@@ -180,9 +254,8 @@ func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error)
 	// mtime so the staleness check on the NEXT read works
 	// cleanly (a sidecar with mtime = source.mtime is
 	// considered fresh until the source is modified again).
-	_ = os.MkdirAll(cacheDir, 0o755)
-	_ = os.WriteFile(metaPath, []byte(fmt.Sprintf("%d %d\n", w, h)), 0o644)
-	_ = os.Chtimes(metaPath, srcInfo.ModTime(), srcInfo.ModTime())
+	_ = writeMetaFile(path, cacheDir, thumbExt, []byte(fmt.Sprintf("%d %d\n", w, h)))
+	_ = os.Chtimes(dimsMetaPath(path, cacheDir, thumbExt), srcInfo.ModTime(), srcInfo.ModTime())
 	return w, h, nil
 }
 
@@ -216,12 +289,13 @@ func touchMetaAtUse(src, cacheDir, thumbExt string) {
 		return
 	}
 	metaPath := dimsMetaPath(src, cacheDir, thumbExt)
-	// If the .meta doesn't exist, create a minimal one. We
-	// use MkdirAll (in case the cache dir was removed out
+	// If the .meta doesn't exist (e.g. legacy flat-layout
+	// file that hasn't been migrated yet, or a fresh thumb
+	// with no prior scan), create a minimal one. We use
+	// MkdirAll (in case the cache subdir was removed out
 	// from under us) and WriteFile. Both are best-effort.
 	if _, err := os.Stat(metaPath); os.IsNotExist(err) {
-		_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
-		_ = os.WriteFile(metaPath, []byte("\n"), 0o644)
+		_ = writeMetaFile(src, cacheDir, thumbExt, []byte("\n"))
 	}
 	// Bump the mtime to time.Now(). Chtimes is the cheapest
 	// way: it doesn't read or write any data.

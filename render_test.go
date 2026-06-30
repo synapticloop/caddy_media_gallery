@@ -5091,3 +5091,4 @@ func TestRenderPage_NoExifPillWhenExifNil(t *testing.T) {
 		cardStart += end + 4
 	}
 }
+

@@ -54,21 +54,51 @@ func TestThumbPath_Stable(t *testing.T) {
 	}
 }
 
+// TestThumbPath_DeterministicSuffix verifies the new
+// 2-level nested cache layout: the thumb is at
+// <cacheDir>/<aa>/<bb>/<rest>.webp where:
+//   - <aa> is the first 2 hex chars of the sha256 (a subdir)
+//   - <bb> is the next 2 hex chars (another subdir)
+//   - <rest> is the remaining 28 hex chars (the basename)
+//
+// Total filename: 28 hex chars + ".webp" (4 chars) = 32 chars
+// but split across 2 subdirs. We verify the path structure:
+// - 2 path segments of exactly 2 hex chars each (the subdirs)
+// - 1 filename of exactly 28 hex chars + .webp
 func TestThumbPath_DeterministicSuffix(t *testing.T) {
-	// The thumb filename is sha256-based. Verify the suffix is 32 hex
-	// chars + .webp so URLs are predictable.
 	p := ThumbPath("/var/www/html/images/foo.jpg", "/var/cache/caddy-gallery")
-	base := filepath.Base(p)
-	if !strings.HasSuffix(base, ".webp") {
-		t.Errorf("thumb path %q should end in .webp", p)
+	rel, err := filepath.Rel("/var/cache/caddy-gallery", p)
+	if err != nil {
+		t.Fatalf("ThumbPath %q is not under cacheDir: %v", p, err)
 	}
-	stem := strings.TrimSuffix(base, ".webp")
-	if len(stem) != 32 {
-		t.Errorf("thumb stem %q should be 32 hex chars (16-byte sha256), got len %d", stem, len(stem))
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) != 3 {
+		t.Fatalf("thumb path %q should have 3 components under cacheDir (aa/bb/rest.webp), got %d: %v", p, len(parts), parts)
+	}
+	subdir1, subdir2, filename := parts[0], parts[1], parts[2]
+	// Subdirs: 2 hex chars each
+	for i, sd := range []string{subdir1, subdir2} {
+		if len(sd) != 2 {
+			t.Errorf("subdir %d (%q) should be 2 hex chars, got len %d", i, sd, len(sd))
+		}
+		for _, c := range sd {
+			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+				t.Errorf("subdir %d %q contains non-hex char %q", i, sd, c)
+				break
+			}
+		}
+	}
+	// Filename: 28 hex chars + .webp
+	if !strings.HasSuffix(filename, ".webp") {
+		t.Errorf("filename %q should end in .webp", filename)
+	}
+	stem := strings.TrimSuffix(filename, ".webp")
+	if len(stem) != 28 {
+		t.Errorf("filename stem %q should be 28 hex chars (rest of sha256), got len %d", stem, len(stem))
 	}
 	for _, c := range stem {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			t.Errorf("thumb stem %q contains non-hex char %q", stem, c)
+			t.Errorf("filename stem %q contains non-hex char %q", stem, c)
 			break
 		}
 	}
@@ -233,19 +263,16 @@ func TestGenerateOrLoadThumb_FormatDispatch(t *testing.T) {
 				}
 			}
 			// Verify cache file has the right extension
+			// (now in the 2-level nested layout).
 			abs, _ := filepath.Abs(src)
 			h := sha256.Sum256([]byte(abs))
-			expectedName := hex.EncodeToString(h[:16]) + "." + c.ext
-			entries, _ := os.ReadDir(cache)
-			found := false
-			for _, e := range entries {
-				if e.Name() == expectedName {
-					found = true
-					break
-				}
-			}
-			if !found {
-				t.Errorf("expected cache file %q, got entries: %v", expectedName, entries)
+			hexHash := hex.EncodeToString(h[:16])
+			subdir1 := hexHash[:2]
+			subdir2 := hexHash[2:4]
+			rest := hexHash[4:]
+			expectedPath := filepath.Join(cache, subdir1, subdir2, rest+"."+c.ext)
+			if _, err := os.Stat(expectedPath); err != nil {
+				t.Errorf("expected cache file at %q, got err: %v", expectedPath, err)
 			}
 		})
 	}
