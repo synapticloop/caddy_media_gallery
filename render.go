@@ -1505,19 +1505,41 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 	}{}
 
 	for _, f := range files {
-		ext := strings.ToLower(filepath.Ext(f.Name))
-		if ext == "" {
+		// Per user request 2026-06-30: only FILES are counted
+		// in the filter dropdowns (directories are shown in
+		// the Directories table, not the file-type filter).
+		// This fixes a pre-existing bug where directories with
+		// no extension (e.g. "buildings", "plants") were being
+		// counted as "(none)" in the Other filter dropdown,
+		// inflating the count.
+		if f.Kind == KindDir {
 			continue
 		}
+		ext := strings.ToLower(filepath.Ext(f.Name))
+		// Per user request 2026-06-30: files WITHOUT an
+		// extension (e.g. "README", "Makefile") now appear in
+		// the "Other" dropdown as "(none)". Previously these
+		// files were silently skipped (no way to filter to
+		// them). The dropdown shows the label "(none)" but the
+		// underlying ext is "" — so ?type= (empty value) is
+		// the form parameter when selected. Note: an empty
+		// value in ?type= already matches all files, so the
+		// "no extension" filter is mostly informational (it
+		// confirms the file is included without filtering
+		// anything out).
+		displayExt := filepath.Ext(f.Name)
+		if displayExt == "" {
+			displayExt = "(none)"
+		}
 		switch {
-		case imageExts[ext]:
+		case ext != "" && imageExts[ext]:
 			e := imgCounts[ext]
 			e.count++
 			if e.displayExt == "" {
 				e.displayExt = filepath.Ext(f.Name)
 			}
 			imgCounts[ext] = e
-		case videoExts[ext]:
+		case ext != "" && videoExts[ext]:
 			e := vidCounts[ext]
 			e.count++
 			if e.displayExt == "" {
@@ -1525,10 +1547,13 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 			}
 			vidCounts[ext] = e
 		default:
+			// Includes files with no extension (ext == "")
+			// AND files with extensions that don't match
+			// image or video types.
 			e := otherCounts[ext]
 			e.count++
 			if e.displayExt == "" {
-				e.displayExt = filepath.Ext(f.Name)
+				e.displayExt = displayExt
 			}
 			otherCounts[ext] = e
 		}
