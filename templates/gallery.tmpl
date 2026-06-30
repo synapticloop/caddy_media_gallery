@@ -1036,35 +1036,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-card);
-  color: var(--fg-muted);
-  font-size: 0.85rem;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.12s, border-color 0.12s, color 0.12s;
-}
-.search-button:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-  color: var(--fg);
-}
-/* Per user request 2026-06-28: the search Reset button.
-   Uses the inverted color scheme — dark bg in light mode,
-   light bg in dark mode — via --active-bg / --active-fg /
-   --active-border (same tokens as .filter-apply). The
-   inversion makes the button stand out as a "destructive"
-   action (same visual weight as the Apply button, which
-   is the intended "this resets what you've done"
-   affordance). Margin-left: 0.4rem to separate from the
-   Search all button. */
-.search-reset-button {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 0.4rem;
-  padding: 0.3rem 0.85rem;
   border: 1px solid var(--active-border);
   border-radius: 4px;
   background: var(--active-bg);
@@ -1075,13 +1046,51 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-/* Per user request 2026-06-28: same fix as .filter-apply
-   — filter: brightness() instead of background: --bg-hover
-   so the text remains readable in light mode. */
-.search-reset-button:hover {
+/* Per user request 2026-06-30: the search-button now uses
+   the active color scheme (same as Apply), so the hover
+   uses filter: brightness() like .filter-apply (rather
+   than background: --bg-hover, which is for secondary
+   buttons like .search-reset-button and .filter-pill). */
+.search-button:hover {
   filter: brightness(1.2);
   color: var(--active-fg);
   border-color: var(--active-border);
+}
+/* Per user request 2026-06-28: the search Reset button.
+   Per user request 2026-06-30: updated to use the same
+   color scheme as the .filter-pill (--bg-hover /
+   --border-strong / --fg) — visually it matches the "All"
+   pill in the filter row. This is the correct semantic:
+   Reset is a secondary action that "undoes" the active
+   search (just like "All" un-anchors a specific filter).
+   The "Search all" button is now the primary action (using
+   the active color scheme like Apply). Margin-left: 0.4rem
+   to separate from the Search all button. */
+.search-reset-button {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.4rem;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--fg);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+/* Per user request 2026-06-30: the search-reset-button
+   now uses the secondary color scheme (same as .filter-pill),
+   so the hover uses background: --bg-hover (the standard
+   secondary hover) rather than filter: brightness()
+   (which is for primary/active buttons like .filter-apply
+   and .search-button). */
+.search-reset-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
 }
 
 /* Phase 118: cards that don't match the current search get
