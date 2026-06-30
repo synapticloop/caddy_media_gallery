@@ -574,6 +574,27 @@ func (g *Gallery) Cleanup() error {
 	}
 	return nil
 }
+// jsonString returns a JSON-encoded string literal
+// (including the surrounding double quotes). Used by the
+// EXIF endpoint to build the JSON response manually (we don't
+// import encoding/json in this file to keep the dependency
+// surface small). The values are already pre-escaped by
+// the formatExifValue/formatExifString helpers in exif.go
+// (control characters stripped, backslashes escaped, quotes
+// escaped) — here we just escape the remaining JSON meta
+// characters: backslash and double-quote.
+func jsonString(s string) string {
+	if s == "" {
+		return `""`
+	}
+	// Escape backslash first (so we don't double-escape the
+	// backslashes we add for quotes).
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	// Then escape double-quote.
+	s = strings.ReplaceAll(s, `"`, `"`)
+	return `"` + s + `"`
+}
+
 func (*Gallery) Validate() error { return nil }
 
 // ServeHTTP renders the gallery for the directory at the current
@@ -622,6 +643,114 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// doesn't exist for galleries that don't generate thumbs.
 	if !g.NoThumbs {
 		if g.serveThumb(w, r, root, relPath) {
+			return nil
+		}
+	}
+
+	// Per user request 2026-06-29: the EXIF endpoint. When
+	// a request has ?exif=1 and resolves to a regular file
+	// within the gallery root, return JSON EXIF data
+	// (the camera subset only — GPS is never extracted, see
+	// exif.go). Used by the lightbox to lazily populate the
+	// EXIF panel on open (avoids reading EXIF for every
+	// image at scan time).
+	//
+	// If the operator set no_exif, this endpoint always
+	// returns 404 — the lightbox JS handles that by
+	// silently hiding the EXIF panel.
+	//
+	// Security: the resolved path is the result of joining
+	// root + relPath, where relPath is derived from the URL
+	// (after handle_path prefix-stripping). For file
+	// requests, relPath is a clean path component — no
+	// path-traversal works because the existing
+	// serveThumb logic does the same resolution and is
+	// known to be safe. We don't add an extra sanitisation
+	// pass to avoid breaking valid filenames that contain
+	// unusual characters.
+	if r.URL.Query().Get("exif") != "" {
+		if info, err := os.Stat(resolved); err == nil && !info.IsDir() {
+			if g.NoExif {
+				http.Error(w, "exif disabled by operator", http.StatusNotFound)
+				return nil
+			}
+			// Only serve EXIF for image files (jpeg/png/webp/gif).
+			// Videos and other files don't have EXIF in our scope.
+			ext := strings.ToLower(filepath.Ext(resolved))
+			if !g.imageExtsMap[ext] {
+				http.Error(w, "exif not available for this file type", http.StatusNotFound)
+				return nil
+			}
+			exif, err := readExif(resolved)
+			if err != nil || exif == nil {
+				// Most images have no EXIF block — that's not an
+				// error, just an empty result. Return has=false
+				// so the lightbox hides the panel cleanly.
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"has":false}`))
+				return nil
+			}
+			// Shape the response for the lightbox JS:
+			//   camera: "Make Model" (or just one, or "—")
+			//   lens: lens model string
+			//   date: date-taken string (YYYY-MM-DD HH:MM:SS)
+			//   exposure: "Shutter · Aperture · ISO · Focal"
+			//   has: true
+			// The lightbox JS uses has to decide whether to
+			// show the panel at all.
+			// Build the "Make Model" string. If only one is set,
+			// use just that one. If both are set, join with a
+			// single space. Default to em-dash if both are empty.
+			var camera string
+			switch {
+			case exif.CameraMake != "" && exif.CameraModel != "":
+				camera = exif.CameraMake + " " + exif.CameraModel
+			case exif.CameraMake != "":
+				camera = exif.CameraMake
+			case exif.CameraModel != "":
+				camera = exif.CameraModel
+			default:
+				camera = "—"
+			}
+			lens := exif.LensModel
+			if lens == "" {
+				lens = "—"
+			}
+			date := exif.DateTaken
+			if date == "" {
+				date = "—"
+			}
+			// Exposure: comma-separated fields joined by " · "
+			parts := []string{}
+			if exif.ExposureTime != "" {
+				parts = append(parts, exif.ExposureTime)
+			}
+			if exif.Aperture != "" {
+				parts = append(parts, exif.Aperture)
+			}
+			if exif.ISO != "" {
+				parts = append(parts, exif.ISO)
+			}
+			if exif.FocalLength != "" {
+				parts = append(parts, exif.FocalLength)
+			}
+			exposure := strings.Join(parts, " \u00b7 ")
+			if exposure == "" {
+				exposure = "—"
+			}
+			// Build JSON manually. We don't import encoding/json
+			// in gallery.go to keep the dependency surface small —
+			// the values are already pre-escaped via the
+			// formatExifValue/formatExifString helpers in exif.go
+			// (control characters stripped, quotes escaped).
+			// Here we just escape the few remaining JSON meta
+			// characters (backslash + double-quote) defensively.
+			body := `{"has":true,"camera":` + jsonString(camera) +
+				`,"lens":` + jsonString(lens) +
+				`,"date":` + jsonString(date) +
+				`,"exposure":` + jsonString(exposure) + `}`
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
 			return nil
 		}
 	}

@@ -92,14 +92,21 @@ type FileInfo struct {
 	// Populated by Scanner.Scan; the count is computed by
 	// reading the subdir's contents (one extra os.ReadDir
 	// syscall per subdir, then discarded).
-	// Exif holds the CAMERA-subset EXIF metadata for this
-	// file (only populated for image files). nil means "no
-	// EXIF block" or "EXIF block with no displayable fields".
-	// Per user request 2026-06-27: GPS fields are NEVER
-	// extracted — the parser only reads Make, Model, Lens,
-	// DateTimeOriginal, ExposureTime, FNumber, ISOSpeedRatings,
-	// and FocalLength. See exif.go for details.
-	Exif       *ExifData `json:"exif,omitempty"`
+	// Exif is the CAMERA-subset EXIF metadata for this file
+	// (only meaningful for image files). Per user request
+	// 2026-06-29: EXIF is read LAZILY (on lightbox open via
+	// the ?exif=1 endpoint), NOT at scan time. This field
+	// is always nil from the scanner — it's only set by
+	// the EXIF endpoint handler when the lightbox asks.
+	// Keeping the field for backward compatibility with
+	// any code that might check it; the rendered HTML
+	// no longer references FileInfo.Exif.
+	//
+	// The legacy CAMERA subset (Make, Model, Lens,
+	// DateTimeOriginal, ExposureTime, FNumber,
+	// ISOSpeedRatings, FocalLength) is preserved; GPS is
+	// never extracted. See exif.go for details.
+	Exif *ExifData `json:"exif,omitempty"`
 	CountItems int       `json:"count_items"`
 	// CountDirs is the number of directories inside this
 	// subdirectory. Includes real directories AND symlinks
@@ -275,35 +282,27 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 			Size:    info.Size(),
 			Kind:    kind,
 		}
-		// Read EXIF for image files. Per user request
-		// 2026-06-27: GPS data is NEVER extracted (see exif.go).
-		// We only call readExif for KindImage; KindVideo and
-		// KindOther don't have EXIF in our scope. Errors are
-		// logged but not fatal — a malformed EXIF block
-		// shouldn't break the scan.
+		// EXIF reading is LAZY — we no longer read EXIF at
+		// scan time. Per user request 2026-06-29: the EXIF
+		// is read only when the lightbox is opened (via a
+		// separate ?exif=1 endpoint), not eagerly during
+		// the initial directory scan. The trade-off:
 		//
-		// Per user request 2026-06-29: the operator can
-		// disable EXIF entirely via the no_exif Caddyfile
-		// directive. When s.NoExif is true, we skip the
-		// readExif call entirely (no I/O, no parsing) —
-		// fi.Exif stays nil and the card overlay + lightbox
-		// both skip the EXIF UI (they only render when
-		// FileInfo.Exif is non-nil).
-		if kind == KindImage && !s.NoExif {
-			fullPath := filepath.Join(s.Root, e.Name())
-			exif, err := readExif(fullPath)
-			if err != nil {
-				// Most images have no EXIF block; that's expected
-				// and not an error worth logging. The dsoprea library
-				// returns exif.ErrNoExif for those — we never see that
-				// because readExif converts it to (nil, nil). So if we
-				// DO see an error here, it's a genuine one (malformed
-				// EXIF, file read error, etc.) and worth logging.
-				fmt.Fprintf(os.Stderr, "readExif(%s): %v\n", fullPath, err)
-			} else {
-				fi.Exif = exif
-			}
-		}
+		//   EAGER (old): every image's EXIF is read at scan
+		//     time (~1-5ms per image). Card overlay shows
+		//     the "EXIF" pill immediately. Lightbox EXIF
+		//     panel pops in instantly. Heavy up-front cost
+		//     but no async fetches.
+		//
+		//   LAZY (new): no EXIF reading at scan time. The
+		//     "EXIF" pill is gone (we don't know if EXIF
+		//     exists until the lightbox opens). Lightbox
+		//     makes an async fetch (~50-200ms round trip)
+		//     to populate the EXIF panel.
+		//
+		// The no_exif Caddyfile directive still works — when
+		// set, the gallery's EXIF endpoint returns 404 (or
+		// empty) so the lightbox never gets data.
 		// Read pixel dimensions for images and videos. Per user
 		// request 2026-06-27: the watermark at the bottom-right
 		// of the thumbnail shows the W × H of the source file.

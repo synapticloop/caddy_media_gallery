@@ -240,13 +240,16 @@ type FileView struct {
 	Height     int
 	Dimensions string
 
-	// Exif holds the CAMERA-subset EXIF metadata for this
-	// file. nil means "no EXIF" — the template should render
-	// neither the "EXIF" pill on the card nor the EXIF panel
-	// in the lightbox. Populated by buildFileView from
-	// FileInfo.Exif (which is populated by scanner.Scan via
-	// readExif). Per user request 2026-06-27: GPS fields
-	// are NEVER extracted.
+	// Exif is no longer populated by the scanner. Per
+	// user request 2026-06-29: EXIF is read LAZILY when
+	// the lightbox opens (via the ?exif=1 endpoint). The
+	// card overlay no longer shows the "EXIF" pill (we
+	// don't know if EXIF exists until the lightbox
+	// fetches it). The lightbox JS fetches the EXIF
+	// separately and populates the EXIF panel.
+	// This field is kept for backward compatibility; it's
+	// always nil. The ExifData type is still defined for
+	// the JSON shape returned by the ?exif=1 endpoint.
 	Exif *ExifData
 
 	// CountItems is the number of NON-directory entries inside
@@ -3943,7 +3946,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
+      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{/* Per user request 2026-06-29: data-exif-* attributes removed (EXIF is now read lazily on lightbox open, not at scan time) */}}>
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
@@ -3967,7 +3970,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           </div>
           <div class="tile-meta-chips">
             <span class="filetype-chip">{{.Type}}</span>
-            {{if and .Exif .Exif.HasAny}}<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>{{end}}
+            {{/* Per user request 2026-06-29: EXIF pill removed (EXIF is now read lazily on lightbox open, not at scan time) */}}
           </div>
         </div>
       </a>
@@ -4511,31 +4514,48 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     media.appendChild(currentEl);
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
-    // Per user request 2026-06-27: show the EXIF metadata
-    // in the lightbox. Read the data-exif-* attributes from
-    // the card; if the card has none, hide the EXIF panel.
+    // Per user request 2026-06-29: EXIF is now read LAZILY
+    // on lightbox open. The data-exif-* attributes are gone
+    // (we don't read EXIF at scan time anymore), so the
+    // lightbox makes an async fetch to the gallery's
+    // ?exif=1 endpoint to populate the EXIF panel.
+    //
+    // The fetch is non-blocking — the lightbox image shows
+    // immediately and the EXIF panel appears ~50-200ms
+    // later (or never, if the file has no EXIF or the
+    // operator set no_exif). The panel is hidden initially
+    // and shown once data arrives.
+    //
+    // URL pattern: same path as the file, with ?exif=1.
+    // Server returns JSON: {camera, lens, date, exposure}
+    // or 404 if no_exif is set / file has no EXIF.
     var exifPanel = overlay.querySelector('.lb-exif');
-    var cameraMake = c.getAttribute('data-exif-camera-make') || '';
-    var cameraModel = c.getAttribute('data-exif-camera-model') || '';
-    var lens = c.getAttribute('data-exif-lens') || '';
-    var dateTaken = c.getAttribute('data-exif-date') || '';
-    var shutter = c.getAttribute('data-exif-shutter') || '';
-    var aperture = c.getAttribute('data-exif-aperture') || '';
-    var iso = c.getAttribute('data-exif-iso') || '';
-    var focal = c.getAttribute('data-exif-focal') || '';
-    if (cameraMake || cameraModel || lens || dateTaken || shutter || aperture || iso || focal) {
-      // Camera = "Make Model" (or just Make, or just Model)
-      var camera = (cameraMake + (cameraMake && cameraModel ? ' ' : '') + cameraModel).trim();
-      // Exposure = "Shutter · Aperture · ISO · Focal"
-      var exposureParts = [shutter, aperture, iso, focal].filter(function(s) { return s; });
-      var exposure = exposureParts.join(' · ');
-      exifPanel.querySelector('[data-exif="camera"]').textContent = camera || '—';
-      exifPanel.querySelector('[data-exif="lens"]').textContent = lens || '—';
-      exifPanel.querySelector('[data-exif="date"]').textContent = dateTaken || '—';
-      exifPanel.querySelector('[data-exif="exposure"]').textContent = exposure || '—';
-      exifPanel.hidden = false;
-    } else {
-      exifPanel.hidden = true;
+    exifPanel.hidden = true;  // hide until data arrives
+    // Only fetch for image files (not videos)
+    if (!isVideo) {
+      var exifUrl = href + (href.indexOf('?') >= 0 ? '&' : '?') + 'exif=1';
+      fetch(exifUrl, { credentials: 'same-origin' })
+        .then(function(r) {
+          if (!r.ok) throw new Error('exif endpoint ' + r.status);
+          return r.json();
+        })
+        .then(function(exif) {
+          // Server returns { has: bool, camera, lens, date, exposure }
+          if (!exif || !exif.has) {
+            exifPanel.hidden = true;
+            return;
+          }
+          exifPanel.querySelector('[data-exif="camera"]').textContent = exif.camera || '—';
+          exifPanel.querySelector('[data-exif="lens"]').textContent = exif.lens || '—';
+          exifPanel.querySelector('[data-exif="date"]').textContent = exif.date || '—';
+          exifPanel.querySelector('[data-exif="exposure"]').textContent = exif.exposure || '—';
+          exifPanel.hidden = false;
+        })
+        .catch(function(err) {
+          // Silently hide the panel on error (file with no EXIF
+          // is the most common case — no need to log noise).
+          exifPanel.hidden = true;
+        });
     }
     overlay.classList.add('open');
   }
