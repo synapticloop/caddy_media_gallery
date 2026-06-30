@@ -220,6 +220,16 @@ type FileView struct {
 	IsImage  bool
 	IsVideo  bool
 	IsOther  bool
+	// Per user request 2026-06-30: DisplayName is the name
+	// shown to the visitor as a hover tooltip on each
+	// thumbnail. It's the filename without the extension,
+	// with underscores ("_") and hyphens ("-") replaced by
+	// spaces — so "misty_bamboo_forest_path.jpg" becomes
+	// "misty bamboo forest path" (human-readable). Used in
+	// the HTML title attribute (native browser tooltip) AND
+	// in a CSS-only ::after pseudo-element tooltip (custom
+	// styled, appears on hover with no delay).
+	DisplayName string
 
 	// ParentDir is set ONLY on the up-link FileView. It is the
 	// basename of the parent directory (one level up from the
@@ -508,10 +518,46 @@ func formatType(name string, isDir bool) string {
 // VIDEO thumbnails (independently togglable). A video thumb URL
 // is set only if noVideoThumbs is false; when true, the video card
 // shows the placeholder gradient + play button (no <img>).
+// displayNameForHover returns the filename without its
+// extension, with underscores and hyphens replaced by
+// spaces — for use as a hover tooltip on thumbnails.
+// Per user request 2026-06-30: the visitor sees a
+// human-readable version of the filename on hover,
+// e.g. "misty_bamboo_forest_path.jpg" becomes
+// "misty bamboo forest path".
+//
+// The function is case-preserving (we don't lowercase)
+// and whitespace-collapsing (multiple consecutive
+// separators are replaced by a single space, so
+// "foo__bar.jpg" becomes "foo bar", not "foo  bar").
+//
+// For directories (no extension), the name is returned
+// with separators replaced but no extension to strip.
+// For names with no extension at all, the name is
+// returned unchanged (minus the separator replacements).
+func displayNameForHover(name string) string {
+	// Strip the extension. We use filepath.Ext which handles
+	// both ".jpg" and ".tar.gz" (returns the last extension).
+	ext := filepath.Ext(name)
+	if ext != "" {
+		name = strings.TrimSuffix(name, ext)
+	}
+	// Replace _ and - with spaces. Use strings.NewReplacer
+	// for a single-pass replacement.
+	repl := strings.NewReplacer("_", " ", "-", " ")
+	return repl.Replace(name)
+}
+
 func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideoThumbs bool) FileView {
 	v := FileView{
 		Name: f.Name,
 		Type: formatType(f.Name, f.Kind == KindDir),
+		// Per user request 2026-06-30: pre-compute the
+		// display name for the hover tooltip. The template
+		// uses this for the HTML title attribute (native
+		// browser tooltip on hover) and for a CSS-only
+		// ::after pseudo-element tooltip (custom styled).
+		DisplayName: displayNameForHover(f.Name),
 	}
 	switch f.Kind {
 	case KindDir:

@@ -1176,8 +1176,74 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: none;
   color: inherit;
   transition: border-color 0.12s, transform 0.12s;
+  /* Per user request 2026-06-30: position: relative so the
+     hover tooltip (::before) can be positioned absolutely
+     above the card. Without this, the tooltip would position
+     itself relative to the nearest positioned ancestor
+     (which could be the body, sending the tooltip to the
+     wrong place — typically the top of the page). */
+  position: relative;
 }
 .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+/* Per user request 2026-06-30: on hover, show a custom
+   tooltip with the filename (no extension, with _ and -
+   replaced by spaces). The tooltip is rendered as a
+   ::before pseudo-element on the card, positioned above
+   the card. The content comes from the data-display-name
+   attribute (set by the server in buildFileView via the
+   displayNameForHover helper).
+
+   The native browser tooltip (HTML title attribute) also
+   shows the same text — we set title=.DisplayName in
+   the card HTML (the .DisplayName is the FileView field
+   that buildFileView populates via displayNameForHover).
+   The native tooltip is the accessibility fallback
+   (screen readers, keyboard nav, touch devices); the CSS
+   tooltip is the visual enhancement (no delay, matches
+   the gallery's design).
+
+   The tooltip is positioned absolutely above the card with
+   a small arrow pointing down. Hidden by default
+   (opacity: 0 + visibility: hidden), shown on hover with
+   a fade-in transition. Pointer-events: none so the
+   tooltip doesn't block clicks on the card.
+*/
+.card[data-display-name]:hover::before {
+  content: attr(data-display-name);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.7rem;
+  background: rgba(20, 22, 28, 0.92);
+  color: #f5f5f5;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  z-index: 100;
+  /* Soft drop shadow for the tooltip. */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+/* The small arrow pointing down (from the tooltip to the
+   card). Pure CSS triangle using border tricks. The arrow
+   sits just below the tooltip and above the card. */
+.card[data-display-name]:hover::after {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid rgba(20, 22, 28, 0.92);
+  pointer-events: none;
+  z-index: 100;
+}
 .thumb {
   position: relative;
   width: 100%;
@@ -2144,7 +2210,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" href="{{.Href}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
+      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" data-display-name="{{.DisplayName}}" href="{{.Href}}" title="{{.DisplayName}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
