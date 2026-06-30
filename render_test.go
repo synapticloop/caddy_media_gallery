@@ -4214,6 +4214,76 @@ func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
 // to 1 (the current page might not exist in the new size).
 // Per user request 2026-06-27: "if the page_size changes,
 // then always reset the page to number 1".
+// TestRenderPage_FilterFormPreservesPageSize verifies that
+// the filter-form (which contains the search input and
+// filter checkboxes) preserves the visitor's chosen page
+// size when submitted. Per user request 2026-06-30: the
+// "Search all" form submit was losing the page_size, so
+// the visitor would be reset to the default page size
+// after searching. The fix: add hidden inputs to the
+// filter-form that preserve everything except the
+// form's own fields (q, ext) and the page param.
+func TestRenderPage_FilterFormPreservesPageSize(t *testing.T) {
+	// 100 images, visitor is on page_size=120, page=1, with
+	// a search query "cat". The filter-form should preserve
+	// page_size=120 when the form submits.
+	var files []FileInfo
+	for i := 0; i < 100; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	q := url.Values{
+		"q":         {"cat"},
+		"page_size": {"120"},
+		"sort":      {"name"},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Find the filter-form section. Scope our checks to just
+	// the filter-form so we don't match against the
+	// page-size-form (which legitimately doesn't have a
+	// hidden page_size — the dropdown supplies it).
+	ffStart := strings.Index(html, `class="filter-form"`)
+	if ffStart < 0 {
+		t.Fatal("filter-form not found")
+	}
+	ffEnd := strings.Index(html[ffStart:], "</form>") + ffStart
+	if ffEnd <= ffStart {
+		t.Fatal("filter-form end not found")
+	}
+	ffForm := html[ffStart:ffEnd]
+	// Per user request 2026-06-30: the filter-form MUST
+	// include a hidden page_size input so the visitor's
+	// chosen page size is preserved when they submit the
+	// search form.
+	if !strings.Contains(ffForm, `<input type="hidden" name="page_size" value="120"`) {
+		t.Error(`expected filter-form to include a hidden page_size="120" input (per user request 2026-06-30)`)
+	}
+	// Should also preserve sort, etc.
+	if !strings.Contains(ffForm, `<input type="hidden" name="sort" value="name"`) {
+		t.Error(`expected filter-form to include a hidden sort="name" input`)
+	}
+	// Should NOT include "page" (would carry the page number
+	// into the new search context — confusing).
+	if strings.Contains(ffForm, `name="page"`) {
+		t.Error("expected filter-form to NOT include a hidden page input (reset to page 1 after search)")
+	}
+	// Should NOT include a hidden "q" (the search input
+	// itself supplies it).
+	if strings.Contains(ffForm, `<input type="hidden" name="q"`) {
+		t.Error(`expected filter-form to NOT include a hidden q input (the search input supplies it)`)
+	}
+	// Should NOT include a hidden "ext" (the filter
+	// checkboxes supply it).
+	if strings.Contains(ffForm, `<input type="hidden" name="ext"`) {
+		t.Error(`expected filter-form to NOT include a hidden ext input (the filter checkboxes supply it)`)
+	}
+}
+
 func TestRenderPage_PageSizeChangeResetsToPage1(t *testing.T) {
 	// 100 images, pageSize=60, currently on page 2.
 	var files []FileInfo
@@ -4236,11 +4306,25 @@ func TestRenderPage_PageSizeChangeResetsToPage1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Find the page-size-form section. The other form on the
+	// page (filter-form) legitimately has hidden page_size and
+	// other inputs to preserve the visitor's filter state when
+	// they submit the search/filter form. We only want to
+	// check the page-size-form's hidden inputs.
+	psStart := strings.Index(html, `class="page-size-form"`)
+	if psStart < 0 {
+		t.Fatal("page-size form not found")
+	}
+	psEnd := strings.Index(html[psStart:], "</form>") + psStart
+	if psEnd < 0 {
+		t.Fatal("page-size form end not found")
+	}
+	psForm := html[psStart:psEnd]
 	// The page-size form should NOT include a hidden page
 	// input (because we exclude it). The current page param
 	// is in the URL but the form's hidden inputs should not
 	// include it.
-	if strings.Contains(html, `name="page"`) {
+	if strings.Contains(psForm, `name="page"`) {
 		t.Error("expected the page-size form to NOT include a hidden page input (so changing page size resets to page 1)")
 	}
 	// The form should also NOT include a hidden page_size
@@ -4248,7 +4332,7 @@ func TestRenderPage_PageSizeChangeResetsToPage1(t *testing.T) {
 	// has duplicate "page_size" fields (hidden + select),
 	// which builds a messy URL with both values on submit.
 	// Per user report 2026-06-27.
-	if strings.Contains(html, `<input type="hidden" name="page_size"`) {
+	if strings.Contains(psForm, `<input type="hidden" name="page_size"`) {
 		t.Error("expected the page-size form to NOT include a hidden page_size input (the dropdown supplies it)")
 	}
 	// The form's other hidden inputs (sort, etc.) should

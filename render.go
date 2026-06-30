@@ -3710,6 +3710,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
         {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
+      {{- /* Preserve other URL params (sort, page_size, etc.) when submitting. */ -}}
+      {{- /* Per user request 2026-06-30: include page_size so changing */ -}}
+      {{- /* the search query keeps the visitor's chosen page size. */ -}}
+      {{- /* The "q" and "ext" are submitted by the form's own inputs */ -}}
+      {{- /* (search input and checkboxes), so we exclude them. */ -}}
+      {{- /* "page" is excluded so the visitor starts on page 1 of the */ -}}
+      {{- /* new filter set. */ -}}
+      {{- queryToHiddenInputsExclude $.Query "page" "q" "ext" -}}
       <div class="filter-row">
         <span class="filter-label">Type Filter</span>
 
