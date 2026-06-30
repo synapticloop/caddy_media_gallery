@@ -1,8 +1,13 @@
 package gallery
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dsoprea/go-exif/v3"
@@ -289,4 +294,108 @@ func formatFocalLengthMm(num, denom uint32) string {
 		return fmt.Sprintf("%d mm", int64(fl))
 	}
 	return fmt.Sprintf("%.1f mm", fl)
+}
+
+
+// exifMetaPath returns the sidecar EXIF metadata file path for
+// the given source file. Same scheme as dimsMetaPath and
+// thumbCachePath: SHA-256 of the absolute source path,
+// truncated to 16 bytes, hex-encoded. The sidecar sits next
+// to the thumb and dims sidecar in the cache dir.
+//
+// Filename: "{hash}.{thumbExt}.exif" — the .exif suffix
+// distinguishes it from .meta (dimensions) and .webp (the
+// thumb itself). All three files for the same source share
+// the same hash, so they're colocated in the cache dir and
+// cache eviction handles them as a unit.
+func exifMetaPath(src, cacheDir, thumbExt string) string {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		abs = src
+	}
+	h := sha256.Sum256([]byte(abs))
+	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".exif")
+}
+
+// exifSidecar is the JSON shape stored in the .exif sidecar.
+// We wrap the data in {has, data} so a sidecar that records
+// "no EXIF" can be distinguished from one that records
+// actual EXIF data — both are valid cached results, but
+// they mean different things to the caller.
+type exifSidecar struct {
+	Has   bool      `json:"has"`
+	Data  *ExifData `json:"data,omitempty"`
+}
+
+// readExifCached returns the EXIF data for the source file
+// at path, using a sidecar .exif file in the thumb cache
+// dir for fast lookups. Per user request 2026-06-29: this
+// complements the LAZY-EXIF design where the lightbox fetches
+// EXIF on open via the ?exif=1 endpoint. The sidecar makes
+// subsequent lightbox opens (prev/next navigation, closing
+// and reopening the same image) instant — no image header
+// re-parse.
+//
+// Behaviour:
+//
+//  1. If a sidecar exists at the expected path, parse it
+//     and return. The JSON includes a "has" flag; we
+//     return the parsed ExifData (or nil if has=false).
+//  2. If no sidecar, call readExif() (image header parse,
+//     ~1-5ms) and write the sidecar for next time. We
+//     write a sidecar for BOTH the "has EXIF" and the
+//     "no EXIF" cases — the latter so we don't re-parse
+//     files that have no EXIF block on every lightbox
+//     open.
+//  3. If the sidecar is malformed (partial write, old
+//     version, etc.), fall through to a fresh read and
+//     overwrite. Self-healing.
+//
+// cacheDir is the thumb cache dir. thumbExt is the thumb
+// extension (e.g. "webp"). When cacheDir is empty
+// (unit-mode tests), we fall back to a direct readExif.
+func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
+	if cacheDir == "" {
+		// No cache dir — fall back to direct read.
+		return readExif(path)
+	}
+	metaPath := exifMetaPath(path, cacheDir, thumbExt)
+	// Try the sidecar first.
+	if data, err := os.ReadFile(metaPath); err == nil {
+		var sidecar exifSidecar
+		if jsonErr := json.Unmarshal(data, &sidecar); jsonErr == nil {
+			// Valid sidecar — return whether we have EXIF
+			// or not. Caller checks for nil data.
+			if !sidecar.Has {
+				return nil, nil
+			}
+			return sidecar.Data, nil
+		}
+		// Malformed sidecar — fall through to a fresh read
+		// and overwrite (self-healing). Could happen if a
+		// previous version wrote a different format.
+	}
+	// Cache miss: do the real read.
+	exif, err := readExif(path)
+	if err != nil {
+		return nil, err
+	}
+	// Build the sidecar and write it. We write a sidecar
+	// for BOTH the has-EXIF and no-EXIF cases so we don't
+	// re-parse on every subsequent lightbox open.
+	sidecar := exifSidecar{Has: exif != nil, Data: exif}
+	jsonData, jsonErr := json.Marshal(sidecar)
+	if jsonErr != nil {
+		// Marshal failure is unlikely (all fields are
+		// strings). If it happens, we just return the data
+		// without caching — the next call will retry.
+		return exif, err
+	}
+	// Best-effort write: if the write fails, we still
+	// return the data correctly. The next call just
+	// re-parses the source (no correctness issue, just a
+	// small perf cost).
+	_ = os.MkdirAll(cacheDir, 0o755)
+	_ = os.WriteFile(metaPath, jsonData, 0o644)
+	return exif, err
 }

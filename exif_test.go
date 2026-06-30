@@ -1,6 +1,8 @@
 package gallery
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -212,5 +214,156 @@ func TestFormatFocalLengthMm(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("formatFocalLengthMm(%d, %d): got %q, want %q", tc.num, tc.denom, got, tc.want)
 		}
+	}
+}
+
+
+// TestReadExifCached_FirstReadWritesSidecar verifies the
+// first call to readExifCached parses the source image's
+// EXIF block AND writes a sidecar .exif file in the thumb
+// cache dir. Per user request 2026-06-29: the sidecar is
+// the optimisation — the first lightbox open of a file
+// pays the parse cost (~1-5ms), every subsequent open
+// reads the sidecar (one small file read, no image parsing).
+func TestReadExifCached_FirstReadWritesSidecar(t *testing.T) {
+	// Use a real fixture that has EXIF.
+	path := "/var/www/html/images/media_gallery/misty_bamboo_forest_path.jpg"
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("fixture not available: %s", path)
+		return
+	}
+	cacheDir, err := os.MkdirTemp("", "exif-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// First read: parses source + writes sidecar.
+	exif, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif == nil {
+		t.Fatal("expected EXIF data from fixture, got nil")
+	}
+	// Verify the sidecar was written.
+	abs, _ := filepath.Abs(path)
+	h := sha256.Sum256([]byte(abs))
+	wantPath := filepath.Join(cacheDir, hex.EncodeToString(h[:16])+".webp.exif")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Errorf("sidecar not written at %s: %v", wantPath, err)
+	}
+}
+
+// TestReadExifCached_SecondReadUsesSidecar verifies the
+// second call reads the sidecar (fast) without re-parsing
+// the source image. We OVERWRITE the source with garbage
+// after the first call; the second call must still return
+// the cached EXIF (proving the sidecar was used, not a
+// re-parse). If the function re-parsed the source, the
+// second call would fail with a parse error.
+func TestReadExifCached_SecondReadUsesSidecar(t *testing.T) {
+	path := "/var/www/html/images/media_gallery/misty_bamboo_forest_path.jpg"
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("fixture not available: %s", path)
+		return
+	}
+	cacheDir, err := os.MkdirTemp("", "exif-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// First read: parse the source + write sidecar.
+	exif1, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif1 == nil {
+		t.Fatal("first read: expected EXIF data, got nil")
+	}
+	// Overwrite the source with garbage. The second read
+	// should still succeed because it uses the sidecar. We
+	// back up the original bytes first so we can restore the
+	// fixture after the test runs (other tests depend on
+	// the fixture being a valid JPEG with real EXIF).
+	origBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.WriteFile(path, origBytes, 0o644)
+	})
+	if err := os.WriteFile(path, []byte("not a valid image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exif2, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Errorf("second read: got error %v (should use sidecar, not re-parse)", err)
+	}
+	if exif2 == nil {
+		t.Errorf("second read: got nil (should have returned cached EXIF)")
+	}
+	// The cached values should match the first read.
+	if exif1 != nil && exif2 != nil {
+		if exif1.CameraMake != exif2.CameraMake || exif1.CameraModel != exif2.CameraModel {
+			t.Errorf("cached EXIF differs from first read: %+v vs %+v", exif1, exif2)
+		}
+	}
+}
+
+// TestReadExifCached_NoExifCachesEmpty verifies the sidecar
+// is written for the "no EXIF" case too. This avoids repeated
+// re-parsing of files that don't have an EXIF block (the
+// most common case for casual photos).
+func TestReadExifCached_NoExifCachesEmpty(t *testing.T) {
+	// Use a real fixture that has NO EXIF (elderly_man, misty_bamboo,
+	// potted_succulent all have EXIF — pick another image).
+	path := "/var/www/html/images/media_gallery/tulip_field_dutch_garden_colorful.webp"
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("fixture not available: %s", path)
+		return
+	}
+	cacheDir, err := os.MkdirTemp("", "exif-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// First read: should return nil (no EXIF) AND write the
+	// "no EXIF" sidecar so subsequent reads don't re-parse.
+	exif, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif != nil {
+		t.Errorf("expected no EXIF for %s, got: %+v", filepath.Base(path), exif)
+	}
+	// Verify the sidecar was written (with has=false).
+	abs, _ := filepath.Abs(path)
+	h := sha256.Sum256([]byte(abs))
+	wantPath := filepath.Join(cacheDir, hex.EncodeToString(h[:16])+".webp.exif")
+	data, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Errorf("sidecar not written at %s: %v", wantPath, err)
+		return
+	}
+	if !strings.Contains(string(data), `"has":false`) {
+		t.Errorf("sidecar should record has=false for files without EXIF, got: %q", string(data))
+	}
+}
+
+// TestReadExifCached_NoCacheDir verifies the function falls
+// back to the direct readExif when cacheDir is empty (e.g.
+// unit-mode tests, no_thumbs mode).
+func TestReadExifCached_NoCacheDir(t *testing.T) {
+	path := "/var/www/html/images/media_gallery/misty_bamboo_forest_path.jpg"
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("fixture not available: %s", path)
+		return
+	}
+	exif, err := readExifCached(path, "", "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif == nil {
+		t.Fatal("expected EXIF data, got nil")
 	}
 }

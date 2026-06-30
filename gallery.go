@@ -681,11 +681,35 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 				http.Error(w, "exif not available for this file type", http.StatusNotFound)
 				return nil
 			}
-			exif, err := readExif(resolved)
-			if err != nil || exif == nil {
-				// Most images have no EXIF block — that's not an
-				// error, just an empty result. Return has=false
-				// so the lightbox hides the panel cleanly.
+			// Per user request 2026-06-29: use readExifCached
+			// to use a sidecar .exif file in the thumb cache
+			// dir when available. The first lightbox open of
+			// a file parses the source (~1-5ms) AND writes
+			// the sidecar; subsequent opens read the sidecar
+			// directly (one small file read, no image parse).
+			// The sidecar is written for BOTH the has-EXIF
+			// and no-EXIF cases, so files without EXIF are
+			// also cached (avoids repeated re-parsing).
+			thumbExt := g.ThumbFormat
+			if thumbExt == "" {
+				thumbExt = "webp"
+			}
+			exif, err := readExifCached(resolved, g.thumbCacheDir(), thumbExt)
+			if err != nil {
+				// I/O error reading the source — log it but
+				// still return a clean has=false so the
+				// lightbox hides the panel. (We don't surface
+				// 5xx to the browser for what is a "no data"
+				// outcome from the user's perspective.)
+				fmt.Fprintf(os.Stderr, "readExifCached(%s): %v\n", resolved, err)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"has":false}`))
+				return nil
+			}
+			if exif == nil {
+				// File has no EXIF block (or sidecar says so).
+				// Return has=false so the lightbox hides the
+				// panel cleanly.
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte(`{"has":false}`))
 				return nil
