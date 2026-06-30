@@ -345,7 +345,7 @@ func TestReadExifCached_NoExifCachesEmpty(t *testing.T) {
 		t.Errorf("sidecar not written at %s: %v", wantPath, err)
 		return
 	}
-	if !strings.Contains(string(data), `"has":false`) {
+	if !strings.Contains(string(data), "has=false") {
 		t.Errorf("sidecar should record has=false for files without EXIF, got: %q", string(data))
 	}
 }
@@ -365,5 +365,184 @@ func TestReadExifCached_NoCacheDir(t *testing.T) {
 	}
 	if exif == nil {
 		t.Fatal("expected EXIF data, got nil")
+	}
+}
+
+
+// TestWriteExifSidecar verifies the text sidecar format
+// produced by writeExifSidecar. Per user request 2026-06-29:
+// the EXIF sidecar uses a plain text key=value format
+// (smaller, faster parse, no encoding/json dependency)
+// instead of JSON.
+func TestWriteExifSidecar(t *testing.T) {
+	t.Run("nil exif → has=false", func(t *testing.T) {
+		data := writeExifSidecar(nil)
+		want := "has=false\n"
+		if string(data) != want {
+			t.Errorf("got %q, want %q", string(data), want)
+		}
+	})
+	t.Run("full exif → has=true + all fields", func(t *testing.T) {
+		exif := &ExifData{
+			CameraMake:   "Sony",
+			CameraModel:  "ILCE-7M4",
+			LensModel:    "FE 70-200mm F2.8 GM OSS II",
+			DateTaken:    "2024:11:08 06:23:14",
+			ExposureTime: "1/250 s",
+			Aperture:     "f/4",
+			ISO:          "ISO 800",
+			FocalLength:  "135 mm",
+		}
+		data := writeExifSidecar(exif)
+		s := string(data)
+		// Must start with has=true
+		if !strings.HasPrefix(s, "has=true\n") {
+			t.Errorf("sidecar should start with has=true, got: %q", s)
+		}
+		// All fields should be present
+		for _, want := range []string{
+			"CameraMake=Sony",
+			"CameraModel=ILCE-7M4",
+			"LensModel=FE 70-200mm F2.8 GM OSS II",
+			"DateTaken=2024:11:08 06:23:14",
+			"ExposureTime=1/250 s",
+			"Aperture=f/4",
+			"ISO=ISO 800",
+			"FocalLength=135 mm",
+		} {
+			if !strings.Contains(s, want+"\n") {
+				t.Errorf("sidecar should contain %q, got: %q", want, s)
+			}
+		}
+	})
+	t.Run("partial exif → has=true + only set fields", func(t *testing.T) {
+		exif := &ExifData{
+			CameraMake: "Fujifilm",
+			// everything else empty
+		}
+		data := writeExifSidecar(exif)
+		s := string(data)
+		if !strings.HasPrefix(s, "has=true\n") {
+			t.Errorf("sidecar should start with has=true, got: %q", s)
+		}
+		if !strings.Contains(s, "CameraMake=Fujifilm\n") {
+			t.Errorf("sidecar should contain CameraMake, got: %q", s)
+		}
+		// Should NOT contain the empty fields
+		if strings.Contains(s, "CameraModel=") {
+			t.Errorf("sidecar should NOT contain empty CameraModel=, got: %q", s)
+		}
+		if strings.Contains(s, "LensModel=") {
+			t.Errorf("sidecar should NOT contain empty LensModel=, got: %q", s)
+		}
+	})
+}
+
+// TestParseExifSidecar verifies the text sidecar parser.
+func TestParseExifSidecar(t *testing.T) {
+	t.Run("has=false → nil (no EXIF)", func(t *testing.T) {
+		data := []byte("has=false\n")
+		exif := parseExifSidecar(data)
+		if exif != nil {
+			t.Errorf("parseExifSidecar(has=false) should return nil, got: %+v", exif)
+		}
+	})
+	t.Run("has=true + fields → parsed ExifData", func(t *testing.T) {
+		data := []byte(`has=true
+CameraMake=Fujifilm
+CameraModel=X-T5
+LensModel=XF 16-55mm F2.8 R LM WR
+DateTaken=2024:09:15 07:48:21
+ExposureTime=1/60 s
+Aperture=f/5.6
+ISO=ISO 1600
+FocalLength=23 mm
+`)
+		exif := parseExifSidecar(data)
+		if exif == nil {
+			t.Fatal("parseExifSidecar should return non-nil")
+		}
+		if exif.CameraMake != "Fujifilm" {
+			t.Errorf("CameraMake: got %q, want Fujifilm", exif.CameraMake)
+		}
+		if exif.CameraModel != "X-T5" {
+			t.Errorf("CameraModel: got %q, want X-T5", exif.CameraModel)
+		}
+		if exif.LensModel != "XF 16-55mm F2.8 R LM WR" {
+			t.Errorf("LensModel: got %q", exif.LensModel)
+		}
+		if exif.FocalLength != "23 mm" {
+			t.Errorf("FocalLength: got %q, want 23 mm", exif.FocalLength)
+		}
+	})
+	t.Run("malformed (no has= prefix) → nil", func(t *testing.T) {
+		data := []byte("garbage data\nCameraMake=Foo\n")
+		exif := parseExifSidecar(data)
+		if exif != nil {
+			t.Errorf("malformed sidecar should return nil, got: %+v", exif)
+		}
+	})
+	t.Run("unknown keys are ignored (forward compat)", func(t *testing.T) {
+		data := []byte(`has=true
+CameraMake=Sony
+SomeFutureField=foo
+`)
+		exif := parseExifSidecar(data)
+		if exif == nil {
+			t.Fatal("should parse has=true")
+		}
+		if exif.CameraMake != "Sony" {
+			t.Errorf("CameraMake: got %q", exif.CameraMake)
+		}
+		// SomeFutureField is ignored (forward compatibility)
+	})
+}
+
+// TestReadExifCached_UsesTextFormat verifies the full flow
+// of writing a text sidecar and reading it back.
+func TestReadExifCached_UsesTextFormat(t *testing.T) {
+	tmp, err := os.MkdirTemp("", "exif-text-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmp)
+	// Create a source file so exifMetaPath can hash it.
+	srcPath := tmp + "/src.jpg"
+	if err := os.WriteFile(srcPath, []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Compute the actual sidecar path the helper would use
+	// (so the helper finds our pre-populated sidecar).
+	sidecarPath := exifMetaPath(srcPath, tmp, "webp")
+	sidecarContent := `has=true
+CameraMake=Canon
+CameraModel=EOS R5
+`
+	if err := os.WriteFile(sidecarPath, []byte(sidecarContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exif, err := readExifCached(srcPath, tmp, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif == nil {
+		t.Fatal("expected non-nil exif")
+	}
+	if exif.CameraMake != "Canon" {
+		t.Errorf("CameraMake: got %q, want Canon", exif.CameraMake)
+	}
+	if exif.CameraModel != "EOS R5" {
+		t.Errorf("CameraModel: got %q, want EOS R5", exif.CameraModel)
+	}
+	// Verify the sidecar IS in text format (not JSON)
+	data, err := os.ReadFile(sidecarPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "has=true") {
+		t.Errorf("sidecar should be in text format, got: %q", string(data))
+	}
+	if strings.Contains(string(data), `{"has":`) {
+		t.Errorf("sidecar should NOT be in JSON format, got: %q", string(data))
 	}
 }
