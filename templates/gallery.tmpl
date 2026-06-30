@@ -1106,19 +1106,32 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg);
 }
 
-/* Phase 118: cards that don't match the current search get
-   this class. visibility: collapse is the grid-aware collapse
-   (entire rows that have no matches collapse too, so matches
-   cluster at the top rather than scattering through empty
-   grid cells). opacity: 0 + transition gives the fade. */
+/* Per user request 2026-06-30: cards that don't match the
+   current search are now GREYED OUT instead of hidden. The
+   cards stay in their grid positions (so the layout doesn't
+   reflow and matches don't cluster at the top), but they're
+   dimmed (opacity 0.25) and not clickable (pointer-events:
+   none). The greyed-out state gives the visitor spatial
+   context — they can still see what's in the directory and
+   where the matches are relative to non-matches.
+
+   Why greyed-out instead of hidden:
+   - Spatial context: the visitor can see the matches in
+     relation to the rest of the directory
+   - Less jarring: no reflow when typing
+   - Better for small directories: if the user is looking
+     for a file, they can see the surrounding context
+   - Accessibility: the items are still in the DOM, but
+     pointer-events: none + tabindex=-1 + aria-hidden=true
+     (set in JS) keep them out of the focus/click path
+*/
 .card,
 .files-table tbody tr {
   transition: opacity 0.2s;
 }
 .card.filtered-out,
 .files-table tbody tr.filtered-out {
-  visibility: collapse;
-  opacity: 0;
+  opacity: 0.25;
   pointer-events: none;
   /* Defensive: tabindex/aria-hidden are toggled in JS too so
      screen readers and keyboard users skip them. */
