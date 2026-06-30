@@ -4464,8 +4464,12 @@ func TestRenderPage_PageSizeAllDropdownSelected(t *testing.T) {
 }
 
 // TestRenderPage_SearchHeader_FormSubmitted verifies the media
-// header shows "Media (showing N of M)" when the visitor submits
-// the search form (URL has ?q=). Per user request 2026-06-28.
+// header format when the visitor submits the search form (URL
+// has ?q=). Per user request 2026-06-30: the format is
+// "search showing M of N" where M = matches on this page and
+// N = total filtered results in the directory. NO "<em>This
+// page</em>" suffix — that's only for the JS-only search case
+// (where the filter only sees the current page).
 func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	var files []FileInfo
 	for i := 0; i < 8; i++ {
@@ -4485,18 +4489,29 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Per user request 2026-06-28: the new search header
-	// format is "search showing M of N <em>This page</em>"
-	// where M = matches on this page, N = total search
-	// results in the directory (for form-submitted search;
-	// for JS-only, N would be the on-page capacity).
 	// With 10 files (8 don't match "cat", 2 do), pageSize=30,
 	// all on page 1: M=2, N=2 (the 2 matching files).
 	if !strings.Contains(html, "search showing 2 of 2") {
 		t.Error(`expected "search showing 2 of 2" in HTML when ?q=cat matches 2 files`)
 	}
-	if !strings.Contains(html, "This page</em>") {
-		t.Error(`expected "<em>This page</em>" suffix in the search header`)
+	// Per user request 2026-06-30: form-submitted search
+	// does NOT include "<em>This page</em>" — the pagination
+	// already shows the total filtered context, so we don't
+	// need the "this page" qualifier. Check ONLY the rendered
+	// header span (data-search-header), not the entire HTML —
+	// the JS source contains "<em>This page</em>" as a string
+	// literal in the updateSearchHeader function.
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		t.Fatal("could not find data-search-header span")
+	}
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd < 0 {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart : headerSpanEnd]
+	if strings.Contains(headerSpan, "This page</em>") {
+		t.Errorf(`form-submitted search header should NOT include "<em>This page</em>"; got: %s`, headerSpan)
 	}
 }
 
@@ -4541,10 +4556,12 @@ func TestRenderPage_SearchHeader_NoSearch(t *testing.T) {
 	}
 }
 
-// TestRenderPage_SearchHeader_FormatWithThisPage verifies the
-// new search header format includes "<em>This page</em>" and
-// the per-page counts. Per user request 2026-06-28.
-func TestRenderPage_SearchHeader_FormatWithThisPage(t *testing.T) {
+// TestRenderPage_SearchHeader_FormatFormSubmitted verifies the
+// new search header format for form-submitted search:
+// "search showing M of N" where M = matches on this page,
+// N = total filtered results in the directory. NO
+// "<em>This page</em>" suffix. Per user request 2026-06-30.
+func TestRenderPage_SearchHeader_FormatFormSubmitted(t *testing.T) {
 	// 10 files, 3 of which match "cat"
 	var files []FileInfo
 	for i := 0; i < 7; i++ {
@@ -4569,14 +4586,90 @@ func TestRenderPage_SearchHeader_FormatWithThisPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	// M=3 (matches on this page), N=3 (total in directory after
-	// search filter — the user clarified N is "total search
-	// results" for form-submitted). With 10 files, 3 match
-	// "cat", pageSize=30, all on page 1: M=3, N=3.
+	// search filter). Per user request 2026-06-30: form-submitted
+	// search header has NO "<em>This page</em>" suffix — the
+	// pagination context already shows the total filtered count.
 	if !strings.Contains(html, "search showing 3 of 3") {
 		t.Error(`expected "search showing 3 of 3" in HTML when 3 files match "cat"`)
 	}
-	if !strings.Contains(html, "<em>This page</em>") {
-		t.Error(`expected "<em>This page</em>" suffix in the search header`)
+	// Check ONLY the rendered header span (data-search-header),
+	// not the entire HTML.
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		t.Fatal("could not find data-search-header span")
+	}
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd < 0 {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart : headerSpanEnd]
+	if strings.Contains(headerSpan, "This page</em>") {
+		t.Errorf(`form-submitted search header should NOT include "<em>This page</em>"; got: %s`, headerSpan)
+	}
+}
+
+// TestRenderPage_SearchHeader_FormatJSSearch verifies the
+// search header format for JS-only search (typing in the
+// search box, no form submit). Per user request 2026-06-30:
+// the format is "search showing M of N <em>This page</em>"
+// where M = visible cards on this page, N = page size.
+// "This page" qualifier is included because the JS filter
+// only sees the current page (it doesn't know about
+// other pages).
+func TestRenderPage_SearchHeader_FormatJSSearch(t *testing.T) {
+	// 10 files, 3 of which match "cat"
+	var files []FileInfo
+	for i := 0; i < 7; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "cat-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "my-cat.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "another-cat.webp", ModTime: 102, Size: 1024, Kind: KindImage,
+	})
+	// No ?q= in the URL — this is the JS-only case. The
+	// search input's value is set via the input itself,
+	// not via the URL. The pageSize is 30 (the per-page
+	// limit). The JS uses OnPageTotalCount as N when
+	// IsServerSearchActive is false.
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// JS search: SearchQuery is empty (no ?q=), so the
+	// header shows the default "Media (10)" format. The
+	// "This page" qualifier is for the JS-set header text
+	// (captured by updateSearchHeader when the user types).
+	if !strings.Contains(html, "Media (10") {
+		t.Error(`expected "Media (10" in HTML when no search is active`)
+	}
+	// Check ONLY the rendered header span (data-search-header),
+	// not the entire HTML — the JS source code at the bottom
+	// of the page contains "<em>This page</em>" as a string
+	// literal in the updateSearchHeader function.
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		// DEBUG: show context
+		idx2 := strings.Index(html, "search-header")
+		if idx2 >= 0 {
+			t.Logf("found search-header at %d: ...%s...", idx2, html[max(0,idx2-80):idx2+150])
+		}
+		t.Fatal("could not find data-search-header span")
+	}
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd < 0 {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart : headerSpanEnd]
+	if strings.Contains(headerSpan, "This page</em>") {
+		t.Errorf(`no-search header should NOT include "<em>This page</em>"; got: %s`, headerSpan)
 	}
 }
 

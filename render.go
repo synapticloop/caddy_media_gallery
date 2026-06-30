@@ -3939,7 +3939,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header>{{if .SearchQuery}}{{if eq .OnPageMatchedCount 0}}search showing 0 of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}} <em>This page</em>{{else}}search showing {{.OnPageMatchedCount}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}} <em>This page</em>{{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span>{{end}}</span>
+      <span data-search-header>{{if .SearchQuery}}search showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}{{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
