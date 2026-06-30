@@ -103,7 +103,7 @@ producer to set them:
 | `page` | integer &gt;= 1 | `1` | Which page (only meaningful when there are > 1 pages) |
 | `page_size` | any value in the operator-configured `page_sizes` list | first item | Visitor's per-page selection (driven by the dropdown). Changing this resets the visitor to page 1. Unknown values fall back to the first item. |
 | `q` | free text (URL-encoded) | (none) | Server-side filename search. Combined with the visitor's `search_match` mode. Directories are never filtered. |
-| `type` | comma-separated list of extensions (e.g. `jpg,png`) | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). |
+| `type` | comma-separated list of extensions (e.g. `jpg,png`), or the sentinel `.` for files without an extension | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). Use `ext=.` (literal dot) to filter to only files with no extension (e.g. `Makefile`, `welcome`). |
 | `dirs_sort` / `dirs_order` | same as the main sort | `name asc` | Sort the Directories and Other Files tables. Header click is client-side (persists in `data-search-match`-style attributes + localStorage). |
 
 **Deliberately NOT query-overridable:**

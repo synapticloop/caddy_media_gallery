@@ -121,7 +121,19 @@ match just works.
 The "Type Filter" dropdown has checkboxes for Images / Videos /
 Other, with the count of each type next to the label. Checking
 "Images" + "Videos" (unchecking "Other") filters out non-media
-files. The "All" pill resets the filter.
+files. The "Reset" pill resets the filter.
+
+**The `(none)` entry** — the Other dropdown includes a
+special `(none)` option for files that don't have an
+extension (e.g. `Makefile`, `welcome`). When checked,
+ONLY files without an extension are shown — no `.md`,
+no `.txt`, no other recognized extension. The form value
+is the sentinel `.` (a literal dot) which can't be a real
+file extension; `parseTypeFilter` translates it to the
+empty-string filter key, and `applyTypeFilter` checks
+`filter[""]` to apply the strict filter. Multi-select
+works as expected: checking `(none)` + `.md` shows files
+matching either condition.
 
 The filter is applied both server-side (when the form is
 submitted) and via the URL (`?type=jpg&type=png`). Directories

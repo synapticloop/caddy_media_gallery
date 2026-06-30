@@ -54,6 +54,21 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 - `d36ded2` refactor: EXIF sidecar keys use Human-Readable names (matching lightbox labels)
 - `6f6b9f6` refactor: EXIF sidecar uses plain text format (no JSON) for speed
 
+### Other filter — `(none)` entry
+- `e029117` feat: include `(none)` entry in Other dropdown for files without extensions
+  - Files like `Makefile` or `welcome` (no extension) now appear in the Other dropdown
+  - Two bugs fixed: directories without extension no longer counted as files; files with no extension no longer silently skipped
+- `df15d41` fix: `(none)` is a strict filter — only show files without an extension
+  - Sentinel value `.` (literal dot) in the form (can't be a real file extension)
+  - `parseTypeFilter` translates `.` to `""` in the filter map
+  - `applyTypeFilter` checks `filter[""]` for the strict no-extension filter
+  - Multi-select OR logic: `?ext=.&ext=.md` shows files matching either
+
+### Documentation
+- `439e937` docs: add CHANGELOG.md with all commits grouped by date and category
+- `47a30b4` docs: refresh screenshots to show EXIF pill on strawberry (after `no_exif` removed from localhost bypass)
+- `3249e2c` docs: update README with new features (EXIF pill, hover tooltip, + Parent Directory, sidecars, //go:embed)
+
 ---
 
 ## 2026-06-29
