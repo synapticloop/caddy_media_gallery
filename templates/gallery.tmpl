@@ -2087,7 +2087,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
-      <span>Directories ({{len .Subdirs}}{{if .Up}} // +1 parent{{end}})</span>
+      <span>Directories ({{len .Subdirs}}{{if .Up}} <em>+ Parent Directory</em>{{end}})</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
     </h2>
