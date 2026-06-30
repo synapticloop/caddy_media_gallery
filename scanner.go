@@ -295,28 +295,39 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 			Size:    info.Size(),
 			Kind:    kind,
 		}
-		// EXIF reading is LAZY — we no longer read EXIF at
-		// scan time. Per user request 2026-06-29: the EXIF
-		// is read only when the lightbox is opened (via a
-		// separate ?exif=1 endpoint), not eagerly during
-		// the initial directory scan. The trade-off:
+		// Per user request 2026-06-29: EXIF is EAGERLY read
+		// at scan time, with the result written to a
+		// .exif sidecar in the thumb cache dir. The first
+		// scan pays the EXIF parse cost (~1-5ms per image)
+		// AND writes the sidecar. Subsequent scans read
+		// the sidecar (one small JSON read, no image parse)
+		// so they're nearly instant.
 		//
-		//   EAGER (old): every image's EXIF is read at scan
-		//     time (~1-5ms per image). Card overlay shows
-		//     the "EXIF" pill immediately. Lightbox EXIF
-		//     panel pops in instantly. Heavy up-front cost
-		//     but no async fetches.
-		//
-		//   LAZY (new): no EXIF reading at scan time. The
-		//     "EXIF" pill is gone (we don't know if EXIF
-		//     exists until the lightbox opens). Lightbox
-		//     makes an async fetch (~50-200ms round trip)
-		//     to populate the EXIF panel.
+		// The card template renders the "EXIF" pill from
+		// FileInfo.Exif (populated from the sidecar). The
+		// lightbox reads the EXIF data from data-exif-*
+		// attributes on the card (inline in the HTML) —
+		// no async fetch needed. This brings back the
+		// pill UX (nice to have at a glance on the gallery
+		// page) without the slow lightbox-open cost.
 		//
 		// The no_exif Caddyfile directive still works — when
-		// set, the gallery's EXIF endpoint returns 404 (or
-		// empty) so the lightbox never gets data.
-		// Read pixel dimensions for images and videos. Per user
+		// set, we skip the EXIF read+sidecar write entirely
+		// so the pill never appears and the lightbox has
+		// no EXIF data to read.
+		if kind == KindImage && !s.NoExif {
+			fullPath := filepath.Join(s.Root, e.Name())
+			// First try the .exif sidecar. If it exists and
+			// is valid, use it (avoids re-parsing the source
+			// on every scan). Otherwise parse the source and
+			// write the sidecar for next time.
+			exif, err := readExifCached(fullPath, s.ThumbCacheDir, s.ThumbFormat)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "readExif(%s): %v\n", fullPath, err)
+			} else {
+				fi.Exif = exif
+			}
+		}// Read pixel dimensions for images and videos. Per user
 		// request 2026-06-27: the watermark at the bottom-right
 		// of the thumbnail shows the W × H of the source file.
 		// AVIF, HEIC, SVG are NOT supported (per user request);

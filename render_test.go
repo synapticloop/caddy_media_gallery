@@ -4619,13 +4619,15 @@ func TestRenderPage_SearchHeader_ServerRendersCorrectly(t *testing.T) {
 
 
 
-// TestRenderPage_NoExifPillOnCards verifies that NO EXIF pill
-// is rendered on the card overlay. Per user request 2026-06-29:
-// EXIF is now read lazily (on lightbox open via the ?exif=1
-// endpoint), not at scan time. Since we don't know if a file
-// has EXIF until the lightbox opens, we can't show the pill
-// on the card. The pill is removed from the template entirely.
-func TestRenderPage_NoExifPillOnCards(t *testing.T) {
+
+// TestRenderPage_ExifPillAppearsWhenExifPresent verifies the
+// "EXIF" pill appears on the card overlay below the filetype
+// chip when FileInfo.Exif is populated. Per user request
+// 2026-06-29: EXIF is now read EAGERLY at scan time (with
+// the result cached in a .exif sidecar), so the card
+// overlay can show the EXIF pill immediately without an
+// async fetch.
+func TestRenderPage_ExifPillAppearsWhenExifPresent(t *testing.T) {
 	files := []FileInfo{
 		{
 			Name: "with_exif.jpg", Kind: KindImage, Size: 1024,
@@ -4638,22 +4640,21 @@ func TestRenderPage_NoExifPillOnCards(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No exif-chip element on the card.
-	if strings.Contains(html, `class="exif-chip"`) {
-		t.Error("EXIF pill should NOT appear on cards (EXIF is now lazy)")
+	if !strings.Contains(html, `<span class="exif-chip"`) {
+		t.Error("expected EXIF chip to appear on the card when image has EXIF")
 	}
-	// No data-exif-* attributes on the card either.
-	if strings.Contains(html, `data-exif-`) {
-		t.Error("data-exif-* attributes should NOT be on cards (EXIF is now lazy)")
+	if !strings.Contains(html, `>EXIF<`) {
+		t.Error("expected EXIF chip text to be 'EXIF'")
 	}
 }
 
-// TestRenderPage_NoExifDataAttributesEvenWhenExifSet verifies
-// that even when FileInfo.Exif is populated (legacy/test
-// scenarios), the template does NOT render the EXIF pill or
-// data-exif-* attributes. The template should treat Exif as
-// always-nil for rendering purposes.
-func TestRenderPage_NoExifDataAttributesEvenWhenExifSet(t *testing.T) {
+// TestRenderPage_ExifDataAttributesWhenExifSet verifies the
+// card <a> has the data-exif-* attributes when FileInfo.Exif
+// is populated. The lightbox reads these attributes to
+// populate the EXIF panel synchronously (no async fetch
+// needed). The end result: instant EXIF panel display
+// when the lightbox opens.
+func TestRenderPage_ExifDataAttributesWhenExifSet(t *testing.T) {
 	files := []FileInfo{
 		{
 			Name: "with_exif.jpg", Kind: KindImage, Size: 1024,
@@ -4670,19 +4671,66 @@ func TestRenderPage_NoExifDataAttributesEvenWhenExifSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Even when Exif is set, the card has no data-exif-* attrs.
+	// The card <a> should have all 8 data-exif-* attributes.
 	for _, attr := range []string{
-		"data-exif-camera-make",
-		"data-exif-camera-model",
-		"data-exif-lens",
-		"data-exif-date",
-		"data-exif-shutter",
-		"data-exif-aperture",
-		"data-exif-iso",
-		"data-exif-focal",
+		`data-exif-camera-make="Sony"`,
+		`data-exif-camera-model="ILCE-7M4"`,
+		`data-exif-lens="FE 70-200mm F2.8 GM OSS II"`,
+		`data-exif-date="2024:11:08 06:23:14"`,
+		`data-exif-shutter="1/250 s"`,
+		`data-exif-aperture="f/4"`,
+		`data-exif-iso="ISO 800"`,
+		`data-exif-focal="135 mm"`,
 	} {
-		if strings.Contains(html, attr) {
-			t.Errorf("card should NOT have %s (EXIF is now lazy)", attr)
+		if !strings.Contains(html, attr) {
+			t.Errorf("expected card to have %s", attr)
 		}
+	}
+}
+
+// TestRenderPage_NoExifPillWhenExifNil verifies the EXIF pill
+// does NOT appear when FileInfo.Exif is nil (file has no
+// EXIF block, or no_exif is set so EXIF was never read).
+// We still want the rest of the card to render normally.
+func TestRenderPage_NoExifPillWhenExifNil(t *testing.T) {
+	files := []FileInfo{
+		{
+			Name: "no_exif.jpg", Kind: KindImage, Size: 1024,
+			Exif: nil, // no EXIF
+		},
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `<span class="exif-chip"`) {
+		t.Error("EXIF pill should NOT appear when Exif is nil")
+	}
+	// The lightbox JS reads data-exif-* attributes (see the
+	// inline <script> at the bottom of the page), so the
+	// literal string "data-exif-" appears in the HTML even
+	// when no card has EXIF. We assert specifically that no
+	// CARD has the attributes — by checking for the
+	// attribute name appearing in a card-shaped context
+	// (e.g. after "class=\"card\""). For a card with no
+	// EXIF, the template renders the data-exif-* block as
+	// empty (the {{if}} is false), so no card has the attrs.
+	cardStart := 0
+	for {
+		idx := strings.Index(html[cardStart:], `class="card"`)
+		if idx < 0 {
+			break
+		}
+		cardStart += idx
+		// Look for the next </a> after this card start.
+		end := strings.Index(html[cardStart:], `</a>`)
+		if end < 0 {
+			break
+		}
+		cardHTML := html[cardStart : cardStart+end]
+		if strings.Contains(cardHTML, "data-exif-") {
+			t.Errorf("card at offset %d should NOT have data-exif-*: %s", cardStart, cardHTML)
+		}
+		cardStart += end + 4
 	}
 }
