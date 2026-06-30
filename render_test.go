@@ -2784,8 +2784,8 @@ func TestRenderPage_Phase79HeadingCounts(t *testing.T) {
 	}
 
 	// 1. The dirs heading should show "Directories (3)".
-	if !strings.Contains(html, "Directories (3)") {
-		t.Error("expected dirs heading to be 'Directories (3)' (Phase 79)")
+	if !strings.Contains(html, "Directories (3") {
+		t.Error("expected dirs heading to start with 'Directories (3' (Phase 79, with optional +1 parent suffix)")
 	}
 	// 2. The others heading should show "Other files (2)".
 	if !strings.Contains(html, "Other files (2)") {
@@ -2803,7 +2803,7 @@ func TestRenderPage_Phase79HeadingCounts(t *testing.T) {
 	// me think: at the gallery root, "Up" is nil, but subdirs
 	// exist, so the section renders. So rootHTML DOES have the
 	// dirs heading.
-	if !strings.Contains(rootHTML, "Directories (3)") {
+	if !strings.Contains(rootHTML, "Directories (3") {
 		t.Error("expected dirs heading in gallery root too (3 subdirs, no Up)")
 	}
 
@@ -2817,8 +2817,8 @@ func TestRenderPage_Phase79HeadingCounts(t *testing.T) {
 	// The dirs section renders if Up is set OR if there are
 	// subdirs. At "deep" with no subdirs, Up is non-nil (we're
 	// in a subdir), so the section renders with count (0).
-	if !strings.Contains(deepHTML, "Directories (0)") {
-		t.Error("expected dirs heading 'Directories (0)' when no subdirs but Up entry exists (Phase 79)")
+	if !strings.Contains(deepHTML, "Directories (0") {
+		t.Error("expected dirs heading to start with 'Directories (0' when no subdirs but Up entry exists (Phase 79, with optional +1 parent suffix)")
 	}
 }
 

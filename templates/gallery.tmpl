@@ -1753,7 +1753,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
           <span>//</span>
           <span>({{.TotalAllFilesSize}} total)</span>
-          <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{if .Up}}{{len .Subdirs}} {{else}}{{len .Subdirs}}{{end}} directories</span>{{end}}
+          <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} directories{{if .Up}} (+1 parent){{end}}</span>{{end}}
           <!-- Per user request 2026-06-20: a dropdown for page size.
      Shows the operator-configured list (defaults to
      30, 60, 120, "all"). "all" is a special token meaning
@@ -1981,7 +1981,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
-      <span>Directories ({{len .Subdirs}})</span>
+      <span>Directories ({{len .Subdirs}}{{if .Up}} // +1 parent{{end}})</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
     </h2>
