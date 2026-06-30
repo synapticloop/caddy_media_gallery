@@ -406,28 +406,37 @@ func writeExifSidecar(exif *ExifData) []byte {
 	}
 	var buf bytes.Buffer
 	buf.WriteString("has=true\n")
+	// Per user request 2026-06-29: sidecar keys are
+	// Human-Readable (matching what the lightbox
+	// displays as labels) rather than the Go struct's
+	// internal field names. So the sidecar says
+	// "Camera Make=Canon" not "CameraMake=Canon".
+	// Mapping between internal field names and
+	// Human-Readable keys happens ONLY at write/parse
+	// time — the rest of the codebase doesn't need
+	// to know about the mapping.
 	if exif.CameraMake != "" {
-		buf.WriteString("CameraMake=")
+		buf.WriteString("Camera Make=")
 		buf.WriteString(exif.CameraMake)
 		buf.WriteByte('\n')
 	}
 	if exif.CameraModel != "" {
-		buf.WriteString("CameraModel=")
+		buf.WriteString("Camera Model=")
 		buf.WriteString(exif.CameraModel)
 		buf.WriteByte('\n')
 	}
 	if exif.LensModel != "" {
-		buf.WriteString("LensModel=")
+		buf.WriteString("Lens Model=")
 		buf.WriteString(exif.LensModel)
 		buf.WriteByte('\n')
 	}
 	if exif.DateTaken != "" {
-		buf.WriteString("DateTaken=")
+		buf.WriteString("Date Taken=")
 		buf.WriteString(exif.DateTaken)
 		buf.WriteByte('\n')
 	}
 	if exif.ExposureTime != "" {
-		buf.WriteString("ExposureTime=")
+		buf.WriteString("Exposure Time=")
 		buf.WriteString(exif.ExposureTime)
 		buf.WriteByte('\n')
 	}
@@ -442,7 +451,7 @@ func writeExifSidecar(exif *ExifData) []byte {
 		buf.WriteByte('\n')
 	}
 	if exif.FocalLength != "" {
-		buf.WriteString("FocalLength=")
+		buf.WriteString("Focal Length=")
 		buf.WriteString(exif.FocalLength)
 		buf.WriteByte('\n')
 	}
@@ -500,26 +509,31 @@ func parseExifSidecar(data []byte) *ExifData {
 		}
 		key := string(line[:eq])
 		val := string(line[eq+1:])
+		// Per user request 2026-06-29: sidecar keys are
+		// Human-Readable ("Camera Make") not the Go
+		// struct's internal field names ("CameraMake").
+		// We map the Human-Readable key to the
+		// corresponding struct field here. Unknown keys
+		// are silently ignored (forward compatibility
+		// — a new field added by a newer version won't
+		// break the older version's parse).
 		switch key {
-		case "CameraMake":
+		case "Camera Make":
 			exif.CameraMake = val
-		case "CameraModel":
+		case "Camera Model":
 			exif.CameraModel = val
-		case "LensModel":
+		case "Lens Model":
 			exif.LensModel = val
-		case "DateTaken":
+		case "Date Taken":
 			exif.DateTaken = val
-		case "ExposureTime":
+		case "Exposure Time":
 			exif.ExposureTime = val
 		case "Aperture":
 			exif.Aperture = val
 		case "ISO":
 			exif.ISO = val
-		case "FocalLength":
+		case "Focal Length":
 			exif.FocalLength = val
-			// Unknown keys are ignored (forward compatibility
-			// — a new field added by a newer version won't
-			// break the older version's parse)
 		}
 	}
 	// Return nil if no fields were set (malformed sidecar

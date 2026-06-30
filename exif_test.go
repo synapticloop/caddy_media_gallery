@@ -382,7 +382,10 @@ func TestWriteExifSidecar(t *testing.T) {
 			t.Errorf("got %q, want %q", string(data), want)
 		}
 	})
-	t.Run("full exif → has=true + all fields", func(t *testing.T) {
+	t.Run("full exif → has=true + all fields (Human-Readable keys)", func(t *testing.T) {
+		// Per user request 2026-06-29: sidecar keys are
+		// Human-Readable ("Camera Make") not the Go
+		// struct's internal field names ("CameraMake").
 		exif := &ExifData{
 			CameraMake:   "Sony",
 			CameraModel:  "ILCE-7M4",
@@ -399,23 +402,23 @@ func TestWriteExifSidecar(t *testing.T) {
 		if !strings.HasPrefix(s, "has=true\n") {
 			t.Errorf("sidecar should start with has=true, got: %q", s)
 		}
-		// All fields should be present
+		// All fields should be present with Human-Readable keys
 		for _, want := range []string{
-			"CameraMake=Sony",
-			"CameraModel=ILCE-7M4",
-			"LensModel=FE 70-200mm F2.8 GM OSS II",
-			"DateTaken=2024:11:08 06:23:14",
-			"ExposureTime=1/250 s",
+			"Camera Make=Sony",
+			"Camera Model=ILCE-7M4",
+			"Lens Model=FE 70-200mm F2.8 GM OSS II",
+			"Date Taken=2024:11:08 06:23:14",
+			"Exposure Time=1/250 s",
 			"Aperture=f/4",
 			"ISO=ISO 800",
-			"FocalLength=135 mm",
+			"Focal Length=135 mm",
 		} {
 			if !strings.Contains(s, want+"\n") {
 				t.Errorf("sidecar should contain %q, got: %q", want, s)
 			}
 		}
 	})
-	t.Run("partial exif → has=true + only set fields", func(t *testing.T) {
+	t.Run("partial exif → has=true + only set fields (Human-Readable keys)", func(t *testing.T) {
 		exif := &ExifData{
 			CameraMake: "Fujifilm",
 			// everything else empty
@@ -425,15 +428,15 @@ func TestWriteExifSidecar(t *testing.T) {
 		if !strings.HasPrefix(s, "has=true\n") {
 			t.Errorf("sidecar should start with has=true, got: %q", s)
 		}
-		if !strings.Contains(s, "CameraMake=Fujifilm\n") {
-			t.Errorf("sidecar should contain CameraMake, got: %q", s)
+		if !strings.Contains(s, "Camera Make=Fujifilm\n") {
+			t.Errorf("sidecar should contain 'Camera Make', got: %q", s)
 		}
 		// Should NOT contain the empty fields
-		if strings.Contains(s, "CameraModel=") {
-			t.Errorf("sidecar should NOT contain empty CameraModel=, got: %q", s)
+		if strings.Contains(s, "Camera Model=") {
+			t.Errorf("sidecar should NOT contain empty 'Camera Model=', got: %q", s)
 		}
-		if strings.Contains(s, "LensModel=") {
-			t.Errorf("sidecar should NOT contain empty LensModel=, got: %q", s)
+		if strings.Contains(s, "Lens Model=") {
+			t.Errorf("sidecar should NOT contain empty 'Lens Model=', got: %q", s)
 		}
 	})
 }
@@ -447,16 +450,19 @@ func TestParseExifSidecar(t *testing.T) {
 			t.Errorf("parseExifSidecar(has=false) should return nil, got: %+v", exif)
 		}
 	})
-	t.Run("has=true + fields → parsed ExifData", func(t *testing.T) {
+	t.Run("has=true + fields → parsed ExifData (Human-Readable keys)", func(t *testing.T) {
+		// Per user request 2026-06-29: sidecar keys are
+		// Human-Readable. The parser maps them back to
+		// the internal Go struct field names.
 		data := []byte(`has=true
-CameraMake=Fujifilm
-CameraModel=X-T5
-LensModel=XF 16-55mm F2.8 R LM WR
-DateTaken=2024:09:15 07:48:21
-ExposureTime=1/60 s
+Camera Make=Fujifilm
+Camera Model=X-T5
+Lens Model=XF 16-55mm F2.8 R LM WR
+Date Taken=2024:09:15 07:48:21
+Exposure Time=1/60 s
 Aperture=f/5.6
 ISO=ISO 1600
-FocalLength=23 mm
+Focal Length=23 mm
 `)
 		exif := parseExifSidecar(data)
 		if exif == nil {
@@ -484,7 +490,7 @@ FocalLength=23 mm
 	})
 	t.Run("unknown keys are ignored (forward compat)", func(t *testing.T) {
 		data := []byte(`has=true
-CameraMake=Sony
+Camera Make=Sony
 SomeFutureField=foo
 `)
 		exif := parseExifSidecar(data)
@@ -515,8 +521,8 @@ func TestReadExifCached_UsesTextFormat(t *testing.T) {
 	// (so the helper finds our pre-populated sidecar).
 	sidecarPath := exifMetaPath(srcPath, tmp, "webp")
 	sidecarContent := `has=true
-CameraMake=Canon
-CameraModel=EOS R5
+Camera Make=Canon
+Camera Model=EOS R5
 `
 	if err := os.WriteFile(sidecarPath, []byte(sidecarContent), 0o644); err != nil {
 		t.Fatal(err)
