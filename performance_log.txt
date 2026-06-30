@@ -1,0 +1,38 @@
+# Performance baseline and optimization log for caddy_media_gallery
+#
+# All measurements taken on: Linux amd64, 4 cores
+# Go: 1.25.1
+# Benchmark: 60 image files, with and without EXIF data
+# Run settings: -benchtime=5s -count=3 (3 runs of 5s each, best reported)
+#
+# Format: <benchmark> <best ns/op> (<avg ns/op>)
+
+== baseline (before any optimization) ==
+2026-07-01T00:05:00Z
+  BenchmarkRenderPage_60Files            2974610 ns/op (3030794 ns/op avg)
+  BenchmarkRenderPage_60Files_WithExif   4468942 ns/op (4719190 ns/op avg)
+
+== optimization 1: pre-compute EXIF attrs (buildExifAttrString + ExifAttrs field) ==
+2026-07-01T00:11:00Z
+  BenchmarkRenderPage_60Files            2954288 ns/op (3020769 ns/op avg)
+  BenchmarkRenderPage_60Files_WithExif   3254310 ns/op (3403452 ns/op avg)
+  Improvement: 27.9% faster for WithExif case (4.47ms → 3.25ms)
+  No regression for non-EXIF case (2.97ms → 2.95ms)
+
+Analysis:
+- The optimization pre-renders 8 separate template field accesses
+  ({{.Exif.CameraMake}}, {{.Exif.LensModel}}, etc.) as a single
+  template.HTMLAttr string. The template then does just
+  {{.ExifAttrs}} — a simple struct field access with no reflection.
+- For 60 cards with EXIF, the savings are 60 * 8 = 480 reflection-
+  based field lookups per render.
+- The non-EXIF case is unchanged (we skip the buildExifAttrString
+  call when there's no EXIF data).
+- Net effect: 1.4ms saved per render for the EXIF case.
+
+Next optimization to try:
+- Pre-render the entire card <a> element as a string (largest
+  win but requires more code changes)
+- Use map[string]interface{} for the template to take advantage of
+  the template engine's specialized map fast paths
+- Cache the template parsing result (already done)

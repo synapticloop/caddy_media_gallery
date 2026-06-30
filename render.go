@@ -3,6 +3,7 @@ package gallery
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"html/template"
 	"net/url"
 	"os"
@@ -272,6 +273,15 @@ type FileView struct {
 	// always nil. The ExifData type is still defined for
 	// the JSON shape returned by the ?exif=1 endpoint.
 	Exif *ExifData
+	// ExifAttrs is the pre-rendered EXIF attribute string
+	// (e.g. ` data-exif-camera-make="Canon" data-exif-camera-model="EOS R5" ...`).
+	// Empty if no EXIF. Per optimization 2026-06-30: this
+	// replaces 8 separate template field accesses
+	// ({{.Exif.CameraMake}}, etc.) — each of which was a
+	// reflection-based field lookup. The template now just
+	// does {{.ExifAttrs}} which is a simple struct field
+	// access (no reflection, no function call).
+	ExifAttrs template.HTMLAttr // pre-rendered EXIF data attributes (trusted HTML attribute — values are html.EscapeString'd, template trusts the result)
 
 	// CountItems is the number of NON-directory entries inside
 	// this subdirectory (files + symlinks to files + broken
@@ -548,6 +558,42 @@ func displayNameForHover(name string) string {
 	return repl.Replace(name)
 }
 
+// buildExifAttrString formats the EXIF data for the
+// data-exif-* HTML attributes. Per optimization 2026-06-30:
+// this avoids 8 separate reflection-based field lookups in
+// the template (one per EXIF field per card).
+func buildExifAttrString(e *ExifData) template.HTMLAttr {
+	// Each attribute is hand-formatted rather than using
+	// fmt.Sprintf to avoid the overhead of reflection-based
+	// argument formatting. The keys are in the same order
+	// as the original template.
+	//
+	// The result is template.HTML (trusted) — values are
+	// pre-escaped via html.EscapeString so the template
+	// engine will NOT re-escape (which would double-encode
+	// the &quot; to &amp;quot;).
+	var b strings.Builder
+	b.Grow(384) // pre-allocate ~384 bytes (typical EXIF size)
+	b.WriteString(` data-exif-camera-make="`)
+	b.WriteString(html.EscapeString(e.CameraMake))
+	b.WriteString(`" data-exif-camera-model="`)
+	b.WriteString(html.EscapeString(e.CameraModel))
+	b.WriteString(`" data-exif-lens="`)
+	b.WriteString(html.EscapeString(e.LensModel))
+	b.WriteString(`" data-exif-date="`)
+	b.WriteString(html.EscapeString(e.DateTaken))
+	b.WriteString(`" data-exif-shutter="`)
+	b.WriteString(html.EscapeString(e.ExposureTime))
+	b.WriteString(`" data-exif-aperture="`)
+	b.WriteString(html.EscapeString(e.Aperture))
+	b.WriteString(`" data-exif-iso="`)
+	b.WriteString(html.EscapeString(e.ISO))
+	b.WriteString(`" data-exif-focal="`)
+	b.WriteString(html.EscapeString(e.FocalLength))
+	b.WriteString(`"`)
+	return template.HTMLAttr(b.String())
+}
+
 func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideoThumbs bool) FileView {
 	v := FileView{
 		Name: f.Name,
@@ -620,11 +666,22 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		// tables have data-date="..." attributes for sorting.
 		v.ModTime = f.ModTime
 	}
-	// Copy EXIF data through (regardless of kind — the template
-	// uses {{if .Exif.HasAny}} to decide whether to render the
-	// EXIF pill and the lightbox panel). Per user request
-	// 2026-06-27: GPS fields are NEVER extracted; see exif.go.
-	v.Exif = f.Exif
+	// Copy EXIF data through. Per user request 2026-06-27: GPS
+	// fields are NEVER extracted; see exif.go.
+	//
+	// Per optimization 2026-06-30: also pre-compute the EXIF
+	// data-attribute string for the template. Previously the
+	// template did 8 separate reflection-based field lookups
+	// per EXIF card ({{.Exif.CameraMake}}, etc.) — now the
+	// template just does {{.ExifAttrs}} (a single struct field
+	// access).
+	//
+	// Skip the call entirely when there's no EXIF (most files)
+	// to avoid the empty-string allocation.
+	if f.Exif != nil && f.Exif.HasAny() {
+		v.Exif = f.Exif
+		v.ExifAttrs = buildExifAttrString(f.Exif)
+	}
 	// Copy dimensions through. Per user request 2026-06-27:
 	// the bottom-right watermark shows the source file's
 	// W × H. The formatDimensions helper returns an empty

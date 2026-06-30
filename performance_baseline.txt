@@ -1,0 +1,14 @@
+# Performance baseline (BEFORE optimizations)
+# Date: 2026-06-30T13:57:23Z
+# CPU: DO-Regular (Linux amd64, 4 cores)
+# Go: 1.25.1
+#
+# Test scenarios:
+# - 60 image files (typical page size)
+# - With and without EXIF data (worst case)
+#
+BenchmarkRenderPage_60Files-4              1086    2925929 ns/op   ~2.93 ms/render
+BenchmarkRenderPage_60Files_WithExif-4      801    4450381 ns/op   ~4.45 ms/render
+#
+# Per-render output: 92.7 KB HTML (638 DOM elements, 29 images)
+# Wall clock for warm load: ~573 ms (includes network, image downloads)

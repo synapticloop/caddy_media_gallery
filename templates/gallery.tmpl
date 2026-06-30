@@ -2271,7 +2271,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <div class="section-body" id="media-body">
     <div class="media-grid">
       {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" data-display-name="{{.DisplayName}}" href="{{.Href}}" title="{{.DisplayName}}"{{if and .Exif .Exif.HasAny}} data-exif-camera-make="{{.Exif.CameraMake}}" data-exif-camera-model="{{.Exif.CameraModel}}" data-exif-lens="{{.Exif.LensModel}}" data-exif-date="{{.Exif.DateTaken}}" data-exif-shutter="{{.Exif.ExposureTime}}" data-exif-aperture="{{.Exif.Aperture}}" data-exif-iso="{{.Exif.ISO}}" data-exif-focal="{{.Exif.FocalLength}}"{{end}}>
+      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" data-display-name="{{.DisplayName}}" href="{{.Href}}" title="{{.DisplayName}}"{{.ExifAttrs}}>
         <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
           {{if .IsVideo}}
           {{if .ThumbURL}}
@@ -2295,7 +2295,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           </div>
           <div class="tile-meta-chips">
             <span class="filetype-chip">{{.Type}}</span>
-            {{if and .Exif .Exif.HasAny}}<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>{{end}}
+            {{if .ExifAttrs}}<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>{{end}}
           </div>
         </div>
       </a>
