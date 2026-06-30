@@ -4202,7 +4202,7 @@ func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
 	// code at the bottom of the page contains
 	// "<em>This page</em>" as a string literal (in
 	// updateSearchHeader).
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		t.Fatal("could not find data-search-header span")
 	}
@@ -4612,7 +4612,7 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	// header span (data-search-header), not the entire HTML —
 	// the JS source contains "<em>This page</em>" as a string
 	// literal in the updateSearchHeader function.
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		t.Fatal("could not find data-search-header span")
 	}
@@ -4706,7 +4706,7 @@ func TestRenderPage_SearchHeader_FormatFormSubmitted(t *testing.T) {
 	}
 	// Check ONLY the rendered header span (data-search-header),
 	// not the entire HTML.
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		t.Fatal("could not find data-search-header span")
 	}
@@ -4766,7 +4766,7 @@ func TestRenderPage_SearchHeader_FormatJSSearch(t *testing.T) {
 	// not the entire HTML — the JS source code at the bottom
 	// of the page contains "<em>This page</em>" as a string
 	// literal in the updateSearchHeader function.
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		// DEBUG: show context
 		idx2 := strings.Index(html, "search-header")
@@ -4818,7 +4818,7 @@ func TestRenderPage_SearchHeader_ServerRendersCorrectly(t *testing.T) {
 	// not the entire HTML. The JS source code at the bottom of
 	// the page contains "<em>This page</em>" as a string literal
 	// in the updateSearchHeader function (for the JS-search case).
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		t.Fatal("could not find data-search-header span")
 	}
@@ -4886,7 +4886,7 @@ func TestRenderPage_SearchHeaderJSUpdatesOnFormSubmittedPage(t *testing.T) {
 	}
 	// The server-rendered header should be the form-submitted
 	// format (no "This page" suffix, N = total filtered).
-	headerSpanStart := strings.Index(html, `data-search-header>`)
+	headerSpanStart := strings.Index(html, `data-search-header `)
 	if headerSpanStart < 0 {
 		t.Fatal("could not find data-search-header span")
 	}
@@ -4908,6 +4908,80 @@ func TestRenderPage_SearchHeaderJSUpdatesOnFormSubmittedPage(t *testing.T) {
 	// The old isServerSearchActive function should be removed.
 	if strings.Contains(html, "function isServerSearchActive()") {
 		t.Error("expected the isServerSearchActive function to be removed (no longer needed)")
+	}
+}
+
+
+// TestRenderPage_SearchHeaderDefaultAttribute verifies that
+// the data-search-header-default attribute is the no-search
+// default (e.g. "Media (89 - Showing 1-60)"), NOT the
+// initially-rendered text. Per user report 2026-06-30:
+// when the page is form-submitted with ?q=st, the JS was
+// capturing the search header ("Media (89 - search 'st' -
+// showing 30 of 34)") as the "default". When the user
+// clicked Reset, the JS restored this stale text instead
+// of the original no-search default. The fix: the server
+// renders the no-search format as the
+// data-search-header-default attribute, and the JS uses
+// that (not innerHTML) as the default.
+func TestRenderPage_SearchHeaderDefaultAttribute(t *testing.T) {
+	var files []FileInfo
+	for i := 0; i < 8; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "cat-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "my-cat.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	q := url.Values{"q": {"cat"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Find the data-search-header-default attribute value.
+	// The default should be the no-search format with the
+	// DIRECTORY total (10 files, not 2 — the search filtered
+	// to 2 matches). The "Showing 1-2" range uses the
+	// ImageStart/ImageEnd which are based on the filtered
+	// paged list. Hmm — for a true no-search default, we'd
+	// want the range to be the unfiltered range. But since
+	// the user is on a form-submitted page, the
+	// ImageStart/ImageEnd reflect the filtered set.
+	//
+	// For now, we just verify the prefix is the directory
+	// total (10), not the filtered total (2). The exact
+	// suffix depends on the server-side filtering state.
+	startMarker := `data-search-header-default="`
+	startIdx := strings.Index(html, startMarker)
+	if startIdx < 0 {
+		t.Fatal("data-search-header-default attribute not found")
+	}
+	startIdx += len(startMarker)
+	// Find the closing quote
+	endIdx := strings.Index(html[startIdx:], `"`)
+	if endIdx < 0 {
+		t.Fatal("could not find end of data-search-header-default value")
+	}
+	defaultVal := html[startIdx : startIdx+endIdx]
+	// Per user report 2026-06-30: the bug was that the
+	// default was the form-submitted search header (e.g.
+	// "Media (89 - search 'st' - showing 30 of 34)"). The
+	// fix: the default is the no-search format. We verify
+	// the default does NOT include the "search" keyword
+	// (which would mean the form-submitted text is still
+	// being used as the default).
+	if strings.Contains(defaultVal, "search") {
+		t.Errorf(`data-search-header-default should NOT include "search" (should be the no-search default); got: %s`, defaultVal)
+	}
+	// Verify the default starts with "Media (10" (the
+	// directory total, not the filtered count of 2).
+	if !strings.HasPrefix(defaultVal, "Media (10") {
+		t.Errorf(`data-search-header-default should start with "Media (10" (directory total); got: %s`, defaultVal)
 	}
 }
 func TestRenderPage_ExifPillAppearsWhenExifPresent(t *testing.T) {

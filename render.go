@@ -3966,7 +3966,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
+      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -4165,10 +4165,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     // keystroke, we either restore the default or
     // replace with the search format.
     var headerEl = document.querySelector('[data-search-header]');
+    // The "default" is the no-search header (e.g. "Media (89 - Showing 1-60)").
+    // Per user request 2026-06-30: the server renders this as the
+    // data-search-header-default attribute. We DON'T use the initial
+    // innerHTML (which may be the search header on a form-submitted
+    // page). The default should ALWAYS be the no-search format so
+    // that clicking Reset restores the original no-search state,
+    // not the form-submitted search state.
     var defaultHeader = null;
     if (headerEl) {
-      defaultHeader = headerEl.innerHTML;
-      headerEl.setAttribute('data-search-header-default', defaultHeader);
+      defaultHeader = headerEl.getAttribute('data-search-header-default');
     }
     // The per-page limit is the N in the search format
     // (e.g., 60). We get it from the server-rendered
