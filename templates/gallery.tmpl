@@ -824,6 +824,22 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   font-size: 0.85rem;
 }
+/* Per user request 2026-06-30: the .type-filter-group wraps
+   the type filter elements (label + dropdowns + Filter +
+   Reset) so they stay together as a unit, separate from the
+   search controls. On desktop this is just a flex row that
+   pushes the search-controls to the right (the .search-controls
+   has margin-left: auto). On mobile (max-width: 600px) the
+   .filter-row is stacked vertically — the .type-filter-group
+   takes its own line, then the .search-controls takes its own
+   line below it. The type filter elements stay grouped (no
+   dropdowns orphaned between rows). */
+.type-filter-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
 .filter-label {
   color: var(--fg-faint);
   margin-right: 0.25rem;
@@ -1854,6 +1870,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{- /* new filter set. */ -}}
       {{- queryToHiddenInputsExclude $.Query "page" "q" "ext" -}}
       <div class="filter-row">
+        {{/* Per user request 2026-06-30: wrap the type filter
+             elements (label + dropdowns + Filter + Reset) in a
+             single .type-filter-group div. On mobile screens
+             (where the filter-row is stacked vertically), this
+             keeps the type filter elements together as a unit,
+             separate from the search controls (which form their
+             own .search-controls group below). The desktop
+             layout is unchanged (the .type-filter-group is a
+             flex row like the original .filter-row contents). */}}
+        <div class="type-filter-group">
         <span class="filter-label">Type Filter</span>
 
         {{if gt .FilterImageOptions.Total 0}}
@@ -1926,6 +1952,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              state when active). */}}
         <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
            href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">Reset</a>
+        </div>
         {{- /* Search box + button on the right of the filter row.
             Client-side: as the user types, JS hides non-matching
             cards (see inline JS at the bottom of the template).
