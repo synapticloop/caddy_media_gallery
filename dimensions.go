@@ -3,6 +3,8 @@ package gallery
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -11,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,6 +55,97 @@ func readDimensions(path string) (width, height int, err error) {
 		// Not an error — just no dimensions to report.
 		return 0, 0, nil
 	}
+}
+
+// dimsMetaPath returns the sidecar metadata file path for the
+// given source file. The sidecar lives next to the thumbnail
+// in the thumb cache dir and contains the source image's W × H
+// dimensions as plain text ("WIDTH HEIGHT\n"). The filename
+// matches the thumb's name with ".meta" appended — so a thumb at
+// /var/cache/caddy-gallery/abc123.webp has its dims at
+// /var/cache/caddy-gallery/abc123.webp.meta.
+//
+// The hash is the same SHA-256 hash of the absolute source path
+// that the thumb cache uses (truncated to 16 bytes), so the
+// sidecar and its corresponding thumb are colocated and can be
+// tracked together by the cache eviction logic.
+//
+// Per user request 2026-06-29: storing the original image
+// dimensions in a sidecar file avoids re-parsing the source
+// image's header on every scan. For a 1000-image gallery,
+// this saves ~1-3 seconds of header reads per directory scan.
+func dimsMetaPath(src, cacheDir, thumbExt string) string {
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		abs = src
+	}
+	h := sha256.Sum256([]byte(abs))
+	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".meta")
+}
+
+// readDimensionsCached returns the pixel dimensions of the
+// source file at path, using a sidecar metadata file in the
+// thumb cache dir for fast lookups. Behaviour:
+//
+//  1. If a sidecar file exists at the expected cache path, read
+//     W × H from it (one small file read, no image parsing).
+//  2. If no sidecar, call readDimensions() (image/video header
+//     parse, ~1-5ms), then write the result to a new sidecar
+//     file for next time. Errors from readDimensions are
+//     propagated as before.
+//  3. If readDimensions returns (0, 0, nil) (file has no
+//     decodable dimensions, e.g. AVIF/HEIC/SVG), don't write a
+//     sidecar — the next scan would get the same result and
+//     we'd have a useless file in the cache.
+//
+// cacheDir is the thumb cache dir (e.g. /var/cache/caddy-gallery).
+// thumbExt is the thumb extension (e.g. "webp"); the sidecar is
+// named "{hash}.{thumbExt}.meta" to colocate with its thumb.
+//
+// This is the same hashing scheme as thumbCachePath() in
+// thumbnails.go — the two paths line up: the sidecar and
+// its corresponding thumb share the same hash and sit next
+// to each other in the cache dir, so cache eviction treats
+// them as a unit.
+func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error) {
+	if cacheDir == "" {
+		// No cache dir configured — fall back to direct read.
+		// The Gallery always sets a cache dir in production, so
+		// this branch is mostly for tests and unit-mode use.
+		return readDimensions(path)
+	}
+	metaPath := dimsMetaPath(path, cacheDir, thumbExt)
+	// Try the sidecar first. A successful read avoids the
+	// ~1-5ms image header parse entirely.
+	if data, err := os.ReadFile(metaPath); err == nil {
+		// Format: "WIDTH HEIGHT" + newline (plain text, newline-terminated).
+		// Two integers separated by whitespace.
+		fields := strings.Fields(string(data))
+		if len(fields) >= 2 {
+			w, errW := strconv.Atoi(fields[0])
+			h, errH := strconv.Atoi(fields[1])
+			if errW == nil && errH == nil {
+				return w, h, nil
+			}
+			// Malformed sidecar — fall through to a fresh read
+			// and overwrite. (Could happen if a previous version
+			// wrote a different format; we want self-healing.)
+		}
+	}
+	// Cache miss: do the real read and write the sidecar.
+	w, h, err = readDimensions(path)
+	if err != nil || w == 0 || h == 0 {
+		// Either an I/O error or no decodable dimensions.
+		// Don't write a sidecar for the no-dimensions case
+		// (would just be a useless file in the cache).
+		return w, h, err
+	}
+	// Write the sidecar. Best-effort: if the write fails, the
+	// next scan just re-reads the source (no correctness issue,
+	// just a small perf cost). We don't propagate the error.
+	_ = os.MkdirAll(cacheDir, 0o755)
+	_ = os.WriteFile(metaPath, []byte(fmt.Sprintf("%d %d\n", w, h)), 0o644)
+	return w, h, nil
 }
 
 // readImageDimensions uses image.DecodeConfig to read only

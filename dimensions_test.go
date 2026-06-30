@@ -2,6 +2,8 @@ package gallery
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"image"
 	"image/color"
 	"image/gif"
@@ -10,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "golang.org/x/image/webp"
@@ -270,4 +273,136 @@ func TestReadDimensions_NoiseBufferNotEmpty(t *testing.T) {
 	if w != 0 || h != 0 {
 		t.Errorf("noise: got %dx%d, want 0x0", w, h)
 	}
+}
+
+
+// TestReadDimensionsCached_FirstReadWritesSidecar verifies the
+// first call to readDimensionsCached parses the source image
+// AND writes a sidecar file to the thumb cache dir. Per user
+// request 2026-06-29: the sidecar is the optimisation — the
+// first scan pays the parse cost, every subsequent scan
+// reads the sidecar (one small file read, no image parsing).
+func TestReadDimensionsCached_FirstReadWritesSidecar(t *testing.T) {
+	tmp, err := os.CreateTemp("", "cache-*.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	writeSyntheticJPEGHelper(t, tmp.Name(), 640, 480)
+	cacheDir, err := os.MkdirTemp("", "sidecar-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	w, h, err := readDimensionsCached(tmp.Name(), cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w != 640 || h != 480 {
+		t.Errorf("first read: got %dx%d, want 640x480", w, h)
+	}
+	// Verify the sidecar was written. Path matches dimsMetaPath
+	// (sha256 of abs path, truncated to 16 bytes, hex).
+	abs, _ := filepath.Abs(tmp.Name())
+	hashHex := sha256Sum16Helper(abs)
+	wantPath := filepath.Join(cacheDir, hashHex+".webp.meta")
+	data, err := os.ReadFile(wantPath)
+	if err != nil {
+		t.Errorf("sidecar not written at %s: %v", wantPath, err)
+	} else {
+		fields := strings.Fields(string(data))
+		if len(fields) < 2 || fields[0] != "640" || fields[1] != "480" {
+			t.Errorf("sidecar contents: got %q, want `640 480`", string(data))
+		}
+	}
+}
+
+// TestReadDimensionsCached_SecondReadUsesSidecar verifies the
+// second call reads the sidecar (fast) without re-parsing the
+// source image. We OVERWRITE the source with garbage after the
+// first call; the second call must still return the cached
+// dimensions (proving the sidecar was used, not a re-parse).
+func TestReadDimensionsCached_SecondReadUsesSidecar(t *testing.T) {
+	tmp, err := os.CreateTemp("", "cache-*.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	writeSyntheticJPEGHelper(t, tmp.Name(), 1920, 1080)
+	cacheDir, err := os.MkdirTemp("", "sidecar-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// First read: parse the source + write sidecar.
+	_, _, err = readDimensionsCached(tmp.Name(), cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Overwrite the source with garbage. The second read
+	// should still succeed because it uses the sidecar.
+	if err := os.WriteFile(tmp.Name(), []byte("not a valid image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w, h, err := readDimensionsCached(tmp.Name(), cacheDir, "webp")
+	if err != nil {
+		t.Errorf("second read: got error %v (should use sidecar, not re-parse)", err)
+	}
+	if w != 1920 || h != 1080 {
+		t.Errorf("second read: got %dx%d, want 1920x1080 (from sidecar)", w, h)
+	}
+}
+
+// TestReadDimensionsCached_NoCacheDir verifies the function
+// falls back to the direct readDimensions when cacheDir is
+// empty (e.g. unit-mode tests, no_thumbs mode).
+func TestReadDimensionsCached_NoCacheDir(t *testing.T) {
+	tmp, err := os.CreateTemp("", "nocache-*.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	writeSyntheticJPEGHelper(t, tmp.Name(), 100, 200)
+	w, h, err := readDimensionsCached(tmp.Name(), "", "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w != 100 || h != 200 {
+		t.Errorf("no cache dir: got %dx%d, want 100x200", w, h)
+	}
+}
+
+// writeSyntheticJPEGHelper writes a minimal valid JPEG file
+// with the given W × H dimensions. Used to populate the source
+// file for readDimensionsCached tests without depending on a
+// real image. The JPEG is just valid enough that
+// image.DecodeConfig returns the dimensions — no actual pixel
+// data is checked.
+func writeSyntheticJPEGHelper(t *testing.T, path string, w, h int) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{128, 128, 128, 255})
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := jpeg.Encode(f, img, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sha256Sum16Helper returns the first 16 bytes of the sha256
+// hash of s as a hex string. Same scheme as thumbCachePath in
+// thumbnails.go.
+func sha256Sum16Helper(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:16])
 }

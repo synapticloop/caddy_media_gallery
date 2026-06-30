@@ -130,6 +130,19 @@ type Scanner struct {
 	// When false (the default), EXIF is read eagerly at
 	// scan time. See gallery.go for the full rationale.
 	NoExif bool
+	// ThumbCacheDir is the on-disk thumb cache dir. When set
+	// (always set in production, via thumbCacheDir() in
+	// gallery.go), the scanner uses readDimensionsCached to
+	// avoid re-parsing source image headers on every scan.
+	// The source dimensions are stored in a sidecar file
+	// alongside the thumb. See readDimensionsCached in
+	// dimensions.go for the cache file format.
+	ThumbCacheDir string
+	// ThumbFormat is the thumb file extension (e.g. "webp").
+	// Used to derive the sidecar path. Defaults to "webp" if
+	// empty (so unit-mode tests that don't set up the full
+	// cache dir still work).
+	ThumbFormat string
 }
 
 // NewScanner returns a Scanner for the given root directory with
@@ -311,9 +324,24 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		// the watermark template treats as "don't render".
 		if kind == KindImage || kind == KindVideo {
 			fullPath := filepath.Join(s.Root, e.Name())
-			w, h, err := readDimensions(fullPath)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "readDimensions(%s): %v\n", fullPath, err)
+			// Per user request 2026-06-29: use the cached
+			// readDimensions when the thumb cache dir is
+			// configured. The first scan parses the source
+			// image's header (~1-5ms) AND writes a sidecar
+		// file alongside the thumb; subsequent scans read
+		// the sidecar (one small file read, no image
+		// parsing). The sidecar's filename matches the
+		// thumb's hash so cache eviction keeps them
+		// together. When the cache dir is empty (unit
+		// tests, no_thumbs mode), we fall back to the
+		// direct read.
+			thumbExt := s.ThumbFormat
+			if thumbExt == "" {
+				thumbExt = "webp"
+			}
+			w, h, dimErr := readDimensionsCached(fullPath, s.ThumbCacheDir, thumbExt)
+			if dimErr != nil {
+				fmt.Fprintf(os.Stderr, "readDimensions(%s): %v\n", fullPath, dimErr)
 			} else if w > 0 && h > 0 {
 				fi.Width = w
 				fi.Height = h

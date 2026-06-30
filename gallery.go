@@ -796,7 +796,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.thumbCacheDir(), g.ThumbFormat)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)

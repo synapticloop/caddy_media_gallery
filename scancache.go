@@ -57,7 +57,7 @@ func NewScanCache(ttl time.Duration) *ScanCache {
 // sets (used by Scanner.Classify to decide KindImage vs KindVideo vs
 // KindOther). They are part of the cache key because a Gallery
 // reconfigured to recognise a new extension should re-scan.
-func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif bool) ([]FileInfo, error) {
+func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif bool, thumbCacheDir, thumbFormat string) ([]FileInfo, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 		return out, nil
 	}
 
-	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif}
+	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif, ThumbCacheDir: thumbCacheDir, ThumbFormat: thumbFormat}
 	files, err := scanner.Scan()
 	if err != nil {
 		return nil, err
