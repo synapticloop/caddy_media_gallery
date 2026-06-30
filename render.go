@@ -1373,6 +1373,17 @@ func parseTypeFilter(q url.Values) map[string]bool {
 		if p == "" {
 			continue
 		}
+		// Per user request 2026-06-30: the sentinel value
+		// "." is used in the form for the "(none)"
+		// entry (files without an extension). Translate it
+		// to the empty string here so the filter map has
+		// "" as a key — applyTypeFilter checks filter[""]
+		// to decide if a file with no extension should be
+		// included.
+		if p == "." {
+			out[""] = true
+			continue
+		}
 		p = strings.ToLower(p)
 		if !strings.HasPrefix(p, ".") {
 			p = "." + p
@@ -1413,6 +1424,17 @@ func applyTypeFilter(files []FileInfo, filter map[string]bool) []FileInfo {
 	if filter == nil || len(filter) == 0 {
 		return files
 	}
+	// Per user request 2026-06-30: the filter map can have
+	// "" as a key (after parseTypeFilter translates the
+	// "." sentinel). When "" is in the filter map,
+	// the "(none)" entry is checked — the visitor wants to
+	// ONLY see files without an extension.
+	//
+	// When filter[""] is true AND filter has other keys
+	// (e.g. ".jpg"), the visitor wants to see files matching
+	// ".jpg" OR with no extension — so the check is OR not
+	// AND.
+	hasNoneFilter := filter[""]
 	out := make([]FileInfo, 0, len(files))
 	for _, f := range files {
 		// Directories always pass through (the visitor should
@@ -1423,7 +1445,15 @@ func applyTypeFilter(files []FileInfo, filter map[string]bool) []FileInfo {
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(f.Name))
-		if filter[ext] {
+		if ext == "" && hasNoneFilter {
+			// File has no extension and the (none) entry is
+			// checked — include it.
+			out = append(out, f)
+			continue
+		}
+		if ext != "" && filter[ext] {
+			// File has an extension matching a checked filter
+			// entry — include it.
 			out = append(out, f)
 		}
 	}
@@ -1457,10 +1487,17 @@ func parseIntDefault(s string, def int) (int, error) {
 // in the current directory with this extension; Selected is
 // true if the extension is in the active ?type= filter.
 type FilterOption struct {
-	Ext        string // lowercase, with leading dot, e.g. ".jpg"
-	DisplayExt string // canonical-case form for display, e.g. "JPG" (vs "jpg")
+	Ext        string // lowercase, with leading dot, e.g. ".jpg" (or "." sentinel for files without extensions (".jpg" form value; the dot-prefix is consistent with other extensions like ".jpg"); see FilterOption.IsNone)
+	DisplayExt string // canonical-case form for display, e.g. "JPG" (vs "jpg"), or "(none)" for files without extensions
 	Count      int    // files in the current directory with this ext
 	Selected   bool   // currently in the active ?type= filter
+	// Per user request 2026-06-30: IsNone marks the
+	// "(none)" option for files without an extension.
+	// The form uses a sentinel value (".") instead of
+	// an empty string because browsers skip empty checkboxes
+	// when serializing the form, which would lose the
+	// distinction between "unchecked" and "checked but empty".
+	IsNone     bool   // true for the (none) entry (files without an extension)
 }
 
 // FilterGroup is one dropdown in the filter UI (Images, Videos,
@@ -1573,11 +1610,33 @@ func filterGroupFromMap(label string, counts map[string]struct {
 }, activeFilter map[string]bool) FilterGroup {
 	out := FilterGroup{Label: label}
 	for ext, info := range counts {
+		// Per user request 2026-06-30: when ext is "" (no
+		// extension), use a sentinel value for the form. The
+		// sentinel is "." — clearly NOT a real file
+		// extension (a filename ending in just a dot would be unusual).
+		// This lets parseTypeFilter recognize it as "filter
+		// to only files without extensions" without losing
+		// the distinction between "unchecked" and "checked
+		// but empty" (which is the HTML form behavior for
+		// empty-valued checkboxes — browsers skip them).
+		ext := ext
+		isNone := false
+		if ext == "" {
+			ext = "."
+			isNone = true
+		}
 		out.Options = append(out.Options, FilterOption{
 			Ext:        ext,
 			DisplayExt: info.displayExt,
 			Count:      info.count,
-			Selected:   activeFilter[ext],
+			// Per user request 2026-06-30: when IsNone is true
+			// (the "(none)" entry), the form value is the "."
+			// sentinel, but the activeFilter map has "" as the
+			// key (after parseTypeFilter translates "." to "").
+			// So we check activeFilter[""] for the Selected
+			// state.
+			Selected:   activeFilter[ext] || (isNone && activeFilter[""]),
+			IsNone:     isNone,
 		})
 	}
 	sort.Slice(out.Options, func(i, j int) bool {
