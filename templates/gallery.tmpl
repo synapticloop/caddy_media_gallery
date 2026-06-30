@@ -854,8 +854,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .filter-pill-active,
 .filter-dropdown[open] > .filter-pill,
 .filter-pill:active {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
+  /* Per user request 2026-06-30: changed from --bg-hover
+     (light gray) to --bg-card (white) to match the Sort
+     by buttons' inactive background. The hover state
+     uses --bg-hover (same as Sort by buttons' hover). */
+  background: var(--bg-card);
+  border-color: var(--border);
   color: var(--fg);
 }
 
@@ -1057,23 +1061,28 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-color: var(--active-border);
 }
 /* Per user request 2026-06-28: the search Reset button.
-   Per user request 2026-06-30: updated to use the same
-   color scheme as the .filter-pill (--bg-hover /
-   --border-strong / --fg) — visually it matches the "All"
-   pill in the filter row. This is the correct semantic:
-   Reset is a secondary action that "undoes" the active
-   search (just like "All" un-anchors a specific filter).
-   The "Search all" button is now the primary action (using
-   the active color scheme like Apply). Margin-left: 0.4rem
-   to separate from the Search all button. */
+   Per user request 2026-06-30: updated twice.
+   1. First: use the same color scheme as the .filter-pill
+      (--bg-hover / --border-strong / --fg) so it matches
+      the "All" pill.
+   2. Then: use the same color scheme as the Sort by
+      buttons (inactive) — --bg-card (white) /
+      --border / --fg. The hover state uses --bg-hover
+      (same as Sort by buttons' hover).
+   This is the correct semantic: Reset is a secondary
+   action that "undoes" the active search (just like "All"
+   un-anchors a specific filter). The "Search all" button
+   is the primary action (using the active color scheme
+   like Apply). Margin-left: 0.4rem to separate from
+   the Search all button. */
 .search-reset-button {
   display: inline-flex;
   align-items: center;
   margin-left: 0.4rem;
   padding: 0.3rem 0.85rem;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: var(--bg-hover);
+  background: var(--bg-card);
   color: var(--fg);
   font-size: 0.85rem;
   font-weight: 500;
@@ -1082,11 +1091,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
 /* Per user request 2026-06-30: the search-reset-button
-   now uses the secondary color scheme (same as .filter-pill),
-   so the hover uses background: --bg-hover (the standard
-   secondary hover) rather than filter: brightness()
-   (which is for primary/active buttons like .filter-apply
-   and .search-button). */
+   now uses the same color scheme as the Sort by buttons
+   (--bg-card / --border / --fg). The hover state uses
+   --bg-hover (same as Sort by buttons' hover). */
 .search-reset-button:hover {
   background: var(--bg-hover);
   border-color: var(--border-strong);
