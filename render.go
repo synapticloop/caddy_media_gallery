@@ -3966,7 +3966,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      <span data-search-header>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
+      <span data-search-header>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{if .IsServerSearchActive}}{{.FilteredTotal}}{{else}}{{.OnPageTotalCount}}{{end}}{{if not .IsServerSearchActive}} <em>This page</em>{{end}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})<span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span>{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -4197,13 +4197,33 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         headerEl.innerHTML = defaultHeader;
         return;
       }
+      // The current search query (read from the input).
+      // Per user request 2026-06-30: the header includes
+      // the query in single quotes (e.g. "search 'cat' -").
+      // We HTML-escape the query because the header uses
+      // innerHTML — any <, >, &, or ' in the query would
+      // either be mis-rendered or (for ') break our
+      // single-quote wrapping.
+      var currentQuery = '';
+      if (input && input.value) {
+        currentQuery = String(input.value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
       // Search format: "Media (TOTAL - search showing M of N <em>This page</em>)"
       // where TOTAL = total file count in the directory,
       // M = visibleCount (cards visible after JS filter),
       // N = pageSizeTotal (the per-page limit, e.g. 60).
       // The MEDIA prefix gives the visitor the directory
-      // size at a glance even while searching.
-      headerEl.innerHTML = 'Media (' + totalFiles + ' - search showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>)';
+      // size at a glance even while searching. Per user
+      // request 2026-06-30: include the search phrase in
+      // single quotes (e.g. "search 'cat' - showing") so
+      // the visitor can see what they're searching for
+      // at a glance.
+      headerEl.innerHTML = 'Media (' + totalFiles + ' - search \'' + currentQuery + '\' - showing ' + visibleCount + ' of ' + pageSizeTotal + ' <em>This page</em>)';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();

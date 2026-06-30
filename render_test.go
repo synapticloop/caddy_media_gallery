@@ -4198,8 +4198,32 @@ func TestRenderPage_MediaHeader_SearchApplied(t *testing.T) {
 	// N of M)" with "search showing M of N <em>This page</em>"
 	// where M = matches on this page (0) and N = on-page
 	// total without filter.
-	if !strings.Contains(html, "search showing 0 of ") || !strings.Contains(html, "This page</em>") {
-		t.Error("expected header to show 'search showing 0 of N <em>This page</em>' when search has no results")
+	// Scope to the header span (data-search-header) — the JS
+	// code at the bottom of the page contains
+	// "<em>This page</em>" as a string literal (in
+	// updateSearchHeader).
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		t.Fatal("could not find data-search-header span")
+	}
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd <= headerSpanStart {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart:headerSpanEnd]
+	// Per user request 2026-06-30: the search header now
+	// includes the search phrase in single quotes. For
+	// form-submitted search with no matches, the format is
+	// "search 'zzz' - showing 0 of 0" (no "<em>This page</em>"
+	// suffix because it's the form-submitted format, not the
+	// JS-only format). The JS would switch to the "This page"
+	// format when the user starts typing.
+	if !strings.Contains(headerSpan, "search 'zzz' - showing 0 of 0") {
+		t.Errorf(`expected header to show "search 'zzz' - showing 0 of 0" when form-submitted search has no results; got: %s`, headerSpan)
+	}
+	// Form-submitted format: NO "<em>This page</em>" suffix.
+	if strings.Contains(headerSpan, "This page</em>") {
+		t.Errorf(`form-submitted search header should NOT include "<em>This page</em>"; got: %s`, headerSpan)
 	}
 	// Also verify the "no images match" empty state is shown.
 	if !strings.Contains(html, "No images match the current filter") {
@@ -4578,8 +4602,8 @@ func TestRenderPage_SearchHeader_FormSubmitted(t *testing.T) {
 	// request 2026-06-30: the header now keeps the "Media (N -"
 	// prefix so the visitor sees the directory size at a glance
 	// even while searching.
-	if !strings.Contains(html, "Media (10 - search showing 2 of 2)") {
-		t.Error(`expected "Media (10 - search showing 2 of 2)" in HTML when ?q=cat matches 2 files`)
+	if !strings.Contains(html, "Media (10 - search 'cat' - showing 2 of 2)") {
+		t.Error(`expected "Media (10 - search &#39;cat&#39; - showing 2 of 2)" in HTML when ?q=cat matches 2 files`)
 	}
 	// Per user request 2026-06-30: form-submitted search
 	// does NOT include "<em>This page</em>" — the pagination
@@ -4618,8 +4642,8 @@ func TestRenderPage_SearchHeader_FormNoResults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, "search showing 0 of") {
-		t.Error(`expected "search showing 0 of N" in HTML when ?q= matches nothing`)
+	if !strings.Contains(html, "search 'zzz_no_match_zzz' - showing 0 of") {
+		t.Error(`expected "search 'zzz_no_match_zzz' - showing 0 of N" in HTML when ?q= matches nothing`)
 	}
 }
 
@@ -4677,8 +4701,8 @@ func TestRenderPage_SearchHeader_FormatFormSubmitted(t *testing.T) {
 	// search header has NO "<em>This page</em>" suffix — the
 	// pagination context already shows the total filtered count.
 	// The header keeps the "Media (N -" prefix.
-	if !strings.Contains(html, "Media (10 - search showing 3 of 3)") {
-		t.Error(`expected "Media (10 - search showing 3 of 3)" in HTML when 3 files match "cat"`)
+	if !strings.Contains(html, "Media (10 - search 'cat' - showing 3 of 3)") {
+		t.Error(`expected "Media (10 - search &#39;cat&#39; - showing 3 of 3)" in HTML when 3 files match "cat"`)
 	}
 	// Check ONLY the rendered header span (data-search-header),
 	// not the entire HTML.
@@ -4790,11 +4814,24 @@ func TestRenderPage_SearchHeader_ServerRendersCorrectly(t *testing.T) {
 	// The server should render the visible text directly
 	// (not in a data-search-header-default attribute). The
 	// JS sets data-search-header-default on page load.
-	if !strings.Contains(html, "search showing 2 of 2") {
-		t.Error(`expected "search showing 2 of 2" in the visible search header text when ?q=st matches 2 files of 10`)
+	// Scope checks to the rendered header span (data-search-header),
+	// not the entire HTML. The JS source code at the bottom of
+	// the page contains "<em>This page</em>" as a string literal
+	// in the updateSearchHeader function (for the JS-search case).
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		t.Fatal("could not find data-search-header span")
 	}
-	if !strings.Contains(html, "<em>This page</em>") {
-		t.Error(`expected "<em>This page</em>" suffix in the search header`)
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd <= headerSpanStart {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart:headerSpanEnd]
+	if !strings.Contains(headerSpan, "search 'st' - showing 2 of 2") {
+		t.Errorf(`expected "search 'st' - showing 2 of 2" in the visible search header text when ?q=st matches 2 files of 10; got: %s`, headerSpan)
+	}
+	if strings.Contains(headerSpan, "<em>This page</em>") {
+		t.Errorf(`form-submitted search should NOT include "<em>This page</em>" suffix; got: %s`, headerSpan)
 	}
 }
 
@@ -4858,8 +4895,8 @@ func TestRenderPage_SearchHeaderJSUpdatesOnFormSubmittedPage(t *testing.T) {
 		t.Fatal("could not find end of data-search-header span")
 	}
 	headerSpan := html[headerSpanStart:headerSpanEnd]
-	if !strings.Contains(headerSpan, "Media (10 - search showing 3 of 3)") {
-		t.Errorf(`expected server-rendered header to be "Media (10 - search showing 3 of 3)"; got: %s`, headerSpan)
+	if !strings.Contains(headerSpan, "Media (10 - search 'cat' - showing 3 of 3)") {
+		t.Errorf(`expected server-rendered header to be "Media (10 - search &#39;cat&#39; - showing 3 of 3)"; got: %s`, headerSpan)
 	}
 	// The JS code that handles search input changes should
 	// NOT have the isServerSearchActive early-return anymore.
