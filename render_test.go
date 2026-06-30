@@ -4808,6 +4808,71 @@ func TestRenderPage_SearchHeader_ServerRendersCorrectly(t *testing.T) {
 // the result cached in a .exif sidecar), so the card
 // overlay can show the EXIF pill immediately without an
 // async fetch.
+
+
+// TestRenderPage_SearchHeaderJSUpdatesOnFormSubmittedPage verifies
+// the rendered template. The JS test is a separate concern
+// (the applyFilter IIFE always calls updateSearchHeader now,
+// regardless of whether the page was form-submitted).
+//
+// Per user request 2026-06-30: when the user changes the
+// search text in the form after a form submit, the header
+// should update to the JS format ("search showing X of 60
+// THIS PAGE") instead of staying as the server-rendered
+// format. The JS change is in the applyFilter function:
+// it no longer returns early when isServerSearchActive
+// is true. The header always reflects the current DOM
+// state.
+func TestRenderPage_SearchHeaderJSUpdatesOnFormSubmittedPage(t *testing.T) {
+	// 10 files, 3 of which match "cat"
+	var files []FileInfo
+	for i := 0; i < 7; i++ {
+		files = append(files, FileInfo{
+			Name: imageName(i), ModTime: int64(i), Size: 1024, Kind: KindImage,
+		})
+	}
+	files = append(files, FileInfo{
+		Name: "cat-photo.jpg", ModTime: 100, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "my-cat.png", ModTime: 101, Size: 1024, Kind: KindImage,
+	})
+	files = append(files, FileInfo{
+		Name: "another-cat.webp", ModTime: 102, Size: 1024, Kind: KindImage,
+	})
+	// Form-submitted search
+	q := url.Values{"q": {"cat"}}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 30,
+		[]string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, "", "", "substring", "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The server-rendered header should be the form-submitted
+	// format (no "This page" suffix, N = total filtered).
+	headerSpanStart := strings.Index(html, `data-search-header>`)
+	if headerSpanStart < 0 {
+		t.Fatal("could not find data-search-header span")
+	}
+	headerSpanEnd := strings.Index(html[headerSpanStart:], "</span>") + headerSpanStart
+	if headerSpanEnd <= headerSpanStart {
+		t.Fatal("could not find end of data-search-header span")
+	}
+	headerSpan := html[headerSpanStart:headerSpanEnd]
+	if !strings.Contains(headerSpan, "Media (10 - search showing 3 of 3)") {
+		t.Errorf(`expected server-rendered header to be "Media (10 - search showing 3 of 3)"; got: %s`, headerSpan)
+	}
+	// The JS code that handles search input changes should
+	// NOT have the isServerSearchActive early-return anymore.
+	// The JS always updates the header to reflect the current
+	// DOM state, even on form-submitted pages.
+	if !strings.Contains(html, "updateSearchHeader(visibleCount, query.length > 0);") {
+		t.Error("expected JS to call updateSearchHeader unconditionally (no isServerSearchActive early-return)")
+	}
+	// The old isServerSearchActive function should be removed.
+	if strings.Contains(html, "function isServerSearchActive()") {
+		t.Error("expected the isServerSearchActive function to be removed (no longer needed)")
+	}
+}
 func TestRenderPage_ExifPillAppearsWhenExifPresent(t *testing.T) {
 	files := []FileInfo{
 		{
