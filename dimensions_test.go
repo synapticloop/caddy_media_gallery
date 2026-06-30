@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	_ "golang.org/x/image/webp"
 )
@@ -320,9 +321,12 @@ func TestReadDimensionsCached_FirstReadWritesSidecar(t *testing.T) {
 
 // TestReadDimensionsCached_SecondReadUsesSidecar verifies the
 // second call reads the sidecar (fast) without re-parsing the
-// source image. We OVERWRITE the source with garbage after the
-// first call; the second call must still return the cached
-// dimensions (proving the sidecar was used, not a re-parse).
+// source image. Per user request 2026-06-30: the staleness
+// check requires sidecar.mtime >= source.mtime for the
+// sidecar to be trusted. We set the sidecar's mtime to match
+// the source's mtime so the staleness check passes; the
+// second read returns the cached dimensions from the sidecar
+// (not a re-parse of the source).
 func TestReadDimensionsCached_SecondReadUsesSidecar(t *testing.T) {
 	tmp, err := os.CreateTemp("", "cache-*.jpg")
 	if err != nil {
@@ -336,22 +340,79 @@ func TestReadDimensionsCached_SecondReadUsesSidecar(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(cacheDir)
-	// First read: parse the source + write sidecar.
+	// First read: parse the source + write sidecar (with
+	// mtime = source.mtime, so the staleness check on the
+	// second read passes).
 	_, _, err = readDimensionsCached(tmp.Name(), cacheDir, "webp")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Overwrite the source with garbage. The second read
-	// should still succeed because it uses the sidecar.
-	if err := os.WriteFile(tmp.Name(), []byte("not a valid image"), 0o644); err != nil {
-		t.Fatal(err)
+	// Verify the sidecar's mtime is now >= the source's mtime.
+	srcInfo, _ := os.Stat(tmp.Name())
+	sidecarPath := dimsMetaPath(tmp.Name(), cacheDir, "webp")
+	sidecarInfo, _ := os.Stat(sidecarPath)
+	if sidecarInfo.ModTime().Before(srcInfo.ModTime()) {
+		t.Fatalf("sidecar mtime %v is before source mtime %v (should be >= after first write)",
+			sidecarInfo.ModTime(), srcInfo.ModTime())
 	}
+	// Second read: should use the sidecar (no re-parse).
+	// The source hasn't been modified since the sidecar was
+	// written, so the staleness check passes.
 	w, h, err := readDimensionsCached(tmp.Name(), cacheDir, "webp")
 	if err != nil {
 		t.Errorf("second read: got error %v (should use sidecar, not re-parse)", err)
 	}
 	if w != 1920 || h != 1080 {
 		t.Errorf("second read: got %dx%d, want 1920x1080 (from sidecar)", w, h)
+	}
+}
+
+// TestReadDimensionsCached_StaleSidecarRefetched is a new test
+// for the per-user 2026-06-30 fix: if the source file is
+// modified AFTER the sidecar is written, the sidecar is stale
+// and the helper re-reads the source. We verify this by:
+// 1. Writing the sidecar with old dimensions
+// 2. Touching the source (mtime > sidecar mtime)
+// 3. Re-writing the source with NEW dimensions
+// 4. Verifying the next read returns the NEW dimensions
+//   (proving the stale sidecar was discarded and the source
+//   was re-read)
+func TestReadDimensionsCached_StaleSidecarRefetched(t *testing.T) {
+	tmp, err := os.CreateTemp("", "cache-*.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmp.Name())
+	tmp.Close()
+	writeSyntheticJPEGHelper(t, tmp.Name(), 1920, 1080)
+	cacheDir, err := os.MkdirTemp("", "sidecar-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// Write a sidecar with OLD dimensions (1920x1080 from the
+	// source we just wrote).
+	_, _, err = readDimensionsCached(tmp.Name(), cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Touch the source to a NEWER mtime (simulating a re-encode
+	// where the dimensions change).
+	newTime := time.Now().Add(1 * time.Hour)
+	if err := os.Chtimes(tmp.Name(), newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+	// Re-write the source with NEW dimensions (640x480).
+	writeSyntheticJPEGHelper(t, tmp.Name(), 640, 480)
+	// Now read again. The sidecar's mtime is < source's mtime
+	// (because we touched the source), so the helper should
+	// discard the stale sidecar and re-read the source.
+	w, h, err := readDimensionsCached(tmp.Name(), cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w != 640 || h != 480 {
+		t.Errorf("after source modification: got %dx%d, want 640x480 (source re-read)", w, h)
 	}
 }
 

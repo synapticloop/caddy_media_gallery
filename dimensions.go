@@ -115,24 +115,60 @@ func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error)
 		return readDimensions(path)
 	}
 	metaPath := dimsMetaPath(path, cacheDir, thumbExt)
+	// Per user request 2026-06-30: check the sidecar's
+	// mtime against the source's mtime. If the source was
+	// modified AFTER the sidecar was written, the sidecar
+	// is stale (e.g., the user re-encoded the image with
+	// different dimensions). We treat the sidecar as fresh
+	// only if sidecar.mtime >= source.mtime — i.e., the
+	// sidecar was written AFTER the source was last
+	// modified.
+	//
+	// We also Stat the source here (cheap) so we can pass
+	// srcInfo.ModTime() to the Chtimes call below.
+	srcInfo, srcErr := os.Stat(path)
+	if srcErr != nil {
+		// Source missing or unreadable. We can't
+		// safely cache anything, so just fall through
+		// to readDimensions which will return its own
+		// error.
+		return readDimensions(path)
+	}
 	// Try the sidecar first. A successful read avoids the
 	// ~1-5ms image header parse entirely.
 	if data, err := os.ReadFile(metaPath); err == nil {
-		// Format: "WIDTH HEIGHT" + newline (plain text, newline-terminated).
-		// Two integers separated by whitespace.
-		fields := strings.Fields(string(data))
-		if len(fields) >= 2 {
-			w, errW := strconv.Atoi(fields[0])
-			h, errH := strconv.Atoi(fields[1])
-			if errW == nil && errH == nil {
-				return w, h, nil
+		// Staleness check: if the source is newer than the
+		// sidecar, the sidecar is stale. Skip it (don't
+		// trust its values).
+		sidecarFresh := true
+		if sidecarInfo, statErr := os.Stat(metaPath); statErr == nil {
+			// sidecarInfo.ModTime() >= srcInfo.ModTime() means
+			// "sidecar was written after the source was last
+			// modified" → fresh
+			if sidecarInfo.ModTime().Before(srcInfo.ModTime()) {
+				sidecarFresh = false
 			}
-			// Malformed sidecar — fall through to a fresh read
-			// and overwrite. (Could happen if a previous version
-			// wrote a different format; we want self-healing.)
+		}
+		if sidecarFresh {
+			// Format: "WIDTH HEIGHT" + newline (plain
+			// text, newline-terminated). Two integers
+			// separated by whitespace.
+			fields := strings.Fields(string(data))
+			if len(fields) >= 2 {
+				w, errW := strconv.Atoi(fields[0])
+				h, errH := strconv.Atoi(fields[1])
+				if errW == nil && errH == nil {
+					return w, h, nil
+				}
+				// Malformed sidecar — fall through to a
+				// fresh read and overwrite. (Could happen
+				// if a previous version wrote a different
+				// format; we want self-healing.)
+			}
 		}
 	}
-	// Cache miss: do the real read and write the sidecar.
+	// Cache miss (no sidecar, malformed sidecar, or stale
+	// sidecar): do the real read and write the sidecar.
 	w, h, err = readDimensions(path)
 	if err != nil || w == 0 || h == 0 {
 		// Either an I/O error or no decodable dimensions.
@@ -140,11 +176,13 @@ func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error)
 		// (would just be a useless file in the cache).
 		return w, h, err
 	}
-	// Write the sidecar. Best-effort: if the write fails, the
-	// next scan just re-reads the source (no correctness issue,
-	// just a small perf cost). We don't propagate the error.
+	// Write the sidecar. We set its mtime to the source's
+	// mtime so the staleness check on the NEXT read works
+	// cleanly (a sidecar with mtime = source.mtime is
+	// considered fresh until the source is modified again).
 	_ = os.MkdirAll(cacheDir, 0o755)
 	_ = os.WriteFile(metaPath, []byte(fmt.Sprintf("%d %d\n", w, h)), 0o644)
+	_ = os.Chtimes(metaPath, srcInfo.ModTime(), srcInfo.ModTime())
 	return w, h, nil
 }
 

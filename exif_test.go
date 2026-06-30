@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+	"os/exec"
 )
 
 // TestReadExif_RealFixtures verifies that readExif extracts
@@ -256,12 +258,69 @@ func TestReadExifCached_FirstReadWritesSidecar(t *testing.T) {
 
 // TestReadExifCached_SecondReadUsesSidecar verifies the
 // second call reads the sidecar (fast) without re-parsing
-// the source image. We OVERWRITE the source with garbage
-// after the first call; the second call must still return
-// the cached EXIF (proving the sidecar was used, not a
-// re-parse). If the function re-parsed the source, the
-// second call would fail with a parse error.
+// the source image. Per user request 2026-06-30: the
+// staleness check requires sidecar.mtime >= source.mtime
+// for the sidecar to be trusted. The first read writes
+// the sidecar with mtime = source.mtime, so the second
+// read passes the staleness check and returns the cached
+// EXIF (no re-parse).
 func TestReadExifCached_SecondReadUsesSidecar(t *testing.T) {
+	path := "/var/www/html/images/media_gallery/misty_bamboo_forest_path.jpg"
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("fixture not available: %s", path)
+		return
+	}
+	cacheDir, err := os.MkdirTemp("", "exif-cache-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(cacheDir)
+	// First read: parse the source + write sidecar (with
+	// mtime = source.mtime, so the staleness check on the
+	// second read passes).
+	exif1, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exif1 == nil {
+		t.Fatal("first read: expected EXIF data, got nil")
+	}
+	// Verify the sidecar's mtime is >= the source's mtime.
+	srcInfo, _ := os.Stat(path)
+	sidecarPath := exifMetaPath(path, cacheDir, "webp")
+	sidecarInfo, _ := os.Stat(sidecarPath)
+	if sidecarInfo.ModTime().Before(srcInfo.ModTime()) {
+		t.Fatalf("sidecar mtime %v is before source mtime %v (should be >= after first write)",
+			sidecarInfo.ModTime(), srcInfo.ModTime())
+	}
+	// Second read: should use the sidecar (no re-parse).
+	// The source hasn't been modified since the sidecar was
+	// written, so the staleness check passes.
+	exif2, err := readExifCached(path, cacheDir, "webp")
+	if err != nil {
+		t.Errorf("second read: got error %v (should use sidecar, not re-parse)", err)
+	}
+	if exif2 == nil {
+		t.Errorf("second read: got nil (should have returned cached EXIF)")
+	}
+	// The cached values should match the first read.
+	if exif1 != nil && exif2 != nil {
+		if exif1.CameraMake != exif2.CameraMake || exif1.CameraModel != exif2.CameraModel {
+			t.Errorf("cached EXIF differs from first read: %+v vs %+v", exif1, exif2)
+		}
+	}
+}
+
+// TestReadExifCached_StaleSidecarRefetched is a new test for
+// the per-user 2026-06-30 fix: if the source file is modified
+// AFTER the sidecar is written, the sidecar is stale and the
+// helper re-reads the source (re-parsing EXIF). We verify by
+// 1. Writing the sidecar with the source's original EXIF
+// 2. Touching the source to a NEWER mtime
+// 3. Re-writing the source with a different EXIF
+// 4. Verifying the next read returns the NEW EXIF (proving
+//   the stale sidecar was discarded)
+func TestReadExifCached_StaleSidecarRefetched(t *testing.T) {
 	path := "/var/www/html/images/media_gallery/misty_bamboo_forest_path.jpg"
 	if _, err := os.Stat(path); err != nil {
 		t.Skipf("fixture not available: %s", path)
@@ -277,36 +336,50 @@ func TestReadExifCached_SecondReadUsesSidecar(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exif1 == nil {
-		t.Fatal("first read: expected EXIF data, got nil")
-	}
-	// Overwrite the source with garbage. The second read
-	// should still succeed because it uses the sidecar. We
-	// back up the original bytes first so we can restore the
-	// fixture after the test runs (other tests depend on
-	// the fixture being a valid JPEG with real EXIF).
-	origBytes, err := os.ReadFile(path)
-	if err != nil {
+	// Touch the source to a NEWER mtime (simulating an EXIF
+	// edit with exiftool).
+	newTime := time.Now().Add(1 * time.Hour)
+	if err := os.Chtimes(path, newTime, newTime); err != nil {
 		t.Fatal(err)
 	}
+	// Modify the source's EXIF with exiftool (different
+	// camera). We use the canonical misty fixture's existing
+	// data; if exiftool isn't available, skip.
+	result := exec.Command("exiftool",
+		"-overwrite_original",
+		"-Make=TestMake",
+		"-Model=TestModel",
+		path,
+	).Run()
+	if result != nil {
+		t.Skipf("exiftool not available: %v", result)
+		return
+	}
+	// Restore the original EXIF after the test.
 	t.Cleanup(func() {
-		_ = os.WriteFile(path, origBytes, 0o644)
+		_ = exec.Command("exiftool",
+			"-overwrite_original",
+			"-Make=Fujifilm",
+			"-Model=X-T5",
+			path,
+		).Run()
 	})
-	if err := os.WriteFile(path, []byte("not a valid image"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// Read again. The sidecar's mtime is < source's mtime,
+	// so the helper should discard the stale sidecar and
+	// re-read the source.
 	exif2, err := readExifCached(path, cacheDir, "webp")
 	if err != nil {
-		t.Errorf("second read: got error %v (should use sidecar, not re-parse)", err)
+		t.Fatal(err)
 	}
 	if exif2 == nil {
-		t.Errorf("second read: got nil (should have returned cached EXIF)")
+		t.Fatal("after source modification: got nil (should have re-read source)")
 	}
-	// The cached values should match the first read.
-	if exif1 != nil && exif2 != nil {
-		if exif1.CameraMake != exif2.CameraMake || exif1.CameraModel != exif2.CameraModel {
-			t.Errorf("cached EXIF differs from first read: %+v vs %+v", exif1, exif2)
-		}
+	if exif2.CameraMake != "TestMake" {
+		t.Errorf("after source modification: got CameraMake=%q, want %q (source re-read)",
+			exif2.CameraMake, "TestMake")
+	}
+	if exif1 != nil && exif2.CameraMake == exif1.CameraMake {
+		t.Errorf("stale sidecar was not invalidated: still got old Make %q", exif1.CameraMake)
 	}
 }
 

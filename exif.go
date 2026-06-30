@@ -350,29 +350,53 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 		return readExif(path)
 	}
 	metaPath := exifMetaPath(path, cacheDir, thumbExt)
+	// Per user request 2026-06-30: check the sidecar's
+	// mtime against the source's mtime. If the source was
+	// modified AFTER the sidecar was written, the sidecar
+	// is stale (e.g., the user re-edited the EXIF data with
+	// exiftool). We treat the sidecar as fresh only if
+	// sidecar.mtime >= source.mtime.
+	srcInfo, srcErr := os.Stat(path)
+	if srcErr != nil {
+		// Source missing or unreadable. Fall through to
+		// readExif which will return its own error.
+		return readExif(path)
+	}
 	// Try the sidecar first.
 	if data, err := os.ReadFile(metaPath); err == nil {
-		if exif := parseExifSidecar(data); exif != nil || bytes.HasPrefix(data, []byte("has=false\n")) {
-			// Successfully parsed. nil exif + "has=false" prefix
-			// means "no EXIF" (valid cached result). nil exif
-			// without that prefix means "malformed sidecar" — fall
-			// through to a fresh read.
-			return exif, nil
+		// Staleness check: if the source is newer than the
+		// sidecar, the sidecar is stale. Skip it.
+		sidecarFresh := true
+		if sidecarInfo, statErr := os.Stat(metaPath); statErr == nil {
+			if sidecarInfo.ModTime().Before(srcInfo.ModTime()) {
+				sidecarFresh = false
+			}
 		}
-		// Malformed sidecar — fall through to a fresh read
-		// and overwrite (self-healing). Could happen if a
-		// previous version wrote a different format.
+		if sidecarFresh {
+			if exif := parseExifSidecar(data); exif != nil || bytes.HasPrefix(data, []byte("has=false\n")) {
+				// Successfully parsed. nil exif + "has=false"
+				// prefix means "no EXIF" (valid cached result).
+				// nil exif without that prefix means "malformed
+				// sidecar" — fall through to a fresh read.
+				return exif, nil
+			}
+			// Malformed sidecar — fall through to a fresh
+			// read and overwrite (self-healing).
+		}
 	}
-	// Cache miss: do the real read.
+	// Cache miss (no sidecar, malformed sidecar, or stale
+	// sidecar): do the real read.
 	exif, err := readExif(path)
 	if err != nil {
 		return nil, err
 	}
-	// Write the sidecar. We write for BOTH the has-EXIF
-	// and no-EXIF cases so we don't re-parse on the next
-	// scan.
+	// Write the sidecar. We set its mtime to the source's
+	// mtime so the staleness check on the NEXT read works
+	// cleanly (a sidecar with mtime = source.mtime is
+	// considered fresh until the source is modified again).
 	_ = os.MkdirAll(cacheDir, 0o755)
 	_ = os.WriteFile(metaPath, writeExifSidecar(exif), 0o644)
+	_ = os.Chtimes(metaPath, srcInfo.ModTime(), srcInfo.ModTime())
 	return exif, err
 }
 
