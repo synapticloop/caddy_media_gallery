@@ -206,6 +206,23 @@ func GenerateOrLoadThumb(src, cacheDir string, cfg ThumbConfig) ([]byte, error) 
 	// Write to cache (best-effort; a write error shouldn't fail
 	// the request — the in-memory bytes are still good).
 	_ = os.WriteFile(cacheFile, buf.Bytes(), 0o644)
+	// Per user request 2026-06-29: set the thumb's mtime to
+	// the source's mtime so the staleness check at the top of
+	// this function works as "is the source newer than the
+	// thumb?" — semantically clear. Without this, the thumb
+	// has the time it was generated, which is always NOW
+	// (never older than the source unless the source changes
+	// after the thumb is generated). With this change, the
+	// thumb's mtime mirrors the source's, so a touched
+	// source will look newer than the cached thumb and
+	// trigger a regeneration.
+	//
+	// The cache eviction logic does NOT use the thumb's mtime
+	// anymore — it uses the .meta sidecar's mtime (which
+	// is updated on each serve via touchMetaAtUse, acting
+	// as a "last used" timestamp for proper LRU eviction).
+	// See evictIfOver for details.
+	_ = os.Chtimes(cacheFile, srcInfo.ModTime(), srcInfo.ModTime())
 
 	// Per user request 2026-06-27: cap the on-disk thumb
 	// cache. After each successful write, kick off a
@@ -312,6 +329,12 @@ func GenerateOrLoadVideoThumb(src, cacheDir, ffmpegPath string, cfg ThumbConfig)
 	if _, err := os.Stat(cacheFile); err != nil {
 		return nil, fmt.Errorf("ffmpeg produced no output for %s: %w", src, err)
 	}
+	// Per user request 2026-06-29: set the thumb's mtime to
+	// the source's mtime (same reason as in
+	// GenerateOrLoadThumb). This makes the staleness check
+	// "is the source newer than the thumb?" semantically clear
+	// and consistent across image and video thumbs.
+	_ = os.Chtimes(cacheFile, srcInfo.ModTime(), srcInfo.ModTime())
 	return os.ReadFile(cacheFile)
 }
 
@@ -421,7 +444,29 @@ func (g *Gallery) serveThumb(w http.ResponseWriter, r *http.Request, root, relPa
 		http.Error(w, "media_gallery: thumb generation failed: "+err.Error(), http.StatusInternalServerError)
 		return true
 	}
-	w.Header().Set("Content-Type", "image/webp")
+	// Per user request 2026-06-29: touch the .meta sidecar
+	// to mark this thumb as "recently used". The .meta mtime
+	// then acts as the LRU timestamp for cache eviction —
+	// older .meta files get evicted first when the cap is
+	// hit. This decouples cache eviction from the thumb's
+	// own mtime (which now mirrors the source's mtime for
+	// semantic correctness in the staleness check).
+	//
+	// The video path always uses webp; the image path uses
+	// the operator-configured format (default webp).
+	thumbExt := "webp"
+	if !isVideoExt(src) {
+		// Reuse the same extension-mapping logic as
+		// GenerateOrLoadThumb: only "jpeg"/"jpg" -> "jpg" and
+		// "png" -> "png"; everything else (including the
+		// default "webp") -> "webp".
+		if g.ThumbFormat == "jpeg" || g.ThumbFormat == "jpg" {
+			thumbExt = "jpg"
+		} else if g.ThumbFormat == "png" {
+			thumbExt = "png"
+		}
+	}
+	touchMetaAtUse(src, g.thumbCacheDir(), thumbExt)
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", g.ThumbTTLMinutes*60)) // thumbs are immutable per source mtime
 	_, _ = w.Write(data)
 	return true
@@ -481,11 +526,26 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	maxBytes := int64(maxMB) * 1024 * 1024
 	targetBytes := maxBytes * 8 / 10 // 80% of cap (20% headroom)
 
-	// Walk the cache directory and collect (size, mtime, path)
+	// Walk the cache directory and collect (size, lruTime, path)
+	// for each cached thumb. Per user request 2026-06-29:
+	// the eviction order is determined by the .meta sidecar's
+	// mtime (which serveThumb touches on every access via
+	// touchMetaAtUse). This gives us proper LRU eviction —
+	// frequently-accessed thumbs stay in the cache,
+	// rarely-accessed ones get evicted when the cap is hit.
+	// The thumb's own mtime no longer drives eviction (since
+	// the thumb's mtime now mirrors the source's mtime for
+	// semantic correctness in the staleness check).
+	//
+	// The total cache size is computed from the .webp/.jpg/.png
+	// thumb files (not the sidecars). When we evict a thumb,
+	// we also delete its .meta and .exif sidecars so they
+	// don't linger in the cache (they're orphaned otherwise).
 	type cacheFile struct {
-		size  int64
-		mtime int64 // unix nanoseconds
-		path  string
+		size     int64
+		lruTime  int64 // unix nanoseconds — .meta mtime if present, else thumb mtime
+		path     string
+		sidecars []string // .meta and .exif to delete with this thumb
 	}
 	var files []cacheFile
 	var totalBytes int64
@@ -499,14 +559,42 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 		if entry.IsDir() {
 			continue
 		}
+		name := entry.Name()
+		// Skip non-thumb files (the .meta and .exif sidecars
+		// are handled via their parent thumb's sidecars list).
+		if !isThumbFile(name) {
+			continue
+		}
 		info, err := entry.Info()
 		if err != nil {
 			continue // stat failed — skip; don't evict
 		}
+		fullPath := filepath.Join(cacheDir, name)
+		// Read LRU timestamp from the .meta sidecar if it
+		// exists. The .meta is named "<name>.meta" (e.g.
+		// "abc123.webp.meta"). If missing (legacy files,
+		// pre-this-feature thumbs, or files that failed the
+		// initial dimensions read), fall back to the
+		// thumb's mtime.
+		lruTime := info.ModTime().UnixNano() // fallback
+		metaFile := fullPath + ".meta"
+		if metaInfo, err := os.Stat(metaFile); err == nil {
+			lruTime = metaInfo.ModTime().UnixNano()
+		} else if !os.IsNotExist(err) {
+			// Stat failed for some other reason. Stick with
+			// the fallback lruTime (the thumb's mtime).
+		}
+		// Collect any sidecars (meta + exif) for deletion.
+		sidecars := []string{metaFile}
+		exifFile := fullPath + ".exif"
+		if _, err := os.Stat(exifFile); err == nil {
+			sidecars = append(sidecars, exifFile)
+		}
 		files = append(files, cacheFile{
-			size:  info.Size(),
-			mtime: info.ModTime().UnixNano(),
-			path:  filepath.Join(cacheDir, entry.Name()),
+			size:     info.Size(),
+			lruTime:  lruTime,
+			path:     fullPath,
+			sidecars: sidecars,
 		})
 		totalBytes += info.Size()
 	}
@@ -516,25 +604,43 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 		return
 	}
 
-	// Over cap — sort by mtime (oldest first) and delete until
-	// under the target. We target 80% of the cap to leave
-	// headroom for future writes (avoids evicting on every
-	// write when the cap is tight).
+	// Over cap — sort by LRU time (oldest = least recently
+	// used first) and delete until under the target. We
+	// target 80% of the cap to leave headroom for future
+	// writes (avoids evicting on every write when the cap
+	// is tight).
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].mtime < files[j].mtime
+		return files[i].lruTime < files[j].lruTime
 	})
 	for _, f := range files {
 		if totalBytes <= targetBytes {
 			break
 		}
-		if err := os.Remove(f.path); err != nil && !os.IsNotExist(err) {
-			// Remove failed (race with another evictor, or
-			// permission denied). Skip — the next sweep
-			// will try again. Not a fatal error.
-			continue
+		// Delete the thumb + any sidecars. Sidecar removal
+		// errors are best-effort (the next sweep will
+		// clean them up).
+		_ = os.Remove(f.path)
+		for _, sc := range f.sidecars {
+			_ = os.Remove(sc)
 		}
 		totalBytes -= f.size
 	}
+}
+
+// isThumbFile reports whether the given cache file name is
+// a thumb (recognised extensions: .webp, .jpg, .jpeg, .png).
+// Used by the eviction logic to skip sidecar files when
+// computing the cache size. Per user request 2026-06-29:
+// .meta and .exif sidecars are NOT counted toward the cache
+// cap (they're tiny and get deleted with their parent thumb
+// during eviction).
+func isThumbFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".webp", ".jpg", ".jpeg", ".png":
+		return true
+	}
+	return false
 }
 
 // maybeEvictAsync is a fire-and-forget eviction. It runs

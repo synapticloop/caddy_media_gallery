@@ -148,6 +148,48 @@ func readDimensionsCached(path, cacheDir, thumbExt string) (w, h int, err error)
 	return w, h, nil
 }
 
+// touchMetaAtUse updates the .meta sidecar's mtime to the
+// current time. This is called on every thumb serve to act
+// as an LRU timestamp — the eviction logic sorts by .meta
+// mtime (oldest first), so frequently-accessed thumbs stay
+// in the cache and rarely-accessed ones get evicted when the
+// cap is hit.
+//
+// The function is best-effort: any error (permission
+// denied, etc.) is silently ignored. The consequences of a
+// failed touch are just "this thumb looks older to the
+// eviction logic" — it might get evicted slightly sooner
+// than it should. No correctness impact.
+//
+// If the .meta sidecar doesn't exist (e.g. the thumb was
+// generated before this feature was added, or the
+// dimensions failed to be read on the initial scan), we
+// CREATE a minimal .meta with a single newline. The eviction
+// logic uses the .meta mtime as the LRU timestamp, so the
+// mtime is the only thing that matters here — the contents
+// are irrelevant. A single-byte file is enough.
+//
+// Why create the .meta on first serve? Because for a fresh
+// thumb (no prior scan), there's no .meta yet, but we still
+// want a valid LRU timestamp. The first serve IS the
+// first-known "last used" time, which is a fine LRU signal.
+func touchMetaAtUse(src, cacheDir, thumbExt string) {
+	if cacheDir == "" {
+		return
+	}
+	metaPath := dimsMetaPath(src, cacheDir, thumbExt)
+	// If the .meta doesn't exist, create a minimal one. We
+	// use MkdirAll (in case the cache dir was removed out
+	// from under us) and WriteFile. Both are best-effort.
+	if _, err := os.Stat(metaPath); os.IsNotExist(err) {
+		_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
+		_ = os.WriteFile(metaPath, []byte("\n"), 0o644)
+	}
+	// Bump the mtime to time.Now(). Chtimes is the cheapest
+	// way: it doesn't read or write any data.
+	_ = os.Chtimes(metaPath, time.Now(), time.Now())
+}
+
 // readImageDimensions uses image.DecodeConfig to read only
 // the image header. Returns (0, 0, nil) for non-image files
 // or files that can't be decoded (corrupted, unsupported
