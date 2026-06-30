@@ -795,8 +795,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 /* Per user request 2026-06-20 (Phase 4): the file-type
    filter UI sits between the breadcrumb and the media
    section. The row is a single horizontal bar of "pills"
-   (the All button + three dropdown triggers + the Apply
-   button). Each dropdown opens to a vertical list of
+   (three dropdown triggers + the Apply button + the
+   Reset button). Each dropdown opens to a vertical list of
    checkbox options (sub-type + count).
 
    Implementation: <details>/<summary> for show/hide (no JS,
@@ -847,10 +847,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-color: var(--border-strong);
   color: var(--fg);
 }
-/* "All" and the dropdown triggers use a different visual
-   treatment when active (currently selected or the dropdown
-   is open). The summary of a <details> element can be styled
-   with [open] to indicate the dropdown is open. */
+/* "Reset" (formerly "All") and the dropdown triggers use a
+   different visual treatment when active (currently selected
+   or the dropdown is open). The summary of a <details> element
+   can be styled with [open] to indicate the dropdown is open. */
 .filter-pill-active,
 .filter-dropdown[open] > .filter-pill,
 .filter-pill:active {
@@ -1069,9 +1069,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       buttons (inactive) — --bg-card (white) /
       --border / --fg. The hover state uses --bg-hover
       (same as Sort by buttons' hover).
-   This is the correct semantic: Reset is a secondary
-   action that "undoes" the active search (just like "All"
-   un-anchors a specific filter). The "Search all" button
+   This is the correct semantic: the search Reset is a
+   secondary action that "undoes" the active search (just
+   like the "Reset" pill in the filter row un-anchors a
+   specific filter). The "Search all" button
    is the primary action (using the active color scheme
    like Apply). Margin-left: 0.4rem to separate from
    the Search all button. */
@@ -1092,8 +1093,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 /* Per user request 2026-06-30: the search-reset-button
    now uses the same color scheme as the Sort by buttons
-   (--bg-card / --border / --fg). The hover state uses
-   --bg-hover (same as Sort by buttons' hover). */
+   (--bg-card / --border / --fg) and the Reset pill in the
+   filter row. The hover state uses --bg-hover (same as
+   Sort by buttons' hover). */
 .search-reset-button:hover {
   background: var(--bg-hover);
   border-color: var(--border-strong);
@@ -1825,9 +1827,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <div class="filter-row">
         <span class="filter-label">Type Filter</span>
 
-        <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
-           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">All</a>
-
         {{if gt .FilterImageOptions.Total 0}}
         <details class="filter-dropdown">
           <summary class="filter-pill">
@@ -1886,6 +1885,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
 
         <button type="submit" class="filter-apply">Apply</button>
+        {{/* Per user request 2026-06-30: moved here from
+             before the filter dropdowns. Renamed from "All"
+             to "Reset" (per user clarification: same function
+             — resets the type filter to show all file types).
+             The href is the same as before: the breadcrumb's
+             current dir, or "./" if at the root. The pill is
+             marked active when no type filter is currently
+             active (which is the state this button SETS — so
+             it makes sense to highlight it as the "current"
+             state when active). */}}
+        <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
+           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">Reset</a>
         {{- /* Search box + button on the right of the filter row.
             Client-side: as the user types, JS hides non-matching
             cards (see inline JS at the bottom of the template).
