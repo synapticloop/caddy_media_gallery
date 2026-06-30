@@ -21,7 +21,7 @@ import (
 // if it happens to exist on the test host (e.g. from a previous
 // build), which would diverge from the bundled template the tests
 // are written against. By isolating tests to a temp dir, the
-// loadTemplate() fallback to the bundled galleryTemplate constant
+// loadTemplate() fallback to the bundled galleryTemplateFS (//go:embed-ed)
 // is what gets used.
 func TestMain(m *testing.M) {
 	tmp, err := os.MkdirTemp("", "caddy-media-gallery-test-*")
