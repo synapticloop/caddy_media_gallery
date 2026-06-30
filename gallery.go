@@ -86,9 +86,12 @@ type Gallery struct {
 	// as images. Set from the  Caddyfile subdirective
 	// (space-separated, case-insensitive, with or without leading
 	// dot). If empty (the default), the plugin uses a built-in list
-	// of common image extensions (jpg, jpeg, png, gif, webp, svg,
-	// avif, heic). Provision() converts this list to a map for the
-	// Scanner to use.
+	// of common image extensions (jpg, jpeg, png, gif, webp).
+	// HEIC, AVIF, and SVG are NOT in the default list — Go's
+	// stdlib can't decode them. Operators can still add them
+	// via `image_types .heic .avif .svg` if they have external
+	// tooling to handle these formats. Provision() converts this
+	// list to a map for the Scanner to use.
 	ImageExts []string
 
 	// VideoExts is the set of file extensions the gallery treats

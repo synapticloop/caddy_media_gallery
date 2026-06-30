@@ -25,7 +25,7 @@ The `media_gallery` directive accepts one inline option:
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
 | `path_prefix` | URL prefix (e.g. `images`) | directory basename | URL mount prefix used in breadcrumb links. Defaults to the basename of the root directory if not set. |
 | `root_name` | display name | `media root` | Display name for the root breadcrumb segment. |
-| `image_types` | space-separated extensions (no leading dot) | `jpg jpeg png gif webp svg avif heic` | File extensions the gallery treats as images. Case-insensitive. |
+| `image_types` | space-separated extensions (no leading dot) | `jpg jpeg png gif webp` | File extensions the gallery treats as images. Case-insensitive. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, not the image grid) and shown with a 📄 icon. Operators who want to handle these formats (e.g. via external tooling) can opt in with `image_types .heic .avif .svg`. |
 | `video_types` | space-separated extensions (no leading dot) | `mp4 webm m4v mov mkv avi ogv ogg` | File extensions the gallery treats as videos. |
 | `sort` | `mtime` / `name` | `mtime` | Sort field for the image grid. `mtime` = newest first; `name` = case-insensitive alphabetical. |
 | `page_size` | integer &gt;= 1 | `60` (or first item in `page_sizes`) | Default per-page count. Deprecated: use `page_sizes` (list form) for the dropdown, which lets the visitor choose. |
@@ -232,7 +232,7 @@ of the `media_gallery` handler, with realistic values:
   "root": "/var/www/html/images",
   "path_prefix": "images",
   "root_name": "images",
-  "image_types": ["jpg", "jpeg", "png", "gif", "webp", "svg", "avif", "heic"],
+  "image_types": ["jpg", "jpeg", "png", "gif", "webp"],
   "video_types": ["mp4", "webm", "m4v", "mov", "mkv", "avi", "ogv", "ogg"],
   "sort": "name",
   "page_size": 60,

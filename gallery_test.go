@@ -1001,8 +1001,11 @@ func TestProvision_DefaultsWhenNoCustomExtTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Image defaults
-	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".avif", ".heic"} {
+	// Image defaults (per user request 2026-06-30: HEIC, AVIF,
+	// and SVG are NOT in the defaults — Go's stdlib can't decode
+	// them. Operators can still add them via the image_types
+	// subdirective.)
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".webp"} {
 		if !g.imageExtsMap[ext] {
 			t.Errorf("expected default imageExtsMap[%q] = true, got false", ext)
 		}

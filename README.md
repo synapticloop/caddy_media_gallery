@@ -1,5 +1,8 @@
 # caddy_media_gallery
 
+> NOTE: whilst useful and used, until this is designated as release 1.0.0, the functionality will change (and bugs will be squashed)
+> That being said, it does work, internationalisation and speedups are next on the agenda
+
 *The delightful way to serve a directory.*
 
 A Caddy v2 HTTP handler module that renders a directory as a thumbnailed
@@ -125,7 +128,7 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `sort` | `mtime` | Sort field: `mtime` (newest first) or `name` (alphabetical) |
 | `path_prefix` | (none) | URL mount prefix used in breadcrumbs (e.g. `images`). Defaults to the directory name. |
 | `root_name` | (none) | Display name for the root breadcrumb. Defaults to "media root". |
-| `image_types` | built-in list | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp svg avif heic`. |
+| `image_types` | built-in list | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp`. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, shown with a 📄 icon). Operators can opt in with `image_types .heic .avif .svg` if they have external tooling to handle these formats. |
 | `video_types` | built-in list | Space-separated list of video extensions. Default: `mp4 webm m4v mov mkv avi ogv ogg`. |
 | `page_size` | `60` | Per-page default (the first item in `page_sizes` if set). |
 | `page_sizes` | `60 30 120 all` | Space-separated list of dropdown options; the first item is the default. Use `all` for "show all on one page". |

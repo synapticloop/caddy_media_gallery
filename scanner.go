@@ -16,7 +16,10 @@ const (
 	// (not the full path); the scanner joins it to Root at render
 	// time.
 	KindDir FileKind = "dir"
-	// KindImage is an image file (jpg, png, gif, webp, svg, avif).
+	// KindImage is an image file (jpg, jpeg, png, gif, webp — the formats
+// the default image_types list supports). HEIC, AVIF, and SVG are
+// NOT classified as KindImage by default — they appear in the
+// "Other files" section.
 	KindImage FileKind = "image"
 	// KindVideo is a video file (mp4, webm).
 	KindVideo FileKind = "video"
@@ -34,10 +37,19 @@ const (
 // leading dot) → true. Lookup in Classify() is case-insensitive
 // because the scanner lowercases the file's extension before
 // the lookup.
+// Per user request 2026-06-30: HEIC, AVIF, and SVG are
+// NOT in the default image types list. Go's stdlib doesn't
+// decode these formats, so the gallery would show broken
+// image icons for them. The scanner still classifies them
+// as KindOther (via the fallback in Classify), so they
+// appear in the "Other files" section with a 📄 icon.
+// Operators can still add them via `image_types .heic
+// .avif .svg` if they want to handle these formats with
+// external tooling, but the default is now only the formats
+// the thumbnail generator actually supports.
 var defaultImageExts = map[string]bool{
 	".jpg": true, ".jpeg": true, ".png": true,
-	".gif": true, ".webp": true, ".svg": true, ".avif": true,
-	".heic": true,
+	".gif": true, ".webp": true,
 }
 
 var defaultVideoExts = map[string]bool{
@@ -163,7 +175,7 @@ func NewScanner(root string) *Scanner {
 //
 // The image and video extension sets come from the Gallery
 // (operator-configurable via the Caddyfile). If neither set is
-// provided, the defaults are used (jpg/png/gif/webp/svg/avif/heic
+// provided, the defaults are used (jpg/jpeg/png/gif/webp
 // for images; mp4/webm/m4v/mov/mkv/avi/ogv/ogg for videos).
 func Classify(name string, imageExts, videoExts map[string]bool) FileKind {
 	ext := strings.ToLower(filepath.Ext(name))
@@ -330,9 +342,11 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		}// Read pixel dimensions for images and videos. Per user
 		// request 2026-06-27: the watermark at the bottom-right
 		// of the thumbnail shows the W × H of the source file.
-		// AVIF, HEIC, SVG are NOT supported (per user request);
-		// readDimensions returns (0, 0, nil) for those, which
-		// the watermark template treats as "don't render".
+		// HEIC, AVIF, SVG are NOT in defaultImageExts (Go's stdlib
+		// can't decode them). If an operator adds them via
+		// `image_types .heic .avif .svg`, readDimensions returns
+		// (0, 0, nil) for those, which the watermark template
+		// treats as "don't render".
 		if kind == KindImage || kind == KindVideo {
 			fullPath := filepath.Join(s.Root, e.Name())
 			// Per user request 2026-06-29: use the cached

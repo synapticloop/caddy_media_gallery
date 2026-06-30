@@ -31,7 +31,11 @@ func TestClassify(t *testing.T) {
 		{"art.png", KindImage},
 		{"anim.gif", KindImage},
 		{"hero.webp", KindImage},
-		{"logo.svg", KindImage},
+		// Per user request 2026-06-30: SVG is no longer in the
+		// default image types list. It now falls through to
+		// KindOther (the gallery treats it as a generic file
+		// with a 📄 icon).
+		{"logo.svg", KindOther},
 		{"movie.mp4", KindVideo},
 		{"clip.webm", KindVideo},
 		{"notes.txt", KindOther},
