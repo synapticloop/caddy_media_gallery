@@ -1388,7 +1388,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: none;
   background: var(--bg-card);
 }
-.page-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); }
+/* Per user request 2026-06-30: added color: var(--fg) to
+   the hover state. Without this, the base `a:hover` rule
+   (which uses --accent-hover, blue) takes effect because
+   .page-btn:hover doesn't override the color. The result
+   was blue text on hover — jarring and inconsistent with
+   the other secondary buttons (Reset, Sort) which keep
+   black text on hover. Now matches the other secondary
+   buttons' hover treatment. */
+.page-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
 .page-btn.active {
   /* Per Phase 85: same color-contrast inversion as
      .sort-btn.active (above). The active page button uses
