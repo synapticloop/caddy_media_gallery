@@ -2264,7 +2264,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            in its server-rendered state; if they differ (visitor typed more
            chars), the JS has taken over and the JS format applies.
       */ -}}
-      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
+      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
     </h2>
@@ -2494,19 +2494,68 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (totalEl) {
       totalFiles = parseInt(totalEl.textContent || '0', 10) || 0;
     }
-    // Per user request 2026-06-30: determine the current
-    // header format by comparing the ?q= URL param with
-    // the input value:
-    // - If they match: the page is in its server-rendered
-    //   state. The visitor hasn't typed anything that
-    //   diverges from the server's search. We use the
-    //   server format ("of FilteredTotal", no <em>This
-    //   page</em>).
-    // - If they differ: the JS has taken over. We use the
-    //   JS format ("of pageSizeTotal" + <em>This page</em>).
+    // Per user request 2026-06-30: the N value and the
+    // "<em>This page</em>" annotation depend on whether
+    // the JS has taken over the search.
+    //
+    // The visitor is in one of three states:
+    //
+    // (1) Input matches URL's ?q= exactly: the page is in its
+    //     server-rendered state. The server's text is correct.
+    //     The N value is the total (FilteredTotal) — what the
+    //     server rendered. No "<em>This page</em>".
+    //
+    //     Example: pageSize=30, total=33, server renders
+    //     "showing 30 of 33" (30 on this page, 33 total).
+    //     We update only M (the visible count, which the JS
+    //     may have filtered).
+    //
+    // (2) Input differs from URL's ?q= (visitor typed more
+    //     or less), AND the page is NOT paginated
+    //     (FilteredTotal <= OnPageTotalCount, i.e. all
+    //     matches fit on this page): the JS uses FilteredTotal
+    //     as N — these matches are not paginated, so "of 33"
+    //     is the full context. No "<em>This page</em>".
+    //
+    //     Example: pageSize=60, total=33, all on page 1.
+    //     User types 'str' → 9 visible, "9 of 33".
+    //
+    // (3) Input differs from URL's ?q=, AND the page IS
+    //     paginated (FilteredTotal > OnPageTotalCount):
+    //     the JS is filtering within the current page only.
+    //     N is the on-page count, with "<em>This page</em>".
+    //
+    //     Example: pageSize=30, total=33 (paginated).
+    //     User types 'str' → 9 visible, "9 of 30
+    //     <em>This page</em>".
+    //
+    // The pageSize comes from the data-search-header-n
+    // hidden span (set to OnPageTotalCount by the server).
+    // The filtered total comes from
+    // data-search-header-filtered hidden span.
     function getSearchParam() {
       var params = new URLSearchParams(window.location.search);
       return params.get('q') || '';
+    }
+    // Read the FilteredTotal from the hidden span (set on
+    // page load by the server template).
+    var filteredTotal = 0;
+    var fEl = document.querySelector('[data-search-header-filtered]');
+    if (fEl) {
+      filteredTotal = parseInt(fEl.textContent || '0', 10) || 0;
+    }
+    // Per user request 2026-06-30: capture the server's
+    // original header text (e.g. "Media (89 - search 'st'
+    // - showing 30 of 33)") on page load. When the visitor
+    // types more chars (JS takes over) and then types back
+    // to match the URL ?q=, the JS restores this text.
+    //
+    // The text is stored in the data-search-header-current
+    // hidden span (set on page load by the server template).
+    var originalServerText = '';
+    var currentEl = document.querySelector('[data-search-header-current]');
+    if (currentEl) {
+      originalServerText = currentEl.textContent || '';
     }
     function updateSearchHeader(visibleCount, isSearchActive) {
       if (!headerEl || defaultHeader === null) return;
@@ -2531,25 +2580,50 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
       }
-      // Compare the ?q= URL param with the input value. If
-      // they match, we're in server-rendered mode (the
-      // server already filtered). If they differ, the JS
-      // is filtering the current page only (server would
-      // have shown a different set).
+      // Compare the ?q= URL param with the input value.
+      // Per user request 2026-06-30: when they match, the
+      // server has already rendered the correct header (e.g.
+      // "Media (89 - search 'st' - showing 30 of 33)" for
+      // pageSize=30, total=33). We just update the visible
+      // count (the JS might have filtered some cards) and
+      // leave the rest alone. When they differ, the JS has
+      // taken over and we recompute the N value + annotation
+      // based on whether the page is paginated.
       var urlQuery = getSearchParam();
       var isServerRendered = (currentQuery === urlQuery);
-      // The "of N" part: if server-rendered, N is the total
-      // match count (the page shows all matches on one page).
-      // If JS-typed, N is the per-page limit and we add the
-      // <em>This page</em> suffix.
-      var ofPart = '';
       if (isServerRendered) {
-        // Extract FilteredTotal from the server text. The
-        // server text is "Media (X - search 'Y' - showing M of N)".
-        var match = (defaultHeader.match(/ of (\d+)/) || []).concat(
-          (headerEl.textContent || '').match(/ of (\d+)/) || []);
-        // Fallback: if we can't extract, use visibleCount as N.
-        ofPart = ' of ' + (match[1] || visibleCount);
+        // Server-rendered state. Restore the server's
+        // original text (e.g. "Media (89 - search 'st'
+        // - showing 30 of 33)" for pageSize=30, total=33).
+        // This handles the case where the visitor typed
+        // more chars (JS took over, text changed) and
+        // then typed back to match the URL — the header
+        // should "change back" to the server's text.
+        if (originalServerText) {
+          headerEl.textContent = originalServerText;
+        }
+        return;
+      }
+      // JS-typed state (input differs from URL ?q=).
+      // Determine the N value and the <em>This page</em>
+      // annotation based on whether the page is paginated:
+      //
+      // - Not paginated (FilteredTotal <= OnPageTotalCount):
+      //   all matches fit on this page. N = FilteredTotal
+      //   (the total), no <em>This page</em>.
+      //
+      //   Example: pageSize=60, total=33, user types 'str'.
+      //   Result: "9 of 33" (no annotation).
+      //
+      // - Paginated (FilteredTotal > OnPageTotalCount):
+      //   the JS is filtering within the current page only.
+      //   N = OnPageTotalCount, with "<em>This page</em>".
+      //
+      //   Example: pageSize=30, total=33, user types 'str'.
+      //   Result: "9 of 30 <em>This page</em>".
+      var ofPart = '';
+      if (filteredTotal > 0 && pageSizeTotal >= filteredTotal) {
+        ofPart = ' of ' + filteredTotal;
       } else {
         ofPart = ' of ' + pageSizeTotal + ' <em>This page</em>';
       }
