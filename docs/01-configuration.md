@@ -446,6 +446,51 @@ yourself wanting to change one of these, that's a signal that
 the constant should probably be promoted to a config option —
 file an issue and we can discuss.
 
+## Caddy-level configuration (optional)
+
+The `media_gallery` directive handles the rendering and
+on-the-fly thumbnailing. A few performance knobs live at
+the Caddy level (outside the module) and are recommended
+for any production deployment:
+
+### Compression
+
+Caddy's built-in `encode` middleware compresses text
+responses (HTML, CSS, JS, JSON, SVG) with gzip and/or
+zstd. The gallery page is ~160 KB raw; gzip compresses it
+to ~20 KB (an 8x reduction), so first-paint and time-to-
+interactive drop significantly. Thumbnails are pre-
+compressed image formats (WebP), so the encoder leaves
+them alone.
+
+```caddy
+route {
+    encode zstd gzip
+    ...
+}
+```
+
+`zstd` is preferred by modern browsers (slightly smaller
+than gzip at similar decompression speed); `gzip` is the
+universal fallback. Caddy auto-selects the best encoding
+based on the `Accept-Encoding` header the browser sends.
+
+The `encode` directive is built into Caddy core — no
+extra `--with` flag is needed at build time.
+
+### Static asset caching
+
+`/favicon.ico`, theme CSS, and font files served by the
+gallery can have long `Cache-Control` max-age values to
+avoid re-downloading on every navigation:
+
+```caddy
+header /favicon.ico Cache-Control "public, max-age=86400"
+```
+
+For per-page assets (thumbnails), the module sets its own
+TTL via the `thumb_ttl` subdirective (default 24h).
+
 ## What `media_gallery` does NOT do
 
 - It does **not** generate thumbnails at build time — thumbnails
