@@ -420,10 +420,26 @@ func (s *Scanner) Enrich(files []FileInfo) {
 	}
 }
 
-// EnrichInBackground spawns a goroutine that calls Enrich
-// on files in parallel. Returns immediately. Use this after
-// Scan() when the cached files list is returned to the
-// caller and you want to fill in the EXIF/dimensions async.
+// EnrichInBackground spawns a goroutine that enriches
+// a COPY of files in parallel, then atomically replaces
+// the cache entry's files slice with the enriched copy
+// (via cache.SetFiles). Returns immediately.
+//
+// Per user report 2026-07-01: the previous pattern
+// (mutating the cached files slice in place from the
+// goroutine) caused a data race — subsequent cache hits
+// within the TTL would return a copy of the slice at
+// an arbitrary moment in the enrichment, so the same
+// page could return different EXIF data on each refresh
+// until the enrichment finally completed.
+//
+// This version makes its own copy, then enriches the
+// copy IN PLACE. The caller's slice is never touched
+// after EnrichInBackground returns. When the goroutine
+// finishes, it calls cache.SetFiles(dir, enriched) which
+// atomically swaps the new slice into the cache. Future
+// cache hits see the enriched data; no in-progress
+// mutation is observable by other readers.
 //
 // maxParallel workers process files concurrently. The default
 // of 8 was chosen empirically: image-header parsing is
@@ -438,8 +454,19 @@ func (s *Scanner) Enrich(files []FileInfo) {
 // of background work per fresh scan (vs ~45s single-threaded).
 // The visitor's first page render isn't blocked by this —
 // the HTML response is sent as soon as Scan() returns.
-func (s *Scanner) EnrichInBackground(files []FileInfo) {
-	go s.enrichParallel(files, 8)
+func (s *Scanner) EnrichInBackground(files []FileInfo, cache *ScanCache, dir string) {
+	filesCopy := make([]FileInfo, len(files))
+	copy(filesCopy, files)
+	go func() {
+		s.enrichParallel(filesCopy, 8)
+		// Atomic swap: when the goroutine finishes, replace
+		// the cache entry's files with the enriched copy.
+		// No-op if the entry was dropped (TTL expired) or
+		// replaced (dir mtime changed) during enrichment.
+		if cache != nil {
+			cache.SetFiles(dir, filesCopy)
+		}
+	}()
 }
 
 // enrichParallel runs Enrich across the file list using a

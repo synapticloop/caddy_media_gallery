@@ -49,6 +49,38 @@ func NewScanCache(ttl time.Duration) *ScanCache {
 	return &ScanCache{ttl: ttl, items: make(map[string]scanCacheEntry)}
 }
 
+// SetFiles atomically replaces the files slice for a cached entry.
+// Used by the background enrichment goroutine after it finishes
+// populating EXIF + dimensions on the previously-stored
+// non-enriched file list.
+//
+// Per user report 2026-07-01: the previous pattern (mutating
+// entry.files in place from the goroutine) caused a data race —
+// subsequent cache hits within the TTL would return a copy of
+// the slice at an arbitrary moment in the enrichment, so the
+// same page could return different EXIF data on each refresh
+// until the enrichment finally completed.
+//
+// The fix: the cache holds a non-enriched snapshot while the
+// enrichment runs (callers get a copy of that snapshot). When
+// the enrichment finishes, the goroutine calls SetFiles which
+// atomically swaps in the enriched slice. Future cache hits see
+// the enriched data; no in-progress mutation is observable.
+//
+// SetFiles is a no-op if the entry no longer exists (e.g. the
+// cache TTL expired and the entry was dropped, or the dir mtime
+// changed and the entry was replaced by a fresh scan).
+func (c *ScanCache) SetFiles(dir string, files []FileInfo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.items[dir]
+	if !ok {
+		return
+	}
+	entry.files = files
+	c.items[dir] = entry
+}
+
 // Get returns the cached []FileInfo for dir, or runs a fresh scan if
 // the cache is empty/expired/stale. The sortMode is part of the cache
 // key — sorting by name vs mtime gives different results.
@@ -104,10 +136,12 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 	// enrichment in the BACKGROUND so the visitor doesn't
 	// wait for it. The first page render shows cards without
 	// the EXIF pill or dimensions watermark; subsequent
-	// renders (after Enrich completes) show the full data.
-	// Mutating the cached `files` slice from the goroutine
-	// is safe because callers always get a copy (below).
-	scanner.EnrichInBackground(files)
+	// renders (after Enrich completes + SetFiles swaps the
+	// enriched slice in) show the full data. EnrichInBackground
+	// mutates its own copy and calls cache.SetFiles when done
+	// to atomically replace the cache entry — no data race
+	// for concurrent cache readers.
+	scanner.EnrichInBackground(files, c, dir)
 	// Return a copy of the slice we just stored (so callers can't mutate cache).
 	out := make([]FileInfo, len(files))
 	copy(out, files)
