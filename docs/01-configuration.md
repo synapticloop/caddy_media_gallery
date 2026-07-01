@@ -15,7 +15,7 @@ handle_path /images/* {
 
 For a local-dev setup (no sudo, no TLS), see the "Local
 install" subsection below — the Caddyfile is much
-simpler (just `http://localhost:8080` instead of a TLS
+simpler (just `http://localhost:3245` instead of a TLS
 hostname, no `admin` block needed for the bundled Caddyfile).
 
 The `media_gallery` directive accepts one inline option:
@@ -64,7 +64,7 @@ For users without sudo access (shared host, locked-down
 laptop), use `./build.sh --user`:
 
 ```bash
-./build.sh --user           # default port 8080, serve ~/Pictures
+./build.sh --user           # default port 3245 (= 0xCAD, easter egg), serve ~/Pictures
 ./build.sh --user 9000      # custom port (must be > 1024)
 CADDY_USER_ROOT=~/photos ./build.sh --user
 ```
@@ -77,7 +77,7 @@ This builds the binary to `~/bin/caddy` and generates
     admin off
 }
 
-http://localhost:8080 {
+http://localhost:3245 {
     root * /home/user/Pictures
 
     handle_path /* {

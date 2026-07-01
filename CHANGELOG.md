@@ -9,6 +9,16 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 2026-07-01
+
+### 🐛 Port change: local-install default is now 3245 (was 8080)
+
+`build.sh --user` now defaults to port **3245** (= 0xCAD in hex — a small easter egg for the project's homepage, since C-A-D happen to all be valid hex digits and the abbreviation is memorable). The script's comments, the auto-generated `Caddyfile.user`, and the help text (`build.sh --help`) all reflect the new default.
+
+To keep using 8080 (the prior default), pass `--user 8080` or set `CADDY_USER_PORT=8080`. All operator documentation (README.md, docs/00-readme.md, docs/01-configuration.md) updated to reflect the new default; remaining 8080 references in docs are intentional ("to override, use 8080...").
+
+---
+
 ## 2026-06-30
 
 ### UI / Button styling

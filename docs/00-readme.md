@@ -68,7 +68,7 @@ laptop, etc.), use `--user`. It builds the binary into
 the project root, and validates the port (>1024).
 
 ```bash
-# Default: build to ~/bin/caddy, listen on port 8080,
+# Default: build to ~/bin/caddy, listen on port 3245 (0xCAD)
 # serve ~/Pictures.
 ./build.sh --user
 
@@ -94,7 +94,7 @@ automatically when no on-disk override is provided
 — no need for `GALLERY_TEMPLATES_DIR` setup either.
 
 Hit it: `https://your-host/images/` (or
-`http://localhost:8080/` for `--user`). You get a
+`http://localhost:3245/` for `--user`). You get a
 paginated, sortable image grid with thumbnails,
 click-to-expand lightbox, an "open in new tab" button
 per tile, and a directory strip at the top for

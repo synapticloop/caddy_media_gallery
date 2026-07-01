@@ -64,8 +64,8 @@ The build script also restarts Caddy via systemd (you may need to be root or use
 If you don't have sudo access (shared host, locked-down laptop, etc.), you can still build and run Caddy entirely from your home directory. The bundled build script has a `--user` mode that does the right thing:
 
 ```bash
-# Build into ~/bin/caddy, generate Caddyfile.user, listen on port 8080.
-# No sudo needed.
+# Build into ~/bin/caddy, generate Caddyfile.user, listen on the
+# default port (3245, see "Why 3245?" below). No sudo needed.
 ./build.sh --user
 
 # Custom port (must be > 1024; the script enforces this).
@@ -95,7 +95,10 @@ echo $! > ~/caddy.pid
 kill $(cat ~/caddy.pid)
 ```
 
-Open <http://localhost:8080> in your browser to see the gallery. If 8080 is taken, choose another port — any number from 1025 to 65535 works (the script validates this for you).
+Open <http://localhost:3245> in your browser to see the gallery. If 3245 is taken, choose another port — any number from 1025 to 65535 works (the script validates this for you).
+
+**Why 3245 as the default?** Small easter egg for the project's homepage — 3245 = `0xCAD` in hex (and C-A-D happen to be valid hex digits, which makes for a memorable abbreviation). If you prefer something more conventional, pass `--user 8080` or set `CADDY_USER_PORT=8080`.
+
 
 ## Caddyfile usage
 
