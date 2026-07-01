@@ -140,7 +140,7 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `thumb_height` | `320` | Max height of generated thumbnails (px). |
 | `thumb_format` | `webp` | Output format: `webp`, `png`, `jpeg` (or `jpg`). |
 | `thumb_ttl` | `1440` | HTTP `Cache-Control: max-age` in minutes for thumb responses. |
-| `cache_scan` | `1` | In-memory scan cache TTL in minutes. |
+| `cache_scan` | `1440` (24h) | In-memory scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net. |
 | `no_thumbs` | `false` | Skip thumbnail generation (use original file in `<img src>`). |
 | `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
 | `no_exif` | `false` | Skip EXIF reading entirely (both at scan time and in the lightbox). Useful for testing or when EXIF is not desired. |

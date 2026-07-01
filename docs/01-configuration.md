@@ -34,7 +34,7 @@ The `media_gallery` directive accepts one inline option:
 | `thumb_height` | integer &gt;= 1 | `320` | Max height (px) of generated thumbnails. |
 | `thumb_format` | `webp` / `png` / `jpeg` (or `jpg`) | `webp` | Output format for generated thumbnails. |
 | `thumb_ttl` | integer (minutes) &gt;= 1 | `1440` (24h) | HTTP `Cache-Control: max-age` for thumb responses. |
-| `cache_scan` | integer (minutes) &gt;= 1 | `1` | In-memory scan cache TTL. |
+| `cache_scan` | integer (minutes) &gt;= 1 | `1440` (24h) | In-memory scan cache TTL. The scan cache's primary invalidation is the **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and invalidates the cache). The TTL is a safety net for edge cases (clock skew, manual mtime changes, stat cache invalidation). The default 24h keeps the cache warm for typical interactive use without forcing periodic re-scans. |
 | `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. |
 | `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
 | `no_exif` | `true` / `false` (no-arg = `true`) | `false` (EXIF on) | Disable EXIF entirely. EXIF is read LAZILY by the lightbox (via the `?exif=1` endpoint) — not at scan time. When `no_exif` is set, the endpoint returns 404 and the lightbox EXIF panel is hidden. Useful for privacy-sensitive deployments. Note that EXIF does NOT include GPS by default — see the EXIF section for details. |
@@ -241,7 +241,7 @@ of the `media_gallery` handler, with realistic values:
   "thumb_height": 320,
   "thumb_format": "webp",
   "thumb_ttl": 1440,
-  "cache_scan": 1,
+  "cache_scan": 1440,  // 24h (mtime check is the primary invalidation)
   "no_thumbs": false,
   "no_video_thumbs": false,
   "template": "gallery.tmpl",
@@ -269,7 +269,7 @@ the same default value applies.
 | `thumb_height <N>` | `"thumb_height"` | int | `320` |
 | `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |
 | `thumb_ttl <N>` | `"thumb_ttl"` | int (minutes) | `1440` |
-| `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1` |
+| `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1440` (24h) |
 | `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | `false` |
 | `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
 | `template <name>` | `"template"` | string | `gallery.tmpl` |
@@ -279,7 +279,7 @@ the same default value applies.
 | `thumb_height <N>` | `"thumb_height"` | int | `320` |
 | `thumb_format <webp\|jpeg\|png>` | `"thumb_format"` | string | `"webp"` |
 | `thumb_ttl_minutes <N>` | `"thumb_ttl"` | int | `1440` (24h) |
-| `cache_scan_minutes <N>` | `"cache_scan"` | int | `1` |
+| `cache_scan_minutes <N>` | `"cache_scan"` | int | `1440` (24h) |
 
 **Heads up on the JSON naming:** the JSON field names use the
 `json:"name"` struct tags — for `CacheScanMinutes` the tag is

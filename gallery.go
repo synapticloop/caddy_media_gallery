@@ -220,8 +220,19 @@ type Gallery struct {
 	ThumbFormat string
 
 	// CacheScanMinutes is the in-memory scan cache TTL in
-	// minutes. Default: 1. Caddyfile: .
-	// Validation: must be > 0.
+	// minutes. Default: 1440 (24 hours).
+	//
+	// Per user request 2026-07-01: the scan cache's primary
+	// invalidation is the DIRECTORY MTIME (checked on every
+	// Get). Adding or removing a file changes the dir mtime,
+	// so the cache automatically invalidates. The TTL is a
+	// SAFETY NET for edge cases (clock skew, manual mtime
+	// changes, stat cache invalidation). Setting it to 24
+	// hours means the cache stays warm for typical
+	// interactive use without forcing periodic re-scans that
+	// would re-do the os.ReadDir + per-file stat() work.
+	//
+	// Caddyfile: . Validation: must be > 0.
 	CacheScanMinutes int
 
 	// ThumbTTLMinutes is the HTTP Cache-Control max-age in
@@ -321,7 +332,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 		g.ThumbFormat = "webp"
 	}
 	if g.CacheScanMinutes == 0 {
-		g.CacheScanMinutes = 1
+		g.CacheScanMinutes = 1440 // 24h — mtime check is the primary invalidation
 	}
 	if g.ThumbTTLMinutes == 0 {
 		g.ThumbTTLMinutes = 1440 // 24 hours, matches the previous 86400s
@@ -678,60 +689,36 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
 	}
-	// Per user request 2026-07-01: pre-generate thumbs for the
-	// page the visitor is going to render. Eager-gen runs
-	// synchronously (so visible thumbs are on disk before the
-	// browser requests them); the rest are background-gen'd
-	// (so navigating to other pages is warm too). See
-	// EagerGenPageThumbs for the parallelism model.
-	go func() {
-		// EagerGenPageThumbs runs synchronously internally, so
-		// this goroutine blocks until the on-page thumbs are
-		// generated. The "go func()" wrapper is what keeps the
-		// HTTP request handler from blocking on thumb gen —
-		// the browser gets the HTML while thumbs are still
-		// being generated in the background. By the time the
-		// browser starts requesting thumbs, the on-page ones
-		// are usually ready.
-		//
-		// Why a goroutine wrapper here? Because the scan cache
-		// is fresh (just-scanned or cache-expired), every
-		// thumb in the directory has to be generated. For a
-		// 200-image directory that's ~30+ seconds of CPU work.
-		// Doing that synchronously inside ServeHTTP would add
-		// 30 seconds to every first-page-load. Doing it in a
-		// separate goroutine means the visitor's HTML arrives
-		// immediately; the browser's parallel thumb requests
-		// (6 at a time) race the goroutine and either win
-		// (cache miss — browser waits for thumb gen) or lose
-		// (cache hit — instant). Either way, the HTML is
-		// delivered now.
-		if !g.NoThumbs {
-			// Determine the page and pageSize from the query,
-			// same as RenderPage would.
-			q := r.URL.Query()
-			page, _ := parseIntDefault(q.Get("page"), 1)
-			pageSize := g.PageSize
-			// Honor the URL's ?page_size= override if present.
-			// pageSizeFromQuery returns -1 if unspecified/invalid,
-			// 0 for "all", or the requested value. Matches what
-			// RenderPage does internally.
-			if ps := pageSizeFromQuery(q); ps > 0 {
-				pageSize = ps
-			} else if ps == 0 {
-				pageSize = 0 // "all" option — fall through to no-paginate
-			}
-			paged, offPage, _ := visibleAndOffPage(files, q, g.SearchMatch, page, pageSize, g.PageSizes)
-			cfg := ThumbConfig{
-				Width:   g.ThumbWidth,
-				Height:  g.ThumbHeight,
-				Format:  g.ThumbFormat,
-				MaxCacheSizeMB: g.MaxCacheSizeMB,
-				CacheStatsTracker: g.CacheStatsTracker,
-			}
-			EagerGenPageThumbs(resolved, paged, offPage, g.thumbCacheDir(), g.ffmpegPath, cfg)
-		}
-	}()
+	// Per user request 2026-07-01: thumb generation is now LAZY (on
+	// demand), not eager. When the browser requests a thumb URL,
+	// serveThumb calls GenerateOrLoadThumb which checks the cache
+	// and only generates if the thumb is missing or stale. The
+	// first request to a cold thumb takes ~100-150ms (the
+	// image-header parse + WebP encode time); subsequent
+	// requests are ~10ms (disk read).
+	//
+	// The previous eager-gen approach (a goroutine that ran at
+	// every page load) pre-generated the on-page 60 thumbs
+	// synchronously (10 workers, ~600ms of full CPU) and the
+	// off-page thumbs in the background (2 workers, several
+	// minutes for thousands of files). It was the right
+	// optimization WHEN the bottleneck was thumb gen latency,
+	// but it's a CPU spike that the user noticed on first
+	// visits to large directories. Lazy is simpler, has no
+	// CPU spike, and the per-thumb latency is acceptable for
+	// the small fraction of images the visitor actually views
+	// (most directories have 10-50 images per page; the
+	// browser's 6-connection parallelism + lazy gen gives a
+	// "wave" of thumbs arriving over ~1 second, which feels
+	// natural with the shimmer animation).
+	//
+	// The trade-off: on the FIRST visit to a directory, thumbs
+	// load in a rolling wave rather than instantly. The
+	// shimmer CSS (in templates/gallery.tmpl) handles this case
+	// (visitor sees a shimmer animation on each thumb until
+	// it loads). On the SECOND visit (within the scan cache
+	// TTL), the thumbs are already on disk and serve in
+	// ~10ms each — no shimmer needed.
 	// Title: basename of the resolved dir, falling back to the
 	// gallery root for the top-level case.
 	title := filepath.Base(resolved)

@@ -28,7 +28,7 @@ Inside an `media_gallery { ... }` block:
 | `thumb_width` | integer &gt;= 1 | `320` | Max width in pixels. Source is fit-within-bounds. |
 | `thumb_height` | integer &gt;= 1 | `320` | Max height in pixels. Source is fit-within-bounds. |
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
-| `cache_scan` | integer &gt;= 1 | `1` | Scan cache TTL in minutes. |
+| `cache_scan` | integer &gt;= 1 | `1440` (24h) | Scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net for edge cases. |
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
 | `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
@@ -51,7 +51,7 @@ handle_path /images/* {
         thumb_width 480
         thumb_height 320
         thumb_format jpeg
-        cache_scan 5
+        cache_scan 1440  # 24h — mtime check is the primary invalidation
         thumb_ttl 60
         search_match word
         max_cache_size_mb 1024
@@ -81,7 +81,7 @@ producer to set them:
   "thumb_width": 480,
   "thumb_height": 320,
   "thumb_format": "jpeg",
-  "cache_scan": 5,
+  "cache_scan": 1440,
   "thumb_ttl": 60,
   "no_thumbs": false,
   "no_video_thumbs": false,

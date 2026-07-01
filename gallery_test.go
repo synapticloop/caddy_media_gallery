@@ -629,8 +629,8 @@ func TestProvision_ThumbConfigDefaults(t *testing.T) {
 	if g.ThumbFormat != "webp" {
 		t.Errorf("ThumbFormat default: got %q, want webp", g.ThumbFormat)
 	}
-	if g.CacheScanMinutes != 1 {
-		t.Errorf("CacheScanMinutes default: got %d, want 1", g.CacheScanMinutes)
+	if g.CacheScanMinutes != 1440 {
+		t.Errorf("CacheScanMinutes default: got %d, want 1440 (= 24h)", g.CacheScanMinutes)
 	}
 	if g.ThumbTTLMinutes != 1440 {
 		t.Errorf("ThumbTTLMinutes default: got %d, want 1440 (= 24h)", g.ThumbTTLMinutes)
