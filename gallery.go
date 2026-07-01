@@ -10,6 +10,7 @@ package gallery
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -677,6 +678,60 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
 	}
+	// Per user request 2026-07-01: pre-generate thumbs for the
+	// page the visitor is going to render. Eager-gen runs
+	// synchronously (so visible thumbs are on disk before the
+	// browser requests them); the rest are background-gen'd
+	// (so navigating to other pages is warm too). See
+	// EagerGenPageThumbs for the parallelism model.
+	go func() {
+		// EagerGenPageThumbs runs synchronously internally, so
+		// this goroutine blocks until the on-page thumbs are
+		// generated. The "go func()" wrapper is what keeps the
+		// HTTP request handler from blocking on thumb gen —
+		// the browser gets the HTML while thumbs are still
+		// being generated in the background. By the time the
+		// browser starts requesting thumbs, the on-page ones
+		// are usually ready.
+		//
+		// Why a goroutine wrapper here? Because the scan cache
+		// is fresh (just-scanned or cache-expired), every
+		// thumb in the directory has to be generated. For a
+		// 200-image directory that's ~30+ seconds of CPU work.
+		// Doing that synchronously inside ServeHTTP would add
+		// 30 seconds to every first-page-load. Doing it in a
+		// separate goroutine means the visitor's HTML arrives
+		// immediately; the browser's parallel thumb requests
+		// (6 at a time) race the goroutine and either win
+		// (cache miss — browser waits for thumb gen) or lose
+		// (cache hit — instant). Either way, the HTML is
+		// delivered now.
+		if !g.NoThumbs {
+			// Determine the page and pageSize from the query,
+			// same as RenderPage would.
+			q := r.URL.Query()
+			page, _ := parseIntDefault(q.Get("page"), 1)
+			pageSize := g.PageSize
+			// Honor the URL's ?page_size= override if present.
+			// pageSizeFromQuery returns -1 if unspecified/invalid,
+			// 0 for "all", or the requested value. Matches what
+			// RenderPage does internally.
+			if ps := pageSizeFromQuery(q); ps > 0 {
+				pageSize = ps
+			} else if ps == 0 {
+				pageSize = 0 // "all" option — fall through to no-paginate
+			}
+			paged, offPage, _ := visibleAndOffPage(files, q, g.SearchMatch, page, pageSize, g.PageSizes)
+			cfg := ThumbConfig{
+				Width:   g.ThumbWidth,
+				Height:  g.ThumbHeight,
+				Format:  g.ThumbFormat,
+				MaxCacheSizeMB: g.MaxCacheSizeMB,
+				CacheStatsTracker: g.CacheStatsTracker,
+			}
+			EagerGenPageThumbs(resolved, paged, offPage, g.thumbCacheDir(), g.ffmpegPath, cfg)
+		}
+	}()
 	// Title: basename of the resolved dir, falling back to the
 	// gallery root for the top-level case.
 	title := filepath.Base(resolved)
@@ -957,3 +1012,60 @@ var (
 	_ caddyfile.Unmarshaler       = (*Gallery)(nil)
 	_ caddyhttp.MiddlewareHandler = (*Gallery)(nil)
 )
+
+// visibleAndOffPage computes the page-visible files and the
+// off-page files for the given directory + query, mirroring
+// the filter/sort/paginate logic in RenderPage (compact — just
+// enough to partition the files).
+//
+// Per user request 2026-07-01: this lets ServeHTTP
+// synchronously pre-generate thumbs for the page-visible files
+// (so the browser sees them instantly) and background-generate
+// the rest (so subsequent page navigations are also warm).
+//
+// The order/sort spec is taken from the query (sort= and order=
+// URL params). Mirrors the same logic in RenderPage (which uses
+// parseSort) so the visible-and-off-page partition matches what
+// the user actually sees.
+//
+// Returns (paged, offPage, ok). ok=false means the helper
+// couldn't classify the files (it shouldn't happen — but the
+// caller falls back to lazy generation in that case).
+func visibleAndOffPage(files []FileInfo, query url.Values, searchMatch string, page, pageSize int, pageSizes []string) (paged, offPage []FileInfo, ok bool) {
+	// Validate pageSize (same as RenderPage).
+	pageSize = validatePageSize(pageSize, pageSizes)
+	if pageSize <= 0 {
+		// "all" option — everything is the visible page.
+		// Nothing to background.
+		return files, nil, true
+	}
+	// Same filter logic as RenderPage (search first, then type).
+	searchQuery := parseSearchQuery(query.Get("q"))
+	filtered := applySearchFilter(files, searchQuery, searchMatch)
+	typeFilter := parseTypeFilter(query)
+	filtered = applyTypeFilter(filtered, typeFilter)
+	// Split (dirs + others + images). Only images/videos have thumbs.
+	_, _, allImages := splitFiles(filtered)
+	// Same sort as RenderPage (respects ?sort= + ?order=).
+	sortSpec := parseSort(query)
+	sortFiles(allImages, sortSpec)
+	start := (page - 1) * pageSize
+	if start < 0 {
+		start = 0
+	}
+	if start >= len(allImages) {
+		// Out-of-range page (visitor navigated past the data).
+		// Nothing visible and nothing off-page.
+		return nil, nil, true
+	}
+	end := start + pageSize
+	if end > len(allImages) {
+		end = len(allImages)
+	}
+	paged = allImages[start:end]
+	if end < len(allImages) {
+		offPage = allImages[end:]
+	}
+	return paged, offPage, true
+}
+
