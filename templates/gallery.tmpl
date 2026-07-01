@@ -2270,36 +2270,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     </h2>
     <div class="section-body" id="media-body">
     <div class="media-grid">
-      {{range .Images}}
-      <a class="card{{if .IsVideo}} video{{end}}" data-filename="{{.Name}}" data-display-name="{{.DisplayName}}" href="{{.Href}}" title="{{.DisplayName}}"{{.ExifAttrs}}>
-        <div class="thumb{{if .IsVideo}} thumb-video{{end}}">
-          {{if .IsVideo}}
-          {{if .ThumbURL}}
-          <!-- Per Phase 62: video has a real thumbnail (extracted
-               from the first frame by ffmpeg on the server). Show
-               the <img> with the play overlay on top. -->
-          <img class="thumb-img" loading="lazy" src="{{.ThumbURL}}" alt="">
-          {{end}}
-          <div class="play-overlay">▶</div>
-          {{else}}
-          <img loading="lazy" src="{{.ThumbURL}}" alt="{{.Name}}">
-          {{end}}
-          {{if .Dimensions}}<span class="thumb-dimensions">{{.Dimensions}}</span>{{end}}
-          <span class="open-btn" data-open-url="{{.Href}}" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>
-        </div>
-        <div class="tile-name">{{.Name}}</div>
-        <div class="tile-meta">
-          <div class="tile-meta-info">
-            <span class="date">{{.Date}}</span>
-            <span class="size">{{.Size}}</span>
-          </div>
-          <div class="tile-meta-chips">
-            <span class="filetype-chip">{{.Type}}</span>
-            {{if .ExifAttrs}}<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>{{end}}
-          </div>
-        </div>
-      </a>
-      {{end}}
+      {{range .Images}}{{.CardHTML}}{{end}}
     </div>
 
     {{if gt .TotalPages 1}}
