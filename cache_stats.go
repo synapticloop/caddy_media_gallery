@@ -3,6 +3,7 @@ package gallery
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -242,19 +243,24 @@ func (t *cacheStatsTracker) snapshot(cacheDir string, capMB int) *cacheStats {
 	// Walk the cache directory to get current size + count.
 	var sizeBytes int64
 	var fileCount int64
-	if entries, err := os.ReadDir(cacheDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			sizeBytes += info.Size()
-			fileCount++
+	// Per user request 2026-06-30: the cache uses a 2-level
+	// nested hash layout (<cacheDir>/<aa>/<bb>/<rest>.webp).
+	// We recurse into nested subdirs with filepath.Walk so
+	// the size + file count includes everything in the nested
+	// tree. We also count both thumbs (.webp / .jpg / .png)
+	// AND sidecars (.meta / .exif) toward fileCount for
+	// accurate reporting.
+	filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
 		}
-	}
+		if info.IsDir() {
+			return nil // directories don't count toward size
+		}
+		sizeBytes += info.Size()
+		fileCount++
+		return nil
+	})
 
 	s := &cacheStats{
 		SizeBytes:        sizeBytes,
