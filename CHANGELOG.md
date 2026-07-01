@@ -11,6 +11,15 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ## 2026-07-01
 
+### 📚 Documentation: canonical localStorage reference
+Per user request 2026-07-01: added a comprehensive "What the template stores in localStorage" section to `docs/03-templates.md`. Documents every key the template reads or writes (`gallery-theme`, `gallery-dirs-sort`, `gallery-dirs-order`, `gallery-others-sort`, `gallery-others-order`, `gallery-section-<dirs|others>`), explains the `gallery-` namespace prefix, and includes a quick-copy snippet for clearing all keys (useful during operator testing). Cross-references added in `README.md` (new bullet in Features) and `docs/04-sort-and-pagination.md` (link to the localStorage reference).
+
+### ⚡ Perf: split scan into fast + background enrichment
+Per user report 2026-07-01: `Scanner.Scan()` no longer reads EXIF or pixel dimensions inline (those took ~45 seconds for 4491 files and blocked the HTTP response). The slow path moved to `Scanner.EnrichInBackground()`, which uses a worker pool of 8 and runs in a goroutine after the fast ScanCache path returns. Result: cold-cache page load for `/images/imagequeue/` (4497 files) drops from **9-46 seconds** to **~227ms**. Minor UX trade-off: EXIF pills and dimensions watermarks don't appear on the very first visit; subsequent renders show them once the background enrich completes.
+
+### 🐛 Refresh shimmer bug fix
+Per user feedback 2026-07-01: removing the pre-add of `loading` class on `<div class="thumb">` in `buildCardHTML`. The previous behavior caused browser-cached thumbs to briefly flash a shimmer state on refresh (the pre-added class was in HTML, so the JS path that checks `img.complete === true` would sometimes see the class first). Now: cached thumbs skip the shimmer entirely on reload; truly-cold thumbs still shimmer via the JS path. Verified: all 20 visible cards have `loading=False, complete=True` after a reload (no shimmer on cached thumbs).
+
 ### 🐛 Port change: local-install default is now 3245 (was 8080)
 
 `build.sh --user` now defaults to port **3245** (= 0xCAD in hex — a small easter egg for the project's homepage, since C-A-D happen to all be valid hex digits and the abbreviation is memorable). The script's comments, the auto-generated `Caddyfile.user`, and the help text (`build.sh --help`) all reflect the new default.

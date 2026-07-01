@@ -38,6 +38,7 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **Video support** — videos show a play-button overlay and link to the raw file. ffmpeg extracts the first frame for the poster thumbnail.
 - **"Directories" section** for sub-directories with breadcrumbs (showing the path from the gallery root), counts (# items, # sub-dirs), and the directory's total size. The header shows `Directories (N)` plus `+ Parent Directory` (italicized) when there's an Up entry.
 - **"Other files" section** for non-image/non-video content in a directory.
+- **Visitor preferences persisted in localStorage** — theme choice (auto/light/dark), table sort state (dirs + others), and per-section collapse state. Full reference: see [What the template stores in localStorage](docs/03-templates.md#what-the-template-stores-in-localstorage). All keys are namespaced with the `gallery-` prefix to avoid collisions with the host site's own localStorage usage.
 
 ## Install
 

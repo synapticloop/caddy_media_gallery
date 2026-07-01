@@ -30,10 +30,13 @@ sort behaviour**:
   The Directories table has its own click-to-sort headers
   (name, # items, # sub-dirs, size, modified). Sort state
   persists in `localStorage` (per table) and in the URL
-  (`?dirs_sort=...&dirs_order=...`).
+  (`?dirs_sort=...&dirs_order=...`). See
+  [docs/03-templates.md#what-the-template-stores-in-localstorage](../docs/03-templates.md#what-the-template-stores-in-localstorage)
+  for the full key reference.
 - Other files: scanner order (newest-first by mtime). The
   Other Files table has its own click-to-sort headers
-  (name, type, size, modified). Same persistence as Directories.
+  (name, type, size, modified). Same persistence as Directories (see the
+[localStorage reference](../docs/03-templates.md#what-the-template-stores-in-localstorage)).
 
 The main image sort does NOT affect the dirs/other-files
 sorts. This is intentional: the dirs strip is a navigation
