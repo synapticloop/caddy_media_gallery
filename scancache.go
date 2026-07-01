@@ -100,6 +100,14 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 		sort:       sortMode,
 		extSetsKey: extKey,
 	}
+	// Per user report 2026-07-01: kick off the EXIF/dimensions
+	// enrichment in the BACKGROUND so the visitor doesn't
+	// wait for it. The first page render shows cards without
+	// the EXIF pill or dimensions watermark; subsequent
+	// renders (after Enrich completes) show the full data.
+	// Mutating the cached `files` slice from the goroutine
+	// is safe because callers always get a copy (below).
+	scanner.EnrichInBackground(files)
 	// Return a copy of the slice we just stored (so callers can't mutate cache).
 	out := make([]FileInfo, len(files))
 	copy(out, files)

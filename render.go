@@ -647,6 +647,15 @@ func buildCardHTML(v FileView) template.HTML {
 	b.WriteString(string(v.ExifAttrs))
 	b.WriteString(`>`)
 	// <div class="thumb...">
+	// Per user feedback 2026-07-01: the 'loading' class
+	// is NOT pre-added here. If we did, browser-cached
+	// thumbs on a refresh would briefly flash the shimmer
+	// animation (the JS sees the image as not-yet-loaded,
+	// adds loading, then removes it on load). Instead we
+	// let the inline JS (just before </body>) add the
+	// class only to thumbs whose <img> isn't already
+	// complete — that way cached thumbs skip the shimmer
+	// entirely, and only true cold loads see it.
 	if v.IsVideo {
 		b.WriteString(`<div class="thumb thumb-video">`)
 	} else {

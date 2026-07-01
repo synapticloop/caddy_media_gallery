@@ -2315,24 +2315,31 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 </footer>
 <script>
 
-/* Per user request 2026-06-27: shimmer animation while
-   thumbnails are loading. Adds .loading class to every
-   .thumb on page load; removes it when the <img> fires
-   load (or error — either way the placeholder isn't
-   needed). The CSS animates a diagonal sweep across the
-   thumb. Stops automatically when the image loads.
+/* Per user feedback 2026-07-01: shimmer animation while
+   thumbnails are loading.
 
-   Edge case: if the image is already cached (instant load
-   from the browser cache), the load event might fire
-   before this script runs. In that case, the .loading class
-   is briefly applied but removed within a frame. Not
-   visible to the user.
-
-   For images below the fold (lazy-loaded), the <img> won't
-   start loading until it's near the viewport, so the
-   .loading class stays applied until the user scrolls down.
-   This is intentional — the shimmer only runs while the
-   user can see the image, not for hidden thumbs. */
+   BEHAVIOR:
+   - The Go-side render does NOT pre-add the .loading class
+     (see buildCardHTML in render.go). The reason: pre-adding
+     it makes browser-cached thumbs briefly flash the shimmer
+     on a reload (the cached image would already be loaded
+     before JS runs, but the per-card class would force a
+     re-shimmer).
+   - This JS adds .loading only to thumbs whose <img> is NOT
+     already complete (i.e., the browser hasn't loaded it
+     yet). For cached thumbs with img.complete=true, the
+     class is never added — no shimmer flash on reload.
+   - For below-the-fold lazy-loaded images, img.complete is
+     false (the browser hasn't started loading yet). The
+     shimmer stays applied until the user scrolls down and
+     the lazy-load triggers. This is intentional — the
+     shimmer appears only for thumbs the user is about to
+     see, not for hidden ones.
+   - When the <img> fires load or error, we remove the
+     .loading class. Either way the placeholder isn't needed.
+   - The CSS (.thumb.loading::before with the thumb-shimmer
+     keyframes) handles the visual animation, with a
+     prefers-reduced-motion override that disables it. */
 (function() {
   var thumbs = document.querySelectorAll('.thumb img');
   for (var i = 0; i < thumbs.length; i++) {
