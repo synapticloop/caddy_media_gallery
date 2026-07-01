@@ -421,54 +421,16 @@ func thumbCachePath(src, cacheDir, ext string) string {
 	return cachePath(src, cacheDir, "."+ext)
 }
 
-// legacyFlatCachePath returns the OLD flat-layout path
-// (e.g. <cacheDir>/<32hex>.webp). Used as a fallback for
-// caches that were populated before the nested layout
-// was introduced. Returns the same string as before so
-// old cache entries can still be located.
-func legacyFlatCachePath(src, cacheDir, ext string) string {
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		abs = src
-	}
-	h := sha256.Sum256([]byte(abs))
-	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+ext)
-}
 
-// readCacheFile tries the new nested path first; if the
-// file doesn't exist there, falls back to the legacy
-// flat-layout path. Returns (data, path, true) if the
-// file was found, (nil, "", false) if neither path has
-// the file. When a legacy file is found, it's also
-// opportunistically MOVED to the new nested location so
-// future reads are fast (one-time cost per legacy file).
+// readCacheFile reads the cached thumb for src. Returns
+// (data, path, true) if found, (nil, "", false) otherwise.
+// Per user request 2026-06-30: the cache uses a 2-level
+// nested hash layout. The legacy flat-layout fallback was
+// removed because the entire cache is regenerated in the
+// new layout on first start with the new code.
 func readCacheFile(src, cacheDir, ext string) ([]byte, string, bool) {
 	newPath := thumbCachePath(src, cacheDir, ext)
 	if data, err := os.ReadFile(newPath); err == nil {
-		return data, newPath, true
-	}
-	// Not in the new location — try the legacy flat path.
-	oldPath := legacyFlatCachePath(src, cacheDir, ext)
-	if data, err := os.ReadFile(oldPath); err == nil {
-		// Opportunistic migration: move the file to its
-		// new nested location. We do this in a goroutine
-		// (best-effort) so a slow rename doesn't block
-		// the request that triggered the read. The file
-		// is renamed, not copied, so the move is
-		// effectively free on most filesystems (just
-		// a directory entry change).
-		go func() {
-			_ = os.MkdirAll(filepath.Dir(newPath), 0o755)
-			_ = os.Rename(oldPath, newPath)
-			// Also migrate the sidecars if they exist.
-			for _, suffix := range []string{".meta", ".exif"} {
-				oldSidecar := oldPath + suffix
-				newSidecar := newPath + suffix
-				if _, err := os.Stat(oldSidecar); err == nil {
-					_ = os.Rename(oldSidecar, newSidecar)
-				}
-			}
-		}()
 		return data, newPath, true
 	}
 	return nil, "", false
@@ -695,52 +657,21 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() {
-			// Nested subdir (e.g. "ff" for the first byte
-			// of the hash). Walk into it recursively.
-			subFiles, subBytes, _ := walkNestedCacheDir(filepath.Join(cacheDir, name))
-			files = append(files, subFiles...)
-			totalBytes += subBytes
+		if !entry.IsDir() {
+			// Per user request 2026-06-30: the legacy flat
+			// layout is no longer supported. Legacy files
+			// (if any are still in the cache after the
+			// regeneration) are silently ignored by the
+			// eviction sweep. They'll be cleaned up by a
+			// manual cache wipe or by the next migration
+			// sweep.
 			continue
 		}
-		// Legacy flat-layout file: <32hex>.webp etc.
-		// Skip non-thumb files (the .meta and .exif sidecars
-		// are handled via their parent thumb's sidecars list).
-		if !isThumbFile(name) {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			continue // stat failed — skip; don't evict
-		}
-		fullPath := filepath.Join(cacheDir, name)
-		// Read LRU timestamp from the .meta sidecar if it
-		// exists. The .meta is named "<name>.meta" (e.g.
-		// "abc123.webp.meta"). If missing (legacy files,
-		// pre-this-feature thumbs, or files that failed the
-		// initial dimensions read), fall back to the
-		// thumb's mtime.
-		lruTime := info.ModTime().UnixNano() // fallback
-		metaFile := fullPath + ".meta"
-		if metaInfo, err := os.Stat(metaFile); err == nil {
-			lruTime = metaInfo.ModTime().UnixNano()
-		} else if !os.IsNotExist(err) {
-			// Stat failed for some other reason. Stick with
-			// the fallback lruTime (the thumb's mtime).
-		}
-		// Collect any sidecars (meta + exif) for deletion.
-		sidecars := []string{metaFile}
-		exifFile := fullPath + ".exif"
-		if _, err := os.Stat(exifFile); err == nil {
-			sidecars = append(sidecars, exifFile)
-		}
-		files = append(files, cacheFile{
-			size:     info.Size(),
-			lruTime:  lruTime,
-			path:     fullPath,
-			sidecars: sidecars,
-		})
-		totalBytes += info.Size()
+		// Nested subdir (e.g. "ff" for the first byte
+		// of the hash). Walk into it recursively.
+		subFiles, subBytes, _ := walkNestedCacheDir(filepath.Join(cacheDir, name))
+		files = append(files, subFiles...)
+		totalBytes += subBytes
 	}
 
 	// Under cap — nothing to do

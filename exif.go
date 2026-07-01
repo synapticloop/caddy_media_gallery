@@ -2,8 +2,6 @@ package gallery
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -312,34 +310,14 @@ func exifMetaPath(src, cacheDir, thumbExt string) string {
 	return cachePath(src, cacheDir, "."+thumbExt+".exif")
 }
 
-// legacyFlatExifMetaPath returns the OLD flat-layout path
-// for an EXIF sidecar. Used as a fallback for caches that
-// were populated before the nested layout was introduced.
-func legacyFlatExifMetaPath(src, cacheDir, thumbExt string) string {
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		abs = src
-	}
-	h := sha256.Sum256([]byte(abs))
-	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".exif")
-}
 
-// readExifFile tries the new nested path first, then the
-// legacy flat-layout path. Returns (data, true) if the file
-// was found in either location, (nil, false) if neither.
-// When a legacy file is found, it's opportunistically
-// MOVED to the new nested location.
+// readExifFile reads the .exif sidecar for src. Returns
+// (data, true) if found, (nil, false) otherwise. The cache
+// uses a 2-level nested hash layout (see cachePath in
+// thumbnails.go for the rationale).
 func readExifFile(src, cacheDir, thumbExt string) ([]byte, bool) {
 	metaPath := exifMetaPath(src, cacheDir, thumbExt)
 	if data, err := os.ReadFile(metaPath); err == nil {
-		return data, true
-	}
-	oldPath := legacyFlatExifMetaPath(src, cacheDir, thumbExt)
-	if data, err := os.ReadFile(oldPath); err == nil {
-		go func() {
-			_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
-			_ = os.Rename(oldPath, metaPath)
-		}()
 		return data, true
 	}
 	return nil, false

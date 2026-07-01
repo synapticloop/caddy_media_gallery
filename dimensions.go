@@ -3,8 +3,6 @@ package gallery
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -83,39 +81,14 @@ func dimsMetaPath(src, cacheDir, thumbExt string) string {
 	return cachePath(src, cacheDir, "."+thumbExt+".meta")
 }
 
-// legacyFlatDimsMetaPath returns the OLD flat-layout path
-// for a dimensions sidecar. Used as a fallback when the new
-// nested layout doesn't have the file. See cachePath for the
-// layout rationale.
-func legacyFlatDimsMetaPath(src, cacheDir, thumbExt string) string {
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		abs = src
-	}
-	h := sha256.Sum256([]byte(abs))
-	return filepath.Join(cacheDir, hex.EncodeToString(h[:16])+"."+thumbExt+".meta")
-}
 
-// readMetaFile tries the new nested path first, then the
-// legacy flat-layout path. Returns (data, true) if the file
-// was found in either location, (nil, false) if neither.
-// When a legacy file is found, it's opportunistically
-// MOVED to the new nested location (so future reads are
-// fast and the eviction sweep can use the new layout).
+// readMetaFile reads the .meta sidecar for src. Returns
+// (data, true) if found, (nil, false) otherwise. The cache
+// uses a 2-level nested hash layout (see cachePath in
+// thumbnails.go for the rationale).
 func readMetaFile(src, cacheDir, thumbExt string) ([]byte, bool) {
 	metaPath := dimsMetaPath(src, cacheDir, thumbExt)
 	if data, err := os.ReadFile(metaPath); err == nil {
-		return data, true
-	}
-	// Not in the new location — try the legacy flat path.
-	oldPath := legacyFlatDimsMetaPath(src, cacheDir, thumbExt)
-	if data, err := os.ReadFile(oldPath); err == nil {
-		// Opportunistic migration. Best-effort goroutine
-		// (same rationale as readCacheFile in thumbnails.go).
-		go func() {
-			_ = os.MkdirAll(filepath.Dir(metaPath), 0o755)
-			_ = os.Rename(oldPath, metaPath)
-		}()
 		return data, true
 	}
 	return nil, false

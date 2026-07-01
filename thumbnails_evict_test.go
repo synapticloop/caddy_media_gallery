@@ -1,12 +1,60 @@
 package gallery
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// makeNestedCacheFile creates a fake cache file in the new
+// 2-level nested layout (<cacheDir>/<aa>/<bb>/<rest>.webp).
+// Returns the full nested path. We compute the hash from a
+// fake source path (just an index) so the test files end up
+// in deterministic locations.
+func makeNestedCacheFile(t *testing.T, cacheDir string, idx int, size int) string {
+	t.Helper()
+	abs, _ := filepath.Abs(fmt.Sprintf("/fake/src/%d.jpg", idx))
+	h := sha256.Sum256([]byte(abs))
+	hexHash := hex.EncodeToString(h[:16])
+	subdir1 := hexHash[:2]
+	subdir2 := hexHash[2:4]
+	rest := hexHash[4:]
+	nestedDir := filepath.Join(cacheDir, subdir1, subdir2)
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(nestedDir, rest+".webp")
+	data := make([]byte, size)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// makeNestedCacheMeta creates the .meta sidecar for a nested
+// cache file. Returns the full nested meta path.
+func makeNestedCacheMeta(t *testing.T, cacheDir string, idx int) string {
+	t.Helper()
+	abs, _ := filepath.Abs(fmt.Sprintf("/fake/src/%d.jpg", idx))
+	h := sha256.Sum256([]byte(abs))
+	hexHash := hex.EncodeToString(h[:16])
+	subdir1 := hexHash[:2]
+	subdir2 := hexHash[2:4]
+	rest := hexHash[4:]
+	nestedDir := filepath.Join(cacheDir, subdir1, subdir2)
+	path := filepath.Join(nestedDir, rest+".webp.meta")
+	if err := os.MkdirAll(nestedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("100 100\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 // TestEvictIfOver_NoLimit verifies that no eviction happens
 // when maxMB <= 0 (the explicit "no cap" opt-out).
@@ -61,16 +109,12 @@ func TestEvictIfOver_NonexistentDir(t *testing.T) {
 // so both files get evicted.
 func TestEvictIfOver_OverLimit(t *testing.T) {
 	tmp := t.TempDir()
-	// Create 2 files of 1 MB each = 2 MB total.
+	// Create 2 nested-layout thumbs of 1 MB each = 2 MB total.
 	// Cap: 1 MB. Target: 0.8 MB. Evict BOTH files
 	// (2 MB > 0.8 MB target).
 	now := time.Now()
 	for i := 0; i < 2; i++ {
-		data := make([]byte, 1024*1024) // 1 MB
-		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		path := makeNestedCacheFile(t, tmp, i, 1024*1024)
 		// i=0 is oldest, i=1 is newest
 		oldTime := now.Add(-time.Duration(2-i) * time.Minute)
 		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
@@ -79,15 +123,24 @@ func TestEvictIfOver_OverLimit(t *testing.T) {
 	}
 	evictIfOver(tmp, 1, nil) // 1 MB cap
 	// Both files should be evicted (total 2 MB > 0.8 MB target).
-	entries, _ := os.ReadDir(tmp)
-	remaining := 0
-	for _, e := range entries {
-		if !e.IsDir() {
+	// Per user request 2026-06-30: the legacy flat layout is
+	// no longer supported, so we only count files in nested
+	// subdirs. Walking the cache dir and checking for "files
+	// at the top level" doesn't work anymore (we have subdirs
+	// at the top level). Instead, count files across all
+	// nested subdirs.
+	var remaining int
+	filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".webp" {
 			remaining++
 		}
-	}
+		return nil
+	})
 	if remaining != 0 {
-		t.Errorf("expected 0 files remaining (2 MB > 0.8 MB target), got %d", remaining)
+		t.Errorf("expected 0 .webp files remaining (2 MB > 0.8 MB target), got %d", remaining)
 	}
 }
 
@@ -95,23 +148,23 @@ func TestEvictIfOver_OverLimit(t *testing.T) {
 // happens when the cache is well under the cap.
 func TestEvictIfOver_UnderCapNoEviction(t *testing.T) {
 	tmp := t.TempDir()
-	// Create 10 files of 100 KB each = 1 MB total.
+	// Create 10 nested-layout files of 100 KB each = 1 MB total.
 	// Cap: 5 MB. We're well under cap → no eviction.
 	for i := 0; i < 10; i++ {
-		data := make([]byte, 100*1024)
-		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		makeNestedCacheFile(t, tmp, i, 100*1024)
 	}
 	evictIfOver(tmp, 5, nil) // 5 MB cap, 1 MB used
-	entries, _ := os.ReadDir(tmp)
-	remaining := 0
-	for _, e := range entries {
-		if !e.IsDir() {
+	// Count remaining .webp files across the nested layout.
+	var remaining int
+	filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && filepath.Ext(path) == ".webp" {
 			remaining++
 		}
-	}
+		return nil
+	})
 	if remaining != 10 {
 		t.Errorf("expected 10 files remaining (under cap), got %d", remaining)
 	}
@@ -128,28 +181,28 @@ func TestEvictIfOver_UnderCapNoEviction(t *testing.T) {
 func TestEvictIfOver_OldestFirst(t *testing.T) {
 	tmp := t.TempDir()
 	now := time.Now()
-	// i=0 is oldest, i=1 is newest
-	for i := 0; i < 2; i++ {
-		data := make([]byte, 1024*1024) // 1 MB
-		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-		oldTime := now.Add(-time.Duration(2-i) * time.Hour)
-		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+	// 3 files of 700 KB each in the nested layout. i=0 is
+	// oldest, i=2 is newest. 2.1 MB total, 1 MB cap →
+	// 0.8 MB target → evict 2 oldest (leaving i=2, the newest).
+	paths := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		paths[i] = makeNestedCacheFile(t, tmp, i, 700*1024)
+		oldTime := now.Add(-time.Duration(3-i) * time.Hour)
+		if err := os.Chtimes(paths[i], oldTime, oldTime); err != nil {
 			t.Fatal(err)
 		}
 	}
 	evictIfOver(tmp, 1, nil) // 1 MB cap → 0.8 MB target
-	// 2 MB > 0.8 MB target → BOTH files evicted.
-	// (To test "oldest first" with a single file surviving,
-	// we'd need 2.5 MB of data — but the helper only takes
-	// integer MB caps. So this test asserts BOTH are evicted
-	// AND the order: 00.webp is gone first.)
-	// Actually with both evicted, we can't test order. Let
-	// me use 3 files of 700 KB.
-	// ... skip the rest, see below
-	_ = tmp
+	// The 2 oldest should be evicted. The newest (i=2) should
+	// still exist.
+	for i := 0; i < 2; i++ {
+		if _, err := os.Stat(paths[i]); err == nil {
+			t.Errorf("file %d (oldest) should have been evicted, but still exists", i)
+		}
+	}
+	if _, err := os.Stat(paths[2]); err != nil {
+		t.Errorf("file 2 (newest) should still exist: %v", err)
+	}
 }
 
 // TestEvictIfOver_FIFOOrder creates 3 files of 700 KB each
@@ -158,31 +211,27 @@ func TestEvictIfOver_OldestFirst(t *testing.T) {
 func TestEvictIfOver_FIFOOrder(t *testing.T) {
 	tmp := t.TempDir()
 	now := time.Now()
+	// 3 files of 700 KB each in the nested layout. i=0 is
+	// oldest, i=2 is newest. 2.1 MB total, 1 MB cap →
+	// 0.8 MB target → evict 2 oldest (leaving i=2, the newest).
+	paths := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		data := make([]byte, 700*1024) // 700 KB
-		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		paths[i] = makeNestedCacheFile(t, tmp, i, 700*1024)
 		// i=0 is oldest, i=2 is newest
 		oldTime := now.Add(-time.Duration(3-i) * time.Hour)
-		if err := os.Chtimes(path, oldTime, oldTime); err != nil {
+		if err := os.Chtimes(paths[i], oldTime, oldTime); err != nil {
 			t.Fatal(err)
 		}
 	}
-	// Total: 2.1 MB. Cap: 1 MB. Target: 0.8 MB. Should
-	// evict 2 oldest (leaving i=2, the newest).
 	evictIfOver(tmp, 1, nil)
-	// The newest file (02.webp) should still exist.
+	// The newest file (i=2) should still exist.
 	for i := 0; i < 2; i++ {
-		path := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if _, err := os.Stat(path); err == nil {
-			t.Errorf("file %02d.webp should have been evicted (older)", i)
+		if _, err := os.Stat(paths[i]); err == nil {
+			t.Errorf("file %d (older) should have been evicted", i)
 		}
 	}
-	path := filepath.Join(tmp, "02.webp")
-	if _, err := os.Stat(path); err != nil {
-		t.Errorf("file 02.webp should still exist (newest): %v", err)
+	if _, err := os.Stat(paths[2]); err != nil {
+		t.Errorf("file 2 (newest) should still exist: %v", err)
 	}
 }
 
@@ -220,48 +269,40 @@ func TestEvictIfOver_OnlyFilesNotSubdirs(t *testing.T) {
 func TestEvictIfOver_LRUViaMetaSidecar(t *testing.T) {
 	tmp := t.TempDir()
 	now := time.Now()
-	// 3 thumbs, 1 MB each = 3 MB total. Cap 1 MB → 0.8 MB target.
-	// All 3 will be evicted (3 MB >> 0.8 MB). We assert the
-	// ORDER: the thumb with the OLDEST .meta mtime is evicted
-	// first, regardless of the thumb's own mtime.
-	thumbData := make([]byte, 1024*1024) // 1 MB
+	// 3 thumbs in the nested layout, 1 MB each = 3 MB total.
+	// Cap 1 MB → 0.8 MB target. All 3 will be evicted
+	// (3 MB >> 0.8 MB). We assert the ORDER: the thumb
+	// with the OLDEST .meta mtime is evicted first,
+	// regardless of the thumb's own mtime.
 	sourceTimes := []time.Time{
 		now.Add(-1000 * time.Hour), // very old source
 		now.Add(-500 * time.Hour),  // less old
 		now.Add(-100 * time.Hour),  // recent source
 	}
 	lruTimes := []time.Time{
-		now.Add(-3 * time.Hour), // LRU=oldest
-		now.Add(-1 * time.Hour), // LRU=mid
+		now.Add(-3 * time.Hour),  // LRU=oldest
+		now.Add(-1 * time.Hour),  // LRU=mid
 		now.Add(-1 * time.Minute), // LRU=newest
 	}
+	paths := make([]string, 3)
+	metaPaths := make([]string, 3)
 	for i := 0; i < 3; i++ {
-		thumbPath := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		metaPath := thumbPath + ".meta"
-		// Source mtime (old for index 0, recent for index 2)
-		if err := os.WriteFile(thumbPath, thumbData, 0o644); err != nil {
+		paths[i] = makeNestedCacheFile(t, tmp, i, 1024*1024)
+		if err := os.Chtimes(paths[i], sourceTimes[i], sourceTimes[i]); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chtimes(thumbPath, sourceTimes[i], sourceTimes[i]); err != nil {
-			t.Fatal(err)
-		}
-		// .meta sidecar with LRU timestamp
-		if err := os.WriteFile(metaPath, []byte("100 100\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chtimes(metaPath, lruTimes[i], lruTimes[i]); err != nil {
+		metaPaths[i] = makeNestedCacheMeta(t, tmp, i)
+		if err := os.Chtimes(metaPaths[i], lruTimes[i], lruTimes[i]); err != nil {
 			t.Fatal(err)
 		}
 	}
 	evictIfOver(tmp, 1, nil) // 1 MB cap → 0.8 MB target → all 3 evicted
-	// Verify all thumbs are gone.
+	// Verify all thumbs and their .meta sidecars are gone.
 	for i := 0; i < 3; i++ {
-		thumbPath := filepath.Join(tmp, fmt.Sprintf("%02d.webp", i))
-		if _, err := os.Stat(thumbPath); !os.IsNotExist(err) {
+		if _, err := os.Stat(paths[i]); !os.IsNotExist(err) {
 			t.Errorf("thumb %d should be evicted, but still exists", i)
 		}
-		metaPath := thumbPath + ".meta"
-		if _, err := os.Stat(metaPath); !os.IsNotExist(err) {
+		if _, err := os.Stat(metaPaths[i]); !os.IsNotExist(err) {
 			t.Errorf("meta %d should be evicted with thumb, but still exists", i)
 		}
 	}
@@ -307,27 +348,27 @@ func TestEvictIfOver_SidecarsNotCountedTowardCap(t *testing.T) {
 func TestEvictIfOver_NoMetaSidecarUsesThumbMtime(t *testing.T) {
 	tmp := t.TempDir()
 	now := time.Now()
-	// 2 thumbs, 1 MB each = 2 MB. Cap 1 MB → 0.8 MB.
-	// Both will be evicted. We assert both are gone.
+	// 2 nested-layout thumbs, 1 MB each = 2 MB total. Cap
+	// 1 MB → 0.8 MB. Both will be evicted. We assert both
+	// are gone.
+	paths := make([]string, 2)
 	for i := 0; i < 2; i++ {
-		thumbPath := filepath.Join(tmp, fmt.Sprintf("no-meta-%d.webp", i))
-		if err := os.WriteFile(thumbPath, make([]byte, 1024*1024), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		// NO .meta sidecar
+		// Use makeNestedCacheFile (which doesn't create a
+		// .meta sidecar) so we exercise the no-meta fallback
+		// in scanNestedThumb.
+		paths[i] = makeNestedCacheFile(t, tmp, i, 1024*1024)
 		// Make the first thumb old (1 hour ago) and the
 		// second recent (now) — eviction should remove
 		// the old one first.
 		oldTime := now.Add(time.Duration(i-1) * time.Hour)
-		if err := os.Chtimes(thumbPath, oldTime, oldTime); err != nil {
+		if err := os.Chtimes(paths[i], oldTime, oldTime); err != nil {
 			t.Fatal(err)
 		}
 	}
 	evictIfOver(tmp, 1, nil)
 	// Both evicted.
 	for i := 0; i < 2; i++ {
-		thumbPath := filepath.Join(tmp, fmt.Sprintf("no-meta-%d.webp", i))
-		if _, err := os.Stat(thumbPath); !os.IsNotExist(err) {
+		if _, err := os.Stat(paths[i]); !os.IsNotExist(err) {
 			t.Errorf("thumb %d should be evicted", i)
 		}
 	}
