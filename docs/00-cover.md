@@ -21,8 +21,6 @@ geometry: margin=1in
 
 \newpage
 \begin{flushleft}
-<!-- Comment moved here so it doesn't render as LaTeX text in
-     the output. The TOC command below generates the actual TOC. -->
 \setcounter{tocdepth}{2}
 \renewcommand{\contentsname}{Contents}
 \tableofcontents
