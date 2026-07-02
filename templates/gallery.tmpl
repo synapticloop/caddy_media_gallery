@@ -2050,7 +2050,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     </header>
 
-    {{if gt .TotalPages 1}}
     <!-- Per user request 2026-06-27: pagination links now
        preserve the full query (sort, order, type filter,
        search query, page_size) — only page is replaced. The
@@ -2082,7 +2081,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <span class="page-btn disabled">Next →</span>
     {{end}}
     </nav>
-    {{end}}
 
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
@@ -2273,7 +2271,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{range .Images}}{{.CardHTML}}{{end}}
     </div>
 
-    {{if gt .TotalPages 1}}
     <nav class="pagination">
       {{if .HasPrev}}
         <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
@@ -2295,7 +2292,6 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <span class="page-btn disabled">Next →</span>
       {{end}}
     </nav>
-    {{end}}
     </div>
     {{if eq (len .Images) 0}}
     <p class="empty">No images match the current filter.</p>

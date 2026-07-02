@@ -642,7 +642,7 @@ func TestProvision_ThumbConfigDefaults(t *testing.T) {
 // produces a "Page 1 of 3" pagination header
 // (ceil(7/3) = 3 pages). The first call exercises an explicit
 // pageSize. (The default-pageSize case is covered by
-// TestProvision_PageSizeDefault + the no-pagination-when-fits
+// TestProvision_PageSizeDefault + the always-show-pagination
 // behavior below.)
 func TestRenderPage_PageSizePagination(t *testing.T) {
 	files := []FileInfo{
@@ -664,19 +664,29 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 		t.Errorf("expected 'Page 1 of 3' for 7 images @ page_size=3, got:\n%s",
 			extractMetaSnippets(html))
 	}
-	// pageSize=0 → defaults to 50 → all 7 images fit on page 1 →
-	// pagination block doesn't render (the template only renders
-	// the nav when TotalPages > 1, see render.go around the
-	// `if gt .TotalPages 1` block). This is the right behavior:
-	// no point showing "Page 1 of 1" + disabled prev/next buttons.
+	// pageSize=0 → defaults to 50 → all 7 images fit on page 1.
+	// Per user request 2026-07-01: the pagination nav IS shown
+	// even when all items fit on one page — with the prev/next
+	// buttons greyed out and the single page number visible.
 	html, err = RenderPage(
 		"test", "./", "./_thumbs/", "", "", false, false, 0, nil, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(html, `<nav class="pagination">`) {
-		t.Errorf("expected NO pagination nav when all 7 images fit on one page (page_size=0 → 50), got:\n%s",
+	if !strings.Contains(html, `<nav class="pagination">`) {
+		t.Errorf("expected pagination nav to render even when all 7 images fit on one page, got:\n%s",
 			extractMetaSnippets(html))
+	}
+	// The nav should have a single page number ("1") and two
+	// disabled prev/next buttons.
+	if !strings.Contains(html, `<span class="page-btn disabled">← Prev</span>`) {
+		t.Errorf("expected disabled prev button, got:\n%s", extractMetaSnippets(html))
+	}
+	if !strings.Contains(html, `<span class="page-btn disabled">Next →</span>`) {
+		t.Errorf("expected disabled next button, got:\n%s", extractMetaSnippets(html))
+	}
+	if !strings.Contains(html, `<span class="page-btn active">1</span>`) {
+		t.Errorf("expected active '1' page button, got:\n%s", extractMetaSnippets(html))
 	}
 }
 

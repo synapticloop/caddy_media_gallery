@@ -4500,14 +4500,22 @@ func TestRenderPage_PageSizeAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The pagination nav should NOT render (only 1 page).
-	if strings.Contains(html, `<nav class="pagination">`) {
-		t.Error("expected NO pagination nav when 'all' is selected (1 page)")
+	// Per user request 2026-07-01: the pagination nav IS shown
+	// even when only 1 page (with prev/next disabled and the
+	// single page number "1" visible).
+	if !strings.Contains(html, `<nav class="pagination">`) {
+		t.Error("expected pagination nav to render when 'all' is selected (1 page with disabled prev/next)")
+	}
+	if !strings.Contains(html, `<span class="page-btn disabled">← Prev</span>`) {
+		t.Error("expected disabled prev button when 'all' is selected (page 1 of 1)")
+	}
+	if !strings.Contains(html, `<span class="page-btn disabled">Next →</span>`) {
+		t.Error("expected disabled next button when 'all' is selected (page 1 of 1)")
 	}
 	// Note: "Showing 1-100" IS in the header when "all" is
 	// selected (it shows the full range). The KEY indicator
-	// that "all" is active is the ABSENCE of the pagination
-	// nav (only 1 page).
+	// that "all" is active is that the pagination nav shows
+	// "1 of 1" (visible via the active page button "1").
 	if !strings.Contains(html, "Showing 1-100") {
 		t.Error("expected header to show 'Showing 1-100' when all 100 items fit on one page")
 	}
@@ -4539,9 +4547,16 @@ func TestRenderPage_PageSizeAllViaURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Should be no pagination nav (all 50 items on 1 page)
-	if strings.Contains(html, `<nav class="pagination">`) {
-		t.Error("expected NO pagination nav when ?page_size=all is in URL")
+	// Per user request 2026-07-01: the pagination nav IS shown
+	// even when only 1 page (with prev/next disabled).
+	if !strings.Contains(html, `<nav class="pagination">`) {
+		t.Error("expected pagination nav to render when ?page_size=all is in URL (1 page with disabled prev/next)")
+	}
+	if !strings.Contains(html, `<span class="page-btn disabled">← Prev</span>`) {
+		t.Error("expected disabled prev button when ?page_size=all is in URL (page 1 of 1)")
+	}
+	if !strings.Contains(html, `<span class="page-btn disabled">Next →</span>`) {
+		t.Error("expected disabled next button when ?page_size=all is in URL (page 1 of 1)")
 	}
 }
 
