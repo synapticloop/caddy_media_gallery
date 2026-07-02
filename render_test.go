@@ -2392,42 +2392,48 @@ func TestRenderPage_SectionHeadingClickable(t *testing.T) {
 }
 
 // TestRenderPage_Phase75HorizontalLinesSameWidth verifies
-// Phase 75: the three horizontal lines (under the sort-bar,
-// under each section, and the header's bottom) are all the
-// same width. The line under the sort-bar is now drawn by
-// .sort-bar's border-bottom (with negative margin to escape
-// the header's 2rem padding), so it extends to the viewport
-// edges like the .section border-bottom.
+// the horizontal lines that visually separate the header
+// rows. The full set of horizontal lines (top to bottom of
+// the header area) is now:
+//   - (no line) between status area and breadcrumb
+//     (header-top no longer has border-bottom, per user
+//     request 2026-07-01)
+//   - line between breadcrumb and sort-bar (sort-bar's
+//     border-bottom)
+//   - line between filter-form and the media grid
+//     (filter-form's border-bottom, per user request
+//     2026-07-01)
 //
-// The <header>'s border-bottom has been REMOVED (it used to
-// draw a line at the <header>'s outer edge, which was slightly
-// different width than the section lines because the section
-// has its own padding).
+// The previous test expected .header-top to have
+// border-bottom. That changed: the user wants the
+// breadcrumb to sit directly below the status with no
+// separator. The .filter-form now has the line below
+// the filter row (previously, the line was above the
+// sort-bar via .header-top's border-bottom).
 func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, nil, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// 1. The <header> rule should NOT have border-bottom anymore.
+	// 1. The <header> rule should NOT have border-bottom.
 	headerStart := strings.Index(html, "header {")
 	if headerStart < 0 {
 		t.Fatal("no header rule")
 	}
-	// Find the matching closing brace (the next "}" — header is
-	// a simple 1-property rule so the closing brace is near).
 	headerEnd := strings.Index(html[headerStart:], "}")
 	if headerEnd < 0 {
 		t.Fatal("no end of header rule")
 	}
 	headerRule := html[headerStart : headerStart+headerEnd+1]
 	if strings.Contains(headerRule, "border-bottom") {
-		t.Errorf("expected <header> rule to NOT have border-bottom (Phase 75: moved to sort-bar); rule: %q", headerRule)
+		t.Errorf("expected <header> rule to NOT have border-bottom; rule: %q", headerRule)
 	}
 
-	// 1b. Per Phase 80: the .header-top rule should have
-	// border-bottom + padding-bottom (the new visual separator
-	// between the title/meta row and the sort-bar).
+	// 1b. Per user request 2026-07-01: the .header-top rule
+	// should NOT have border-bottom anymore (the line between
+	// status and breadcrumb is removed). It should still have
+	// padding-bottom: 0.75rem (for visual breathing room).
 	headerTopStart := strings.Index(html, ".header-top {")
 	if headerTopStart < 0 {
 		t.Fatal("no .header-top rule")
@@ -2437,15 +2443,11 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 		t.Fatal("no end of .header-top rule")
 	}
 	headerTopRule := html[headerTopStart : headerTopStart+headerTopEnd+1]
-	if !strings.Contains(headerTopRule, "border-bottom: 1px solid var(--border)") {
-		t.Errorf("expected .header-top to have border-bottom (Phase 80); rule: %q", headerTopRule)
+	if strings.Contains(headerTopRule, "border-bottom") {
+		t.Errorf("expected .header-top to NOT have border-bottom (user 2026-07-01: removed); rule: %q", headerTopRule)
 	}
 	if !strings.Contains(headerTopRule, "padding-bottom: 0.75rem") {
-		t.Errorf("expected .header-top to have padding-bottom: 0.75rem (Phase 80); rule: %q", headerTopRule)
-	}
-	// And should NOT have margin-bottom: 0.85rem (removed in Phase 80).
-	if strings.Contains(headerTopRule, "margin-bottom: 0.85rem") {
-		t.Errorf("expected .header-top to NOT have margin-bottom: 0.85rem (Phase 80: removed); rule: %q", headerTopRule)
+		t.Errorf("expected .header-top to still have padding-bottom: 0.75rem; rule: %q", headerTopRule)
 	}
 
 	// 2. The .sort-bar rule should have border-bottom (not border-top).
@@ -2459,25 +2461,25 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 	}
 	sortBarRule := html[sortBarStart : sortBarStart+sortBarEnd+1]
 	if !strings.Contains(sortBarRule, "border-bottom") {
-		t.Errorf("expected .sort-bar rule to have border-bottom (Phase 75); rule: %q", sortBarRule)
-	}
-	if strings.Contains(sortBarRule, "border-top") {
-		t.Errorf("expected .sort-bar rule to NOT have border-top (Phase 75: moved to border-bottom); rule: %q", sortBarRule)
-	}
-	// The negative margin is what makes the line extend to the
-	// viewport edges (escapes the <header>'s 2rem padding).
-	// Per Phase 80: the sort-bar no longer has negative
-	// horizontal margin (it was margin: 0 -2rem to escape the
-	// header's 2rem padding; the user removed it in Phase 80).
-	if strings.Contains(sortBarRule, "margin: 0 -2rem") {
-		t.Errorf("expected .sort-bar to NOT have margin: 0 -2rem (Phase 80: removed)")
-	}
-	// And the new padding should be 0.75rem 0 0.75rem 0.
-	if !strings.Contains(sortBarRule, "padding: 0.75rem 0 0.75rem 0") {
-		t.Errorf("expected .sort-bar to have padding: 0.75rem 0 0.75rem 0 (Phase 80); rule: %q", sortBarRule)
+		t.Errorf("expected .sort-bar rule to have border-bottom; rule: %q", sortBarRule)
 	}
 
-	// 3. The .section rule should have border-bottom (unchanged).
+	// 3. The .filter-form rule should have border-bottom
+	// (the new line between the filter row and the media grid).
+	showMore := strings.Index(html, ".filter-form {")
+	if showMore < 0 {
+		t.Fatal("no .filter-form rule")
+	}
+	showMoreEnd := strings.Index(html[showMore:], "}")
+	if showMoreEnd < 0 {
+		t.Fatal("no end of .filter-form rule")
+	}
+	filterFormRule := html[showMore : showMore+showMoreEnd+1]
+	if !strings.Contains(filterFormRule, "border-bottom") {
+		t.Errorf("expected .filter-form rule to have border-bottom (user 2026-07-01: added); rule: %q", filterFormRule)
+	}
+
+	// 4. The .section rule should have border-bottom (unchanged).
 	sectionStart := strings.Index(html, ".section {")
 	if sectionStart < 0 {
 		t.Fatal("no .section rule")
@@ -2488,7 +2490,7 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 	}
 	sectionRule := html[sectionStart : sectionStart+sectionEnd+1]
 	if !strings.Contains(sectionRule, "border-bottom") {
-		t.Errorf("expected .section rule to have border-bottom (unchanged from Phase 75); rule: %q", sectionRule)
+		t.Errorf("expected .section rule to have border-bottom; rule: %q", sectionRule)
 	}
 }
 

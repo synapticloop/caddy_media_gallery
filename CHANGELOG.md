@@ -15,6 +15,12 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 - Type Filter → **File Type Filter** (the dropdown next to the Sort by buttons). Plain English, matches operator-facing naming in docs/04-sort-and-pagination.md.
 - Search all → **Search All** (the submit button next to the search input). Title-case matches the Reset/Filter button styling.
 
+### ✏️ UI: header borders and "Sort By" label
+Three small layout/label changes on the header area:
+- **Removed** the `border-bottom` from `.header-top` (the line between the status area "3 files // 3 images..." and the breadcrumb `images > crosswords`). The breadcrumb now sits directly below the status with no separator.
+- **Added** `border-bottom: 1px solid var(--border)` to `.filter-form` — a visible separator between the filter row (File Type Filter / Search All / Reset) and the media grid below. The search controls remain right-aligned within the filter row.
+- **"Sort by" → "Sort By"** in the sort-bar label. Title-case to match the Filter / Reset / Search All button styling.
+
 ---
 
 ## 2026-07-01

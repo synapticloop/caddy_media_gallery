@@ -213,14 +213,11 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  /* Per user request 2026-06-19: removed margin-bottom: 0.85rem.
-     Added a border-bottom + padding-bottom to create a
-     visible separator between the title/meta row and the
-     sort-bar row below. The 1px line extends the full width
-     of the .header (no negative margin needed because the
-     .header has padding 0 2rem 0, and the .header-top is
-     full-width inside that padding). */
-  border-bottom: 1px solid var(--border);
+  /* Per user request 2026-07-01: removed border-bottom.
+     The line between the status area and the breadcrumb
+     is now removed — the breadcrumb sits directly below
+     the status with no separator. Kept padding-bottom so
+     the breadcrumb has visual breathing room. */
   padding-bottom: 0.75rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
@@ -816,6 +813,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      left edge of the row aligns with the rest of the page
      content. */
   padding: 0.75rem 0 0.75rem 0;
+  /* Per user request 2026-07-01: added border-bottom to create
+     a visible separator between the filter row and the media
+     grid below. */
+  border-bottom: 1px solid var(--border);
 }
 .filter-row {
   display: flex;
@@ -1912,7 +1913,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     <div class="sort-bar">
       {{$q := .Query}}
-      <span class="sort-label">Sort by</span>
+      <span class="sort-label">Sort By</span>
       <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
       <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
       <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
