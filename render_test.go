@@ -2446,8 +2446,8 @@ func TestRenderPage_Phase75HorizontalLinesSameWidth(t *testing.T) {
 	if strings.Contains(headerTopRule, "border-bottom") {
 		t.Errorf("expected .header-top to NOT have border-bottom (user 2026-07-01: removed); rule: %q", headerTopRule)
 	}
-	if !strings.Contains(headerTopRule, "padding-bottom: 0.75rem") {
-		t.Errorf("expected .header-top to still have padding-bottom: 0.75rem; rule: %q", headerTopRule)
+	if !strings.Contains(headerTopRule, "padding-bottom:") {
+		t.Errorf("expected .header-top to have padding-bottom (per user request 2026-07-01, was 0.75rem, now 0.25rem); rule: %q", headerTopRule)
 	}
 
 	// 2. The .sort-bar rule should have border-bottom (not border-top).
