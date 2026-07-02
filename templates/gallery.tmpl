@@ -825,8 +825,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding: 0.75rem 0 0.75rem 0;
   /* Per user request 2026-07-01: added border-bottom to create
      a visible separator between the filter row and the media
-     grid below. */
-  border-bottom: 1px solid var(--border);
+     grid below. Per user request 2026-07-01: the border
+     color matches the darker #c0c4c6 used under the
+     breadcrumb for visual consistency between the two
+     "primary" separators in the header area. */
+  border-bottom: 1px solid #c0c4c6;
 }
 .filter-row {
   display: flex;
