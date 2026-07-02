@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -466,5 +468,97 @@ func TestGenerateOrLoadVideoThumb_EndToEndWithRealFFmpeg(t *testing.T) {
 	}
 	if !bytes.Equal(data, data2) {
 		t.Error("second call returned different bytes (cache hit should be deterministic)")
+	}
+}
+
+
+// TestServeThumb_CreatesSidecarsSynchronously verifies that the
+// synchronous sidecar creation (added per user request 2026-07-01)
+// works: a single serveThumb call leaves thumb + .meta + .exif on
+// disk. Before this change, the .meta and .exif sidecars were
+// created asynchronously by the scanner's background enrichment
+// goroutine, fired on page loads. The new behavior is: each
+// serveThumb call leaves a complete cache state for the source
+// file, so the next page load / lightbox open finds the data
+// already present.
+func TestServeThumb_CreatesSidecarsSynchronously(t *testing.T) {
+	src := makeTestJPEG(t, 640, 480)
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := t.TempDir()
+	t.Setenv("GALLERY_THUMB_CACHE_DIR", cacheDir)
+	g := &Gallery{
+		ThumbWidth:   320,
+		ThumbHeight:  320,
+		ThumbFormat:  "webp",
+		NoExif:       false,
+		ThumbTTLMinutes: 1440,
+	}
+	// Construct a request that the handler will recognise as a
+	// thumb request. The URL is /<subdir>/_thumbs/<basename>.webp
+	// and the handler strips the .webp suffix to get the source
+	// basename. The "subdir" path is also stripped, so the
+	// source must be at root + subdir + basename.
+	// The test JPEG was created at src (a temp dir); we mirror
+	// that as the gallery root and use a subdir of "".
+	// The serveThumb handler expects a URL ending in .webp —
+	// it strips the .webp suffix to recover the source basename.
+	// The source is at filepath.Dir(src) + "src.jpg" so the
+	// source basename (no extension) is "src" and the thumb URL
+	// is /_thumbs/src.webp.
+	req := httptest.NewRequest("GET", "/_thumbs/src.webp", nil)
+	rec := httptest.NewRecorder()
+	handled := g.serveThumb(rec, req, filepath.Dir(src), "_thumbs/src.webp")
+	if !handled {
+		t.Fatalf("serveThumb returned false (request not handled)")
+	}
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Verify the thumb was written.
+	thumbPath := thumbCachePath(src, cacheDir, "webp")
+	if _, err := os.Stat(thumbPath); err != nil {
+		t.Errorf("thumb not created: %v", err)
+	}
+	// Verify the .meta sidecar was written by the synchronous
+	// readDimensionsCached call.
+	metaPath := thumbCachePath(src, cacheDir, "webp") + ".meta"
+	metaData, err := os.ReadFile(metaPath)
+	if err != nil {
+		t.Errorf(".meta sidecar not created: %v", err)
+	}
+	// The .meta should contain the source dimensions (640 480),
+	// not the thumb dimensions (320x scaled). Verify.
+	var w, h int
+	if _, err := fmt.Sscanf(string(metaData), "%d %d", &w, &h); err != nil {
+		t.Errorf(".meta content not parseable as 'W H': %q (err: %v)", metaData, err)
+	}
+	if w != 640 || h != 480 {
+		t.Errorf(".meta has %dx%d, want 640x480 (source dimensions, not thumb dimensions)", w, h)
+	}
+	// Verify the .exif sidecar was written by the synchronous
+	// readExifCached call. The test JPEG has no EXIF, so the
+	// sidecar should be "has=false" (which is the documented
+	// "no EXIF" cache format).
+	exifPath := thumbCachePath(src, cacheDir, "webp") + ".exif"
+	exifData, err := os.ReadFile(exifPath)
+	if err != nil {
+		t.Errorf(".exif sidecar not created: %v", err)
+	}
+	if !bytes.HasPrefix(exifData, []byte("has=false")) {
+		t.Errorf(".exif should be 'has=false' for a JPEG with no EXIF, got %q", exifData)
+	}
+	// Verify the .meta mtime was touched to time.Now() by
+	// touchMetaAtUse (the LRU marker). It should be at or
+	// after srcInfo.ModTime() (the .meta is written with
+	// source mtime, then touched to now).
+	metaInfo, err := os.Stat(metaPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metaInfo.ModTime().Before(srcInfo.ModTime()) {
+		t.Errorf(".meta mtime %v is before source mtime %v", metaInfo.ModTime(), srcInfo.ModTime())
 	}
 }
