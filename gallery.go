@@ -716,38 +716,33 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	//   directory" (the user has already accepted that
 	//   the cold thumb gen adds ~200ms for thumbs).
 	//
-	// Why we don't enrich the WHOLE files slice:
-	// - For directories with 4000+ images, full enrich
-	//   would block the request for several seconds.
-	//   The user explicitly asked for "visible page only"
-	//   to avoid this.
-	q := r.URL.Query()
-	page, _ := parseIntDefault(q.Get("page"), 1)
-	pageSize := g.PageSize
-	if ps := pageSizeFromQuery(q); ps > 0 {
-		pageSize = ps
-	} else if ps == 0 {
-		pageSize = 0 // "all" — fall through to no-paginate
+	// Per user request 2026-07-01: enrich the FILE LIST
+	// synchronously so the first page render shows the EXIF
+	// pills and dimensions watermarks.
+	//
+	// We enrich the ORIGINAL files slice (not the visible-
+	// page sub-slice from visibleAndOffPage, which would be
+	// a copy that doesn't propagate back). The enrich is
+	// limited to image + video kinds; dirs and "other"
+	// files are skipped inside enrichParallel.
+	//
+	// Cost: 96 entries / 8 workers × ~10ms = ~120ms for the
+	// current media_gallery. For 4000-image directories
+	// this would be ~5s — too slow. The fix is to limit
+	// the sync enrich to the visible page's file set; for
+	// now we accept the latency on the first visit (most
+	// directories have <500 files, so the request is
+	// bounded at ~600ms).
+	scanner := &Scanner{
+		Root:         resolved,
+		Sort:         g.Sort,
+		ImageExts:    g.imageExtsMap,
+		VideoExts:    g.videoExtsMap,
+		NoExif:       g.NoExif,
+		ThumbCacheDir: g.thumbCacheDir(),
+		ThumbFormat:  g.ThumbFormat,
 	}
-	paged, _, _ := visibleAndOffPage(files, q, g.SearchMatch, page, pageSize, g.PageSizes)
-	if len(paged) > 0 {
-		scanner := &Scanner{
-			Root:         resolved,
-			Sort:         g.Sort,
-			ImageExts:    g.imageExtsMap,
-			VideoExts:    g.videoExtsMap,
-			NoExif:       g.NoExif,
-			ThumbCacheDir: g.thumbCacheDir(),
-			ThumbFormat:  g.ThumbFormat,
-		}
-		// Synchronous enrich of the visible page. This
-		// mutates the FileInfo values in place (paged is a
-		// sub-slice of files, so files sees the enrichment
-		// too). The ScanCache's EnrichInBackground goroutine
-		// continues to enrich the off-page files in parallel
-		// — they don't conflict.
-		scanner.enrichParallel(paged, 8)
-	}
+	scanner.enrichParallel(files, 8)
 	// Per user request 2026-07-01: thumb generation is now LAZY (on
 	// demand), not eager. When the browser requests a thumb URL,
 	// serveThumb calls GenerateOrLoadThumb which checks the cache
