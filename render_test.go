@@ -310,8 +310,8 @@ func TestRenderPage_TileMetadata(t *testing.T) {
 	if !strings.Contains(html, `class="tile-name">photo.jpg`) {
 		t.Error("expected tile to show filename as tile-name")
 	}
-	if !strings.Contains(html, "2026-06-12") {
-		t.Error("expected ISO-formatted date on tile (UTC-normalised)")
+	if !strings.Contains(html, "2026-06-12 14:30") {
+		t.Error(`expected ISO-formatted date+time on tile (UTC-normalised, "2026-06-12 14:30" for the test input)`)
 	}
 	if !strings.Contains(html, "229.1 KB") {
 		t.Error("expected human-readable size on tile (229.1 KB for 234567 bytes)")

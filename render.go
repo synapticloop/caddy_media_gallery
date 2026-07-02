@@ -506,15 +506,20 @@ func humanSize(n int64) string {
 }
 
 // formatDate converts a unix-nanosecond ModTime to an ISO date
-// string (YYYY-MM-DD). Always in UTC so the date is stable across
-// server timezones (the system is AEST/UTC+10; without UTC
-// normalisation a file modified at 23:30 UTC would render as the
-// next day locally). Returns "" for zero values.
+// string (YYYY-MM-DD HH:MM in UTC, 24h time). Always in UTC so
+// the date is stable across server timezones (the system is
+// AEST/UTC+10; without UTC normalisation a file modified at
+// 23:30 UTC would render as the next day locally). Per user
+// request 2026-07-01: include the 24h time (HH:MM) in addition
+// to the date. Returns "" for zero values.
 func formatDate(unixNano int64) string {
 	if unixNano == 0 {
 		return ""
 	}
-	return time.Unix(0, unixNano).UTC().Format("2006-01-02")
+	// Per user request 2026-07-01: include the 24h time (HH:MM)
+	// in addition to the date. The full format is "2026-07-02 14:35"
+	// — concise (no seconds) for a gallery listing.
+	return time.Unix(0, unixNano).UTC().Format("2006-01-02 15:04")
 }
 
 // formatType returns the file's extension, uppercase, without
