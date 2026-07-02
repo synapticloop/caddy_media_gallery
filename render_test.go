@@ -2639,8 +2639,8 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	if !strings.Contains(dirsTable, `<th class="col-date sortable"`) {
 		t.Error("expected sortable col-date th in dirs-table")
 	}
-	if !strings.Contains(dirsTable, `<span>Modified</span>`) {
-		t.Error("expected <span>Modified</span> in dirs-table")
+	if !strings.Contains(dirsTable, `<span>Last Modified</span>`) {
+		t.Error("expected <span>Last Modified</span> in dirs-table (per user request 2026-07-01)")
 	}
 
 	// 5. The dirs-table body should have NO <td class="col-type"> cells.
