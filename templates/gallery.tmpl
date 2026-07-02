@@ -754,23 +754,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      0.75rem to 0.25rem so the breadcrumb sits closer to
      the status area above. */
   padding: 0.25rem 0 0.5rem 0;
-  /* Per user request 2026-07-01: replaced the single
-     border-bottom with a "double-line" effect — two
-     parallel grey lines with the page background (--bg)
-     between them, like a "tab strip" separator. The two
-     lines are full-width (margin: 0 -2rem to escape the
-     header's 2rem horizontal padding, matching the
-     sort-bar and filter-form lines). */
-  margin: 0 -2rem;
-  /* The background-image has two 1px lines (top + bottom)
-     with a 4px gap of --bg between them. The background
-     itself is transparent (the parent shows through), so
-     the gap looks like the page background. */
-  background-image:
-    linear-gradient(to bottom, var(--border) 0, var(--border) 1px, transparent 1px, transparent 5px, var(--border) 5px, var(--border) 6px);
-  background-size: 100% 6px;
-  background-repeat: no-repeat;
-  background-position: bottom;
+  border-bottom: 1px solid var(--border);
 }
 /* Per user request 2026-06-20: the breadcrumb is now
    rectangular (no chevron shape). All segments are simple
