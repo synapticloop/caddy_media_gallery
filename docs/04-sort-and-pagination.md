@@ -110,7 +110,7 @@ The search box in the header does two things:
   don't match get the `.filtered-out` class. Visibility
   collapse + opacity 0 fade hides them. The URL doesn't
   change.
-- **"Search all" button** (server-side filter): submits the
+- **"Search All" button** (server-side filter): submits the
   form with `?q=foo`. The page re-loads with the matched
   files only. The form preserves the other URL params.
 
@@ -121,7 +121,7 @@ match just works.
 
 ## Type filter
 
-The "Type Filter" dropdown has checkboxes for Images / Videos /
+The "File Type Filter" dropdown has checkboxes for Images / Videos /
 Other, with the count of each type next to the label. Checking
 "Images" + "Videos" (unchecking "Other") filters out non-media
 files. The "Reset" pill resets the filter.

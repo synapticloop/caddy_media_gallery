@@ -1946,7 +1946,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              layout is unchanged (the .type-filter-group is a
              flex row like the original .filter-row contents). */}}
         <div class="type-filter-group">
-        <span class="filter-label">Type Filter</span>
+        <span class="filter-label">File Type Filter</span>
 
         {{if gt .FilterImageOptions.Total 0}}
         <details class="filter-dropdown">
@@ -2031,7 +2031,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
             value="{{.SearchQuery}}"
             autocomplete="off"
             aria-label="Search filenames in this directory">
-          <button type="submit" class="search-button">Search all</button>
+          <button type="submit" class="search-button">Search All</button>
           {{/* Per user request 2026-06-28: a Reset button next
                to "Search all" that clears the search input
                AND the ?q= URL parameter (if one is present).

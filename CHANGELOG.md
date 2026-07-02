@@ -9,6 +9,14 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 2026-07-02
+
+### ✏️ UI: rename filter label and search button
+- Type Filter → **File Type Filter** (the dropdown next to the Sort by buttons). Plain English, matches operator-facing naming in docs/04-sort-and-pagination.md.
+- Search all → **Search All** (the submit button next to the search input). Title-case matches the Reset/Filter button styling.
+
+---
+
 ## 2026-07-01
 
 ### 🐛 Fix: enrich the original files slice (not the filtered copy)
