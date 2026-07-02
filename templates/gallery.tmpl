@@ -750,11 +750,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   font-size: 0.85rem;
-  /* Per user request 2026-07-01: reduced padding-top from
-     0.75rem to 0.25rem so the breadcrumb sits closer to
-     the status area above. */
-  padding: 0.25rem 0 0.5rem 0;
-  border-bottom: 1px solid var(--border);
+  /* Per user request 2026-07-01: padding-top 0.25rem
+     (compact — keeps the breadcrumb close to the status
+     area above) and padding-bottom 0.85rem (more visual
+     breathing room before the separator). */
+  padding: 0.25rem 0 0.85rem 0;
+  /* Per user request 2026-07-01: darker border under the
+     breadcrumb. Using #c0c4c6 (a slightly darker shade
+     than --border-strong #d0d4d6) for stronger visual
+     separation from the sort-bar below. */
+  border-bottom: 1px solid #c0c4c6;
 }
 /* Per user request 2026-06-20: the breadcrumb is now
    rectangular (no chevron shape). All segments are simple
