@@ -19,8 +19,8 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **Drop-in replacement** for `file_server browse` in a `handle_path` block.
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime. The thumb's mtime matches the source's mtime, and an LRU eviction runs when the cache exceeds `max_cache_size_mb`.
-- **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos. Both are cached in sidecar files alongside the thumbnails so the second scan is instant.
-- **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF data is read eagerly at scan time (not lazily on lightbox open) and cached in a sidecar so subsequent scans skip the parse.
+- **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos. Both are cached in `.meta` sidecar files alongside the thumbnails so the second page load hits the sidecar fast path (<100µs per file).
+- **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF + dimensions are computed **synchronously during the page request** (the 60 visible-page files take ~75ms with 8 parallel workers, hidden behind the HTML render), then cached in `.meta` and `.exif` sidecar files alongside the thumb. The next page load hits the sidecar fast path (<100µs per file). The `no_exif` directive disables EXIF reading entirely (no sidecar is created, no EXIF pill on cards, no EXIF panel in lightbox).
 - **Filename search** with two operator-configurable match modes (`search_match word|substring`, default `substring`). Live (client-side) as the visitor types, plus a "Search all" button for server-side full-directory search. Non-matching cards stay visible but are dimmed (not hidden) so the visitor keeps spatial context.
 - **Hover tooltip on each thumbnail** showing the filename with the extension stripped and underscores / hyphens replaced by spaces — e.g. `misty_bamboo_forest_path.jpg` shows as `misty bamboo forest path`. Two layers: a native browser tooltip (via the HTML `title` attribute) for accessibility, plus a custom CSS tooltip (via `:before`) for instant visual feedback.
 - **Type filter** — Images / Videos / Other checkboxes in the header (with a "Filter" submit button and a "Reset" pill that clears the type filter). The Other dropdown includes a `(none)` entry for files without an extension (e.g. `Makefile`, `welcome`) — clicking it as a strict filter shows ONLY no-extension files. Combined with the search filter via the URL (`?type=jpg&type=png` or `?ext=jpg&ext=png`; `?ext=.` filters to no-extension files only).
@@ -143,7 +143,7 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `cache_scan` | `1440` (24h) | In-memory scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net. |
 | `no_thumbs` | `false` | Skip thumbnail generation (use original file in `<img src>`). |
 | `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | `false` | Skip EXIF reading entirely (both at scan time and in the lightbox). Useful for testing or when EXIF is not desired. |
+| `no_exif` | `false` | Skip EXIF reading entirely. Disables both the per-thumb sidecar creation in `serveThumb` and the sync visible-page enrich in `ServeHTTP`. Cards no longer show the "EXIF" pill; lightbox hides the EXIF panel. Useful for privacy-sensitive deployments. |
 | `template` | `gallery.tmpl` | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed). |
 | `search_match` | `substring` | Filename match rule for search: `substring` (default) or `word` (word-boundary). |
 | `max_cache_size_mb` | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). Enforced via an on-write check (cheap, runs in a goroutine after each cache write) and a background sweep every 30 min. |
@@ -160,32 +160,62 @@ media_gallery {
 
 ## How thumbs work
 
-Thumb URLs look like `/_thumbs/<basename>.webp` (e.g. for source `photo.jpg`, the thumb is at `/_thumbs/photo.webp`). On first request, the module:
+Thumb URLs look like `/_thumbs/<basename>.webp` (e.g. for source `photo.jpg`, the thumb is at `/_thumbs/photo.webp`). On first request, `serveThumb` calls `GenerateOrLoadThumb` which:
 
-1. Hashes the source's absolute path (sha256, first 16 bytes).
-2. Checks the cache at `/var/cache/caddy-gallery/<hash>.webp` (and the matching `.meta` and `.exif` sidecars).
-3. If the cached thumb's mtime is older than the source, regenerates:
+1. Hashes the source's absolute path (sha256, first 16 bytes / 32 hex chars).
+2. Splits the hash into 2 hex chars per level: `<aa>/<bb>/<rest28>`.
+3. Checks the cache at `/var/cache/caddy-gallery/<aa>/<bb>/<rest28>.webp` (and the matching `.meta` and `.exif` sidecars).
+4. If the cached thumb is missing OR its mtime is older than the source's mtime, regenerates:
    - Decode source (jpg, png, gif, webp via stdlib + golang.org/x/image)
-   - Resize to 320px wide, preserve aspect ratio
+   - Resize to fit within `thumb_width` × `thumb_height` (default 320×320), preserve aspect ratio
    - Encode as lossless WebP (VP8L) using github.com/HugoSmits86/nativewebp
-   - Set the thumb's mtime to match the source's mtime
-   - Write dimensions to `<hash>.webp.meta` sidecar and EXIF to `<hash>.webp.exif` sidecar (text format with Human-Readable keys: `Camera Make`, `Lens Model`, `Exposure Time`, etc.)
+   - Set the thumb's mtime to match the source's mtime (so the staleness check works: `!thumb.mtime.Before(source.mtime)` means the thumb is fresh)
+   - Write dimensions to `<hash>.webp.meta` sidecar (plain text "W H\n", used for LRU + the W × H watermark)
+   - Read+write EXIF to `<hash>.webp.exif` sidecar (plain text with Human-Readable keys: `Camera Make`, `Lens Model`, `Exposure Time`, etc.; first line is `has=true|false`); skipped if `no_exif` is set
    - Return the bytes
-4. Subsequent requests serve the cached file directly (with a quick `.meta` mtime touch so the LRU eviction knows the file was used).
+5. Subsequent requests serve the cached file directly. `serveThumb` then calls `touchMetaAtUse` to update the `.meta` mtime to `time.Now()` (the LRU marker — eviction sorts by `.meta` mtime, oldest first).
 
-Cache invalidation is purely mtime-based — no cron job, no inotify watcher.
+Cache invalidation is purely mtime-based — no cron job, no inotify watcher. The nested layout keeps each leaf directory to ~5 entries (well under ext4's ~10k-entry degradation threshold).
 
 **Cache directory** is `/var/cache/caddy-gallery` by default. Override with the `GALLERY_THUMB_CACHE_DIR` env var (useful for testing).
 
 ## Caching & performance
 
-- **Scan cache** — each directory is scanned at most once per minute (mtime-keyed). For 100+ image directories like `/images/generated/`, this drops per-request work from milliseconds to microseconds.
-- **Thumb cache** — WebP thumbs are written to disk and served from disk; subsequent requests are a single `os.ReadFile`. The thumb URL is content-addressed (sha256 of the source path), so the URL itself is cacheable. LRU eviction runs when the cache exceeds `max_cache_size_mb`.
-- **Sidecar caches** for dimensions (`.webp.meta`) and EXIF (`.webp.exif`) are written next to the thumbnail. Both use plain-text format (key-value pairs, first line `has=true|false`) for fast parsing. The sidecar's mtime matches the source's mtime; if the source changes, the sidecar is detected stale and re-read.
-- **HTTP `Cache-Control: public, max-age=86400`** on thumb responses (24h, since thumbs are immutable per source mtime).
-- **HTTP `Cache-Control: no-cache`** on gallery HTML (so newly-added images show up on the next refresh).
-- **Cache size cap** (`max_cache_size_mb`, default 1 GB) — when the on-disk thumb cache grows past the cap, the oldest thumbs (by file mtime) are evicted in a background goroutine until the cache is at 80% of the cap. A 30-min background sweep catches the case where the cache grows without new writes. Operators can set `max_cache_size_mb 0` for unbounded (the pre-feature behavior).
-- **EXIF + dimensions reading** — both happen at scan time (not per-request) and are cached alongside the file info. EXIF costs ~1-5ms per image (header-only parse); image dimensions use `image.DecodeConfig` (header only); video dimensions call `ffprobe` (50-100ms). For a 200-image directory, the first scan after a cache miss takes ~1-2 seconds total; subsequent renders are sub-millisecond.
+The gallery has a layered cache: scan cache (in-memory) + thumb cache (on-disk) + sidecar caches (in-memory + on-disk). The design pattern is **eager metadata, lazy thumbs**: metadata + EXIF are computed synchronously during the page request so the visitor sees them on the first visit; thumbnails are generated lazily when the browser requests them.
+
+### The three caches
+
+- **Scan cache** (in-memory) — `[]FileInfo` per directory, keyed by absolute dir path. Invalidation is **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and forces a fresh scan). The TTL (`cache_scan` directive, default **1440 = 24h**) is a safety net for edge cases (clock skew, manual mtime changes, in-place file modifications that don't bump dir mtime). Cache state is internally consistent within a TTL window (enrichment happens via atomic `SetFiles` swap, no in-progress mutation is observable).
+
+- **Thumb cache** (on-disk at `/var/cache/caddy-gallery/`) — 2-level nested hash subdirs (`<aa>/<bb>/<hash28>.webp`). Default cap: **1 GB** (`max_cache_size_mb`). LRU eviction when the cap is hit (sorts by `.meta` mtime, oldest first). 2 hex chars per level keeps leaf dirs to ~5 entries (well under ext4's ~10k-entry slowdown threshold). LRU marker is the `.meta` mtime, touched on every thumb access (decouples eviction from the thumb's own mtime which mirrors the source's mtime for semantic correctness).
+
+- **Sidecar caches** (per thumb file, in the same subdir) — `.webp.meta` (dimensions, plain text "W H\n") and `.webf.exif` (EXIF data, plain text with Human-Readable keys: `Camera Make`, `Lens Model`, `Exposure Time`, etc.; first line is `has=true|false`). Created lazily on the first thumb request (synchronous with the thumb gen) and reused on subsequent requests. Staleness check: `sidecar.mtime < source.mtime` → sidecar is stale → re-read source and overwrite. Both sidecars are written/checked atomically.
+
+### First-visit latency budget
+
+For `/images/media_gallery/` (89 files, 4 with EXIF), cold cache:
+
+| Step | Time |
+|---|---|
+| TLS handshake | ~16ms |
+| Scan (cold, 89 files) | ~20ms |
+| Sync enrich of 89 files (8 workers × ~10ms each) | ~110ms |
+| Template render | ~30ms |
+| Body transfer (gzip 160 KB → 20 KB) | ~50ms |
+| **HTML total** | **~225ms** |
+| First thumb request (cold, decode + resize + WebP encode) | ~250ms |
+| Subsequent thumbs (browser parallelizes 6 at a time) | wave over ~1s |
+| Warm reload (within 24h TTL) | ~30ms |
+
+### HTTP caching
+
+- **Thumb responses**: `Cache-Control: public, max-age=86400` (24h, set via the `thumb_ttl` directive). Thumbs are immutable per source mtime, so the visitor's browser cache is safe.
+- **Gallery HTML**: `Cache-Control: no-cache` (always fresh). New images need to show up on the next refresh.
+- **Caddy-level `encode`**: `encode zstd gzip` for all text responses (HTML, CSS, JS, JSON). 8x compression ratio on the 160 KB gallery HTML — 7.7x smaller wire size.
+
+### Cache size cap
+
+`max_cache_size_mb` (default 1024 MB = 1 GB) — when the on-disk thumb cache grows past the cap, the oldest thumbs (by `.meta` mtime) are evicted in a background goroutine until the cache is at 80% of the cap. A 30-min background sweep catches the case where the cache grows without new writes. Operators can set `max_cache_size_mb 0` for unbounded (the pre-feature behavior). The footer shows current usage as a 2-digit hex percentage (`01` = 1%, `28` = 40%, `64` = 100%).
 
 ## Dependencies
 

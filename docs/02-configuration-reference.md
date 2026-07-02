@@ -32,7 +32,7 @@ Inside an `media_gallery { ... }` block:
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
 | `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
 | `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | no-arg = `true` / explicit `false` = `false` | `false` (EXIF on) | Disable EXIF entirely. EXIF is read LAZILY by the lightbox (via the `?exif=1` endpoint) — not at scan time. When set, the endpoint returns 404 and the lightbox EXIF panel is hidden. Privacy-friendly. |
+| `no_exif` | no-arg = `true` / explicit `false` = `false` | `false` (EXIF on) | Disable EXIF reading entirely. When set: the visible-page sync enrich skips EXIF reads, `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark is unaffected. Privacy-friendly — useful when EXIF data is undesirable. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary. `substring` = match anywhere. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 

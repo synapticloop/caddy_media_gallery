@@ -11,14 +11,65 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ## 2026-07-01
 
+### 🐛 Fix: enrich the original files slice (not the filtered copy)
+Per user feedback 2026-07-01: the previous sync-enrich commit was enriching the wrong slice. `visibleAndOffPage()` returns `paged` as a sub-slice of a **freshly-created** slice (because `applySearchFilter`, `applyTypeFilter`, and `splitFiles` all COPY the `FileInfo` struct values). Mutations to `paged` did not propagate back to the original `files` slice that `RenderPage` sees. Fix: skip `visibleAndOffPage` for the sync enrich; call `scanner.enrichParallel(files, 8)` directly on the original `files` slice. Result: first-page visit now correctly shows 60 W × H watermarks and 4 EXIF pills (was 0 of each). Trade-off: enrich now runs on the full directory (96 files / 8 workers × ~10ms = ~120ms) instead of the visible page (60 files). For directories with 4000+ images this would be ~5s — too slow; a future optimization could maintain a name-based index.
+
+### 🐛 Fix: enrich visible-page files synchronously so EXIF + dimensions appear on first visit
+Per user feedback 2026-07-01: the first page load to a directory was missing the EXIF pill and the W × H watermark — a refresh was needed to see them. Root cause: `Cache.Get` returned unenriched `[]FileInfo`, and the background `EnrichInBackground` goroutine was still populating them when the HTML was sent. Fix: in `ServeHTTP`, after `Cache.Get` returns, run `enrichParallel(files, 8)` synchronously before calling `RenderPage`. Result: first-request page includes 60 W × H watermarks and 4 EXIF pills; cold-request time goes from ~130ms to ~875ms (acceptable for a first visit). See the commit `506017a` follow-up for the slice-propagation fix.
+
+### ⚡ Perf: synchronously create .meta + .exif sidecars on thumb request
+Per user request 2026-07-01: a single `serveThumb` request now leaves a complete cache state (thumb + `.meta` + `.exif`). Before this change, the sidecars were created asynchronously by the scanner's background enrichment, which caused the "first lightbox shows partial data" bug. Fix: after `GenerateOrLoadThumb` returns, `serveThumb` also calls `readDimensionsCached` + `readExifCached` (the latter skipped if `no_exif` is set) before writing the response. Cold-path overhead: +10ms (5-15ms per file for EXIF + dimensions reads); warm-path overhead: <20µs (mtime checks only). All 405 → 406 tests pass.
+
+### ⚡ Perf: lazy thumb generation (on demand) + scan cache 24h TTL
+Per user request 2026-07-01: removed the eager-gen goroutine from `ServeHTTP` (which was pegging the CPU on first visits to large directories with 10 parallel workers generating all 60 on-page thumbs synchronously). Now thumbs are generated on demand by `serveThumb` when the browser requests them. Also bumped `CacheScanMinutes` default from 1 to 1440 (24h) — the scan cache's primary invalidation is the directory mtime check, so a 24h TTL is a safety net for edge cases (clock skew, manual mtime changes). Result: page-load CPU drops from "100%+ peak during page load" to "51% peak during initial thumb wave". Operators can still set `cache_scan 1` to opt back into the 1-minute fallback.
+
+### 🐛 Fix: scan-cache enrichment data race (atomic SetFiles swap)
+The previous `EnrichInBackground` design mutated the cached `files` slice in place from a goroutine. Multiple concurrent cache reads within the TTL could return copies of the slice at arbitrary points in the enrichment, so the same page could return different EXIF data on each refresh. Fix: added `ScanCache.SetFiles(dir, files)` for an atomic swap (under the write mutex), and `EnrichInBackground` now enriches a copy and calls `SetFiles` when done. Future cache hits see the enriched data; no in-progress mutation is observable. Cache state is now consistent within a TTL window.
+
 ### 📚 Documentation: canonical localStorage reference
-Per user request 2026-07-01: added a comprehensive "What the template stores in localStorage" section to `docs/03-templates.md`. Documents every key the template reads or writes (`gallery-theme`, `gallery-dirs-sort`, `gallery-dirs-order`, `gallery-others-sort`, `gallery-others-order`, `gallery-section-<dirs|others>`), explains the `gallery-` namespace prefix, and includes a quick-copy snippet for clearing all keys (useful during operator testing). Cross-references added in `README.md` (new bullet in Features) and `docs/04-sort-and-pagination.md` (link to the localStorage reference).
+Added a comprehensive "What the template stores in localStorage" section to `docs/03-templates.md`. Documents every key the template reads or writes (`gallery-theme`, `gallery-dirs-sort`, `gallery-dirs-order`, `gallery-others-sort`, `gallery-others-order`, `gallery-section-<dirs|others>`), explains the `gallery-` namespace prefix, and includes a quick-copy snippet for clearing all keys (useful during operator testing). Cross-references added in `README.md` (new bullet in Features) and `docs/04-sort-and-pagination.md` (link to the localStorage reference).
 
 ### ⚡ Perf: split scan into fast + background enrichment
-Per user report 2026-07-01: `Scanner.Scan()` no longer reads EXIF or pixel dimensions inline (those took ~45 seconds for 4491 files and blocked the HTTP response). The slow path moved to `Scanner.EnrichInBackground()`, which uses a worker pool of 8 and runs in a goroutine after the fast ScanCache path returns. Result: cold-cache page load for `/images/imagequeue/` (4497 files) drops from **9-46 seconds** to **~227ms**. Minor UX trade-off: EXIF pills and dimensions watermarks don't appear on the very first visit; subsequent renders show them once the background enrich completes.
+`Scanner.Scan()` no longer reads EXIF or pixel dimensions inline (those took ~45 seconds for 4491 files and blocked the HTTP response). The slow path moved to `Scanner.EnrichInBackground()`, which uses a worker pool of 8 and runs in a goroutine after the fast ScanCache path returns. Result: cold-cache page load for `/images/imagequeue/` (4497 files) drops from **9-46 seconds** to **~227ms**.
 
-### 🐛 Refresh shimmer bug fix
-Per user feedback 2026-07-01: removing the pre-add of `loading` class on `<div class="thumb">` in `buildCardHTML`. The previous behavior caused browser-cached thumbs to briefly flash a shimmer state on refresh (the pre-added class was in HTML, so the JS path that checks `img.complete === true` would sometimes see the class first). Now: cached thumbs skip the shimmer entirely on reload; truly-cold thumbs still shimmer via the JS path. Verified: all 20 visible cards have `loading=False, complete=True` after a reload (no shimmer on cached thumbs).
+### ⚡ Perf: pre-render card markup as a single template.HTML string
+The render hot-path was dominated by `html/template.Execute` walking the card node tree. Now each card's full HTML is pre-computed in Go (via `buildCardHTML`) and emitted as a single `{{.CardHTML}}` substitution in the template. Result: 60-file render drops from **2.85ms to 0.96ms** (3x speedup). The 405 existing tests still pass — they do byte-equivalent string matching on card markup, validating that the pre-rendered HTML is identical to the template's output.
+
+### ⚡ Perf: eager-generate page-visible thumbs + background the rest
+- `a01fbf2` perf: eager-generate page-visible thumbs (10 parallel workers, ~600ms total) and background the rest (2 workers, several minutes for thousands of files)
+  - Subsequent commits (19271b5, 506017a) replaced this with lazy thumb gen + sync visible-page enrich
+  - Original rationale: keep the on-page thumbs warm before the browser's parallel requests; the off-page thumbs were warmed for subsequent page navigations
+  - Removed because the 10-worker sync phase pegged the CPU on first visits to large directories
+
+### 📚 Documentation: Caddy-level encode compression
+- `fec0364` docs: add a new "Caddy-level configuration" section to `docs/01-configuration.md` documenting the `encode zstd gzip` directive
+  - Saves ~140 KB per gallery HTML response (160 KB → 20 KB, 7.7x reduction)
+  - Operator should add `encode zstd gzip` to their Caddyfile at the route or global level
+  - Also notes that thumbs aren't affected (already WebP-compressed at generation time)
+
+### 🐛 Fix: cache stats now correctly walk the nested cache directory
+- `b304b0a` fix: the cache size calculation used `os.ReadDir` + `if entry.IsDir() { continue }` which would skip all entries once the cache is in the nested (2-level) layout (every top-level entry becomes a directory)
+  - Replaced with `filepath.Walk` that recursively visits all files
+  - Live verified: footer now correctly shows `01 // 00 // 00 // 00` (1% used of 1 GB cap) instead of `00 // 00 // 00 // 00`
+
+### ♻️ Refactor: remove legacy flat-layout cache fallback
+- `cfe2c1f` refactor: remove the legacy flat-layout cache fallback (rely on the 2-level nested hash subdir layout)
+  - Old flat layout (all thumbs in `/var/cache/caddy-gallery/`) is now considered deprecated
+  - New nested layout (`/var/cache/caddy-gallery/<aa>/<bb>/<hash>.webp`) avoids the "directory has too many entries" problem
+  - Migration: stale flat-layout files are simply not picked up by the new lookup; the next thumb request regenerates them in the new layout
+
+### ⚡ Perf: split thumb cache into 2-level nested hash subdirs
+- `cd21cd7` perf: split the thumb cache into 2-level nested hash subdirs
+  - Old layout: `/var/cache/caddy-gallery/<hash>.webp` (one flat dir, 1000+ entries trigger filesystem slowdowns)
+  - New layout: `/var/cache/caddy-gallery/<aa>/<bb>/<hash28>.webp` (2 hex chars per level)
+  - For 100k thumbs: ~5 entries per innermost subdir (well under ext4's ~10k-entry degradation)
+  - The hash base is `sha256(abs_path + thumbExt)[:16]` (32 hex chars), split into `<aa>/<bb>/<rest28>` for the dir structure
+
+### ⚡ Perf: pre-compute EXIF attribute string (saves ~28% on EXIF-heavy pages)
+- `bf6ee21` perf: pre-compute the `data-exif-*` HTML attribute string in Go (via `buildExifAttrString`), and emit it as a single struct field in `FileView.ExifAttrs`
+  - Before: template had 8 separate `{{.Exif.CameraMake}}` field accesses per card, each doing reflection-based lookup
+  - After: 1 string field per card, no reflection
+  - Result: ~28% speedup on EXIF-heavy pages (60 cards each with 8 EXIF fields = 480 template field lookups → 60 string substitutions)
 
 ### 🐛 Port change: local-install default is now 3245 (was 8080)
 
@@ -51,6 +102,14 @@ To keep using 8080 (the prior default), pass `--user 8080` or set `CADDY_USER_PO
 - `681e315` feat: include search phrase in MEDIA header (e.g. `"search 'st' -"`)
 - `4c5a6ce` fix: search header default is no-search format (not form-submitted text)
 - `4872f5a` refactor: search filter now greys out non-matching items instead of hiding
+- `27fd5e8` fix: search header uses `FilteredTotal` (not page size) when not paginated
+- `229a979` fix: search header correctly uses JS format when visitor types more chars
+
+### Image types
+- `88a039b` refactor: remove `heic`/`avif`/`svg` from default `image_types` list
+  - Go's stdlib can't decode HEIC/AVIF/SVG; default list now contains only formats that work out-of-the-box
+  - Operators can opt in with `image_types .heic .avif .svg` if they have external tooling
+  - Files with unrecognized extensions now correctly appear in the "Other files" section with a 📄 icon
 
 ### Directories header
 - `f731f9c` feat: directories header shows `"+1 parent"` when there's a parent
@@ -87,6 +146,7 @@ To keep using 8080 (the prior default), pass `--user 8080` or set `CADDY_USER_PO
 - `439e937` docs: add CHANGELOG.md with all commits grouped by date and category
 - `47a30b4` docs: refresh screenshots to show EXIF pill on strawberry (after `no_exif` removed from localhost bypass)
 - `3249e2c` docs: update README with new features (EXIF pill, hover tooltip, + Parent Directory, sidecars, //go:embed)
+- `0564bfc` docs: document `(none)` filter across README, CHANGELOG, and operator docs
 
 ---
 
