@@ -1618,6 +1618,41 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: underline;
 }
 
+/* Per user request 2026-07-01: "Back To Top" button.
+   - Fixed position at bottom-center, 1.5rem from the
+     viewport bottom (a "little bit of marking from
+     the bottom").
+   - Black background, white text, rounded corners
+     (border-radius: 4px).
+   - Hidden by default; the JS scroll listener toggles
+     the .visible class when scrollY > window.innerHeight
+     (one full viewport of scrolling). */
+.back-to-top {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+}
+.back-to-top:hover {
+  color: #fff;
+  background: #222;
+}
+.back-to-top.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* ---- Lightbox overlay (created by lightbox.js) ---- */
 #gallery-lightbox {
   position: fixed;
@@ -2324,6 +2359,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        Refreshed every 30 sec by the stats-refresh goroutine. */}}
   <div class="site-footer-cache-stats" title="cache usage % // peak evictions in any 1h bucket in last 24h // 7d // 28d">{{.CacheStatsXX}} // {{.CacheStatsYY}} // {{.CacheStatsZZ}} // {{.CacheStatsAA}}</div>
 </footer>
+<!-- Per user request 2026-07-01: "Back To Top" button.
+     - Position: bottom-center, 1.5rem from the viewport
+       bottom (a "little bit of marking from the bottom")
+     - Style: black background, white text, rounded corners
+       (border-radius: 4px)
+     - Visibility: hidden by default; shown when the user
+       has scrolled past one viewport height (i.e. they've
+       scrolled at least one full screen of content)
+     - On click: smooth scroll to the top of the page
+       (window.scrollTo with behavior: 'smooth') -->
+<a href="#top" class="back-to-top" id="back-to-top" aria-label="Back to top">Back To Top</a>
 <script>
 
 /* Per user feedback 2026-07-01: shimmer animation while
@@ -3244,6 +3290,44 @@ input.addEventListener('input', function() {
 
     })();
 
+/* Per user request 2026-07-01: "Back To Top" button
+   behavior. The button is fixed at the bottom-center of
+   the viewport and is hidden by default (opacity: 0,
+   pointer-events: none). The scroll listener toggles the
+   .visible class when the user has scrolled past one
+   full viewport height (i.e. they've scrolled at least
+   one screen of content). The click handler scrolls to
+   the top of the page using window.scrollTo with
+   behavior: 'smooth' (CSS scroll-behavior would be
+   equivalent, but the JS approach is more explicit and
+   works in older browsers). */
+(function() {
+  var btn = document.getElementById('back-to-top');
+  if (!btn) return;
+  // Threshold: one full viewport height. The button
+  // appears after the user has scrolled at least one
+  // screen's worth of content (per user spec).
+  var threshold = window.innerHeight;
+  function update() {
+    if (window.scrollY > threshold) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+  }
+  window.addEventListener('scroll', update, { passive: true });
+  // Also update on resize (the threshold changes if the
+  // viewport height changes — e.g. user resizes browser,
+  // or rotates a tablet).
+  window.addEventListener('resize', update);
+  // Initial state (in case the page loads scrolled).
+  update();
+  // Click handler: smooth scroll to top.
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+})();
 </script>
 </body>
 </html>
