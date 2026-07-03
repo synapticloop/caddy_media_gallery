@@ -2049,18 +2049,33 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    rows. The .collapsed class is also persisted to
    localStorage (gallery-lb-exif-collapsed and
    gallery-lb-video-meta-collapsed) so the user doesn't
-   have to re-pick on every visit. */
+   have to re-pick on every visit.
+   Visual treatment (per user spec 2026-07-02):
+   - Full-width title with a slightly lighter background
+     (rgba(255,255,255,0.06) on top of the panel's
+     rgba(0,0,0,0.55) = a subtle white wash)
+   - Horizontal divider line under the title (using a
+     bottom border, full width of the panel)
+   - No underline on hover (the visual hover affordance
+     is the cursor + the divider line is always visible
+     — the underline would be visual noise) */
 #gallery-lightbox .lb-exif-header {
   cursor: pointer;
   font-weight: 700;
   letter-spacing: 0.05em;
-  padding-bottom: 2px;
+  padding: 2px 8px;
+  margin: -2px -8px 2px -8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   user-select: none;
   outline: none;
 }
 #gallery-lightbox .lb-exif-header:hover {
-  text-decoration: underline;
-  opacity: 0.85;
+  /* No text-decoration: underline per user request.
+     The visual hover cue is the cursor: pointer + the
+     subtle background — the divider line is always
+     visible so no underline is needed. */
+  background: rgba(255, 255, 255, 0.1);
 }
 #gallery-lightbox .lb-exif-header:focus-visible {
   outline: 1px solid rgba(255, 255, 255, 0.6);
