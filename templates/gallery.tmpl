@@ -580,11 +580,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .files-table .col-size::before {
   content: "";
   position: absolute;
-  /* Per user request 2026-07-01: small padding so the bar
-     sits inside the cell with breathing room above and
-     below (not flush with the row's top/bottom borders). */
-  top: 2px;
-  bottom: 2px;
+  /* Per user request 2026-07-02: increased the top/bottom
+     offset from 2px to 4px so the relative-size bar is
+     less tall (more compact). More breathing room above
+     and below the bar. */
+  top: 4px;
+  bottom: 4px;
   left: 0;
   width: var(--size-pct, 0%);
   /* Per user request 2026-07-01: a darker grey than the
@@ -1478,7 +1479,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: absolute;
   bottom: 6px;
   left: 6px;
-  padding: 2px 6px;
+  /* Per user request 2026-07-02: reduced vertical padding
+     from 2px to 1px so the background badge is less
+     tall (more compact). Same horizontal padding (6px)
+     for consistent text spacing. */
+  padding: 1px 6px;
   background: rgba(0, 0, 0, 0.65);
   color: rgba(255, 255, 255, 0.95);
   border-radius: 3px;
@@ -1498,7 +1503,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: absolute;
   bottom: 6px;
   right: 6px;
-  padding: 2px 6px;
+  /* Per user request 2026-07-02: reduced vertical padding
+     from 2px to 1px so the background badge is less
+     tall (more compact). Same horizontal padding (6px)
+     for consistent text spacing. */
+  padding: 1px 6px;
   background: rgba(0, 0, 0, 0.65);
   color: rgba(255, 255, 255, 0.95);
   border-radius: 3px;
