@@ -9,7 +9,49 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 2026-07-03
+
+### 🐛 Fix: broken Last Modified sort + Size sort didn't account for KB/MB/GB
+Two sort bugs in the directories and other-files tables:
+- **Last Modified sort** was a no-op for directories because `v.ModTime = f.ModTime` was only set in the `default:` branch of `buildFileView()` (for "other" files). All directory rows had `data-date="0"`. Fixed by moving the assignment to BEFORE the switch in `buildFileView()` so it's set for ALL file kinds (KindDir, KindImage, KindVideo, default).
+- **Size sort** used `parseFloat("58.2 MB") = 58.2` and `parseFloat("1.05 GB") = 1.05`. The comparison `58.2 < 1.05` is false, so 1.05 GB sorted before 58.2 MB. Fixed by adding a `parseSizeToBytes()` helper in the JS sort code that converts the human-readable size to bytes before comparing. Now sorts correctly across KB/MB/GB/TB boundaries.
+
+### ✏️ UI: size bars in directories/other-files tables less tall
+Per user spec: `.files-table .col-size::before` now uses `top: 7px; bottom: 5px` (was `top: 2px; bottom: 2px`). The relative-size bars in the SIZE column have more breathing room above the text and slightly less below, making them visibly more compact while still showing the relative-size progression.
+
+### ✏️ UI: refine collapsed EXIF/META panel
+Three rounds of refinement on the collapsible EXIF/META panel in the lightbox:
+- **Rotation direction:** text now reads top-to-bottom (anticlockwise). Changed `writing-mode: vertical-rl` to `writing-mode: vertical-lr`. The vertical bar on the right of the image now reads "EXIF" or "META" from top to bottom instead of bottom to top.
+- **Position:** panel moved from "to the left of the image with a gap" to "to the right of the image, slightly overlapping". Now sits at `img.right - panel.width + 8` (8px inside the image's right edge), giving the "leaning against the right edge" feel.
+- **Height stability fix:** the collapsed panel was growing in height on every toggle. Root cause: the base CSS had `bottom: 6rem` AND the `.collapsed` rule had `top: 50%`, so the height was forced to `viewport.height - top - bottom` (354px on a 900px viewport, even though content was only ~50px). Each toggle the JS updated `top` to re-center with the image, but that changed the height, creating a circular dependency. Fixed by adding `bottom: auto` to the `.collapsed` rule. Toggle handler also now clears inline `left`/`top`/`transform` on expand so the expanded CSS position is restored cleanly.
+
+### 🐛 Fix: META panel positioned immediately on video open
+Previous fix (c52c5ff) waited for `loadedmetadata` before positioning, but until that event fired, the panel sat at the CSS fallback position (left: 0.5rem — the LEFT side of the lightbox). New approach: position IMMEDIATELY using the current bounding rect (poster-sized for videos), then re-position when `loadedmetadata` fires. If loadedmetadata never fires, the panel stays at the poster-sized position (better than the CSS fallback on the left).
+
+---
+
 ## 2026-07-02
+
+### ✨ Feature: video metadata (META panel)
+Per user request 2026-07-02: parallel "META" panel for videos, showing duration / container / codecs / bitrate / framerate (extracted from `ffprobe`, cached in `.vmeta` sidecars). New `video_meta.go` module shells out to `ffprobe -v error -show_format -show_streams -of json`, parses the JSON, and extracts 6 fields. The `FileInfo` struct gained a `VideoMeta *VideoMeta` field; `FileView` gained matching fields and a pre-rendered `VideoMetaAttrs string` (avoids 6 separate template reflection lookups per card). Lightbox META panel: 6-row table below the caption. Card overlay: small "META" pill, same style as the EXIF pill. `video_meta_test.go` (10 tests): ffprobe JSON parsing, each field, malformed JSON, sidecar I/O.
+
+### ✨ Feature: collapsible EXIF/META panels in the lightbox
+Per user request 2026-07-02: the lightbox EXIF and META panels can now be collapsed to a vertical bar by clicking the panel header. State persists in `localStorage` (`gallery-lb-exif-collapsed` and `gallery-lb-video-meta-collapsed`) so the visitor doesn't have to re-pick on every visit. When collapsed, the panel becomes a vertical bar (~28px wide) with the text rotated 90° via `writing-mode: vertical-rl` (later refined to `vertical-lr` for anticlockwise reading). Header click toggles and persists; keyboard accessible (Enter/Space on the role="button" header).
+
+### ✨ UI: META pill on video cards
+Per user request 2026-07-02: small "META" pill on video cards, parallel to the "EXIF" pill on image cards. Same visual style (accent-coloured chip) so visitors can tell at a glance which kind of metadata is available. Initial placement was on the bottom-left of the thumbnail; later refined to match the EXIF pill position.
+
+### ✏️ UI: back-to-top button with scroll percentage
+Per user request 2026-07-01: "Back To Top" button fixed at the bottom-center of the viewport, appears after scrolling past one full viewport height. Black background, white text, rounded corners. The button shows the current scroll percentage as a small badge alongside the "Back To Top" text (e.g. "Back To Top [50%]"). The percentage is computed as `scrollY / (scrollHeight - clientHeight) * 100`, updated on every scroll event via `requestAnimationFrame` (no jitter, no scroll-event spam).
+
+### ✏️ UI: refine EXIF/META panel header
+Per user request 2026-07-02: the EXIF/META panel header (the "EXIF" or "META" text) now has a slightly lighter background (rgba(255,255,255,0.06) on the dark panel) and a horizontal divider line underneath. The hover state removes the underline (per user spec) and uses a background change instead. The expanded panel has the same width whether expanded or collapsed (`min-width: 340px`) so the panel doesn't shrink when toggled.
+
+### ✏️ UI: relative-size bars in SIZE column
+Per user request 2026-07-01: the SIZE column in the directories and other-files tables now shows a light-grey background bar representing the file's size relative to the largest in the column. The bar width is set via the `--size-pct` CSS custom property, computed from the file sizes during render. Smaller files have shorter bars (or no bar at all for 0-byte files), giving a visual sense of relative sizes at a glance. Dark-mode-aware via the `--bar-bg` variable.
+
+### 🐛 Fix: enrichment was on the wrong slice
+Per user feedback 2026-07-01: the previous sync-enrich commit was enriching the wrong slice. `visibleAndOffPage()` returns `paged` as a sub-slice of a **freshly-created** slice (because `applySearchFilter`, `applyTypeFilter`, and `splitFiles` all COPY the `FileInfo` struct values). Mutations to `paged` did not propagate back to the original `files` slice that `RenderPage` sees. Fix: skip `visibleAndOffPage` for the sync enrich; call `scanner.enrichParallel(files, 8)` directly on the original `files` slice. Result: first-page visit now correctly shows 60 W × H watermarks and 4 EXIF pills (was 0 of each). Trade-off: enrich now runs on the full directory (96 files / 8 workers × ~10ms = ~120ms) instead of the visible page (60 files). For directories with 4000+ images this would be ~5s — too slow; a future optimization could maintain a name-based index.
 
 ### ✏️ UI: rename filter label and search button
 - Type Filter → **File Type Filter** (the dropdown next to the Sort by buttons). Plain English, matches operator-facing naming in docs/04-sort-and-pagination.md.

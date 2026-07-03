@@ -21,6 +21,9 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime. The thumb's mtime matches the source's mtime, and an LRU eviction runs when the cache exceeds `max_cache_size_mb`.
 - **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos. Both are cached in `.meta` sidecar files alongside the thumbnails so the second page load hits the sidecar fast path (<100µs per file).
 - **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF + dimensions are computed **synchronously during the page request** (the 60 visible-page files take ~75ms with 8 parallel workers, hidden behind the HTML render), then cached in `.meta` and `.exif` sidecar files alongside the thumb. The next page load hits the sidecar fast path (<100µs per file). The `no_exif` directive disables EXIF reading entirely (no sidecar is created, no EXIF pill on cards, no EXIF panel in lightbox).
+- **Collapsible EXIF/META panel** in the lightbox. Click the panel header ("EXIF" or "META") to collapse to a slim vertical bar on the right side of the image; click again to expand. State persists in localStorage (`gallery-lb-exif-collapsed` / `gallery-lb-video-meta-collapsed`) so the choice is remembered across visits. The bar's text is rotated 90° anticlockwise (top-to-bottom) via `writing-mode: vertical-lr`. Position is JS-computed to sit at `img.right - panel.width + 8`, slightly overlapping the image's right edge.
+- **Video metadata (META panel)** — parallel to EXIF for videos. Shows duration (e.g. "0:05"), container (e.g. "mov,mp4,m4a"), video codec (e.g. "h264"), audio codec, bitrate (e.g. "2.3 Mbps"), and framerate (e.g. "24 fps"). Extracted from `ffprobe -v error -show_format -show_streams -of json`, cached in `.vmeta` sidecars (parallel to `.exif`). A "META" pill on the card lets the visitor know which videos have metadata. The META panel **hides when the video is playing** and reappears when paused (play/pause handler on the `<video>` element).
+- **"Back To Top" button** with scroll percentage. Fixed at the bottom-center of the viewport, appears after scrolling past one full viewport height. The button shows the current scroll percentage as a small badge (e.g. "Back To Top [50%]"). The percentage is computed as `scrollY / (scrollHeight - clientHeight) * 100` and updated via `requestAnimationFrame` on every scroll event (no jitter, no scroll-event spam).
 - **Filename search** with two operator-configurable match modes (`search_match word|substring`, default `substring`). Live (client-side) as the visitor types, plus a "Search All" button for server-side full-directory search. Non-matching cards stay visible but are dimmed (not hidden) so the visitor keeps spatial context.
 - **Hover tooltip on each thumbnail** showing the filename with the extension stripped and underscores / hyphens replaced by spaces — e.g. `misty_bamboo_forest_path.jpg` shows as `misty bamboo forest path`. Two layers: a native browser tooltip (via the HTML `title` attribute) for accessibility, plus a custom CSS tooltip (via `:before`) for instant visual feedback.
 - **Type filter** — Images / Videos / Other checkboxes in the header (with a "Filter" submit button and a "Reset" pill that clears the type filter). The Other dropdown includes a `(none)` entry for files without an extension (e.g. `Makefile`, `welcome`) — clicking it as a strict filter shows ONLY no-extension files. Combined with the search filter via the URL (`?type=jpg&type=png` or `?ext=jpg&ext=png`; `?ext=.` filters to no-extension files only).
@@ -244,7 +247,7 @@ go test ./... -v
 go test ./... -race       # race detector
 ```
 
-405 tests, all standard library + stdlib-friendly patterns. No test fixtures in the repo — the test for thumbnail generation uses a programmatically-generated 640x480 JPEG. Tests cover rendering, EXIF parsing, dimension reading, search filter, sort, pagination, scan cache, and the Caddyfile parser.
+416 tests, all standard library + stdlib-friendly patterns. No test fixtures in the repo — the test for thumbnail generation uses a programmatically-generated 640x480 JPEG. Tests cover rendering, EXIF parsing, dimension reading, search filter, sort, pagination, scan cache, and the Caddyfile parser.
 
 ## Architecture
 
@@ -257,7 +260,7 @@ caddy_media_gallery/
 ├── thumbnails.go           # WebP thumb generation, mtime cache, LRU eviction
 ├── dimensions.go           # Source dimensions reader + .meta sidecar cache
 ├── exif.go                 # EXIF reader + .exif sidecar cache (text format)
-├── *_test.go               # Go tests (405 total)
+├── *_test.go               # Go tests (416 total)
 ├── build.sh                # xcaddy build + systemd restart (or --user for local install)
 ├── template_embedded.go     # //go:embed directive bundling the gallery template
 ├── templates/

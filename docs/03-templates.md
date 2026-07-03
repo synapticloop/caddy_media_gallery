@@ -495,6 +495,8 @@ already visited other parts of the host site with their own
 | `gallery-others-sort` | `"name"` \| `"modified"` (default) | Other-files table header click | Same | Same |
 | `gallery-others-order` | `"asc"` \| `"desc"` | Other-files table header click | Same | Same |
 | `gallery-section-<section>` | `"collapsed"` | The [−]/[+] toggle on the directories / other-files section headings | Section-toggle script (eager: on page load, the script reads all `gallery-section-*` keys and applies the collapsed class) | Click on a section heading (or the small toggle button) |
+| `gallery-lb-exif-collapsed` | `"true"` (absent = expanded) | Click on the EXIF panel header in the lightbox | Lightbox JS — when opening, if the key is `"true"` the panel starts collapsed | Click on the EXIF panel header to collapse (key removed on expand) |
+| `gallery-lb-video-meta-collapsed` | `"true"` (absent = expanded) | Click on the META panel header in the lightbox (videos only) | Lightbox JS — same pattern as EXIF | Same |
 
 `<section>` is one of `dirs` or `others` — same values used in
 the `data-section="..."` attribute on each section header.

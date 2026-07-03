@@ -29,6 +29,21 @@ sort behaviour**:
 - Directories: always rendered, case-insensitive alphabetical.
   The Directories table has its own click-to-sort headers
   (name, # items, # sub-dirs, size, modified). Sort state
+
+**Size sort units** (2026-07-03): The Size column shows
+human-readable sizes like "58.2 MB" or "1.05 GB". The JS
+sort code parses these to bytes via a `parseSizeToBytes()`
+helper before comparing, so KB/MB/GB/TB boundaries sort
+correctly (e.g. 1.05 GB > 791.3 MB > 360.6 MB, not the
+wrong order that a naive `parseFloat` would give).
+
+**Last Modified sort fix** (2026-07-03): previously all
+directory rows had `data-date="0"` because the `ModTime`
+field was only populated for "other" files (not for
+directories, images, or videos). Fixed in `buildFileView()`
+by setting `v.ModTime = f.ModTime` for ALL file kinds
+before the switch statement. Now sorts correctly by
+modification time.
   persists in `localStorage` (per table) and in the URL
   (`?dirs_sort=...&dirs_order=...`). See
   [docs/03-templates.md#what-the-template-stores-in-localstorage](../docs/03-templates.md#what-the-template-stores-in-localstorage)
