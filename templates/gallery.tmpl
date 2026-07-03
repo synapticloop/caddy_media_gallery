@@ -516,12 +516,50 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.05em;
 }
 .files-table .col-size {
-  /* Size column: narrow, right-aligned, formatted by humanSize()
-     (e.g. "1.2 MB", "342 B"). */
+  /* Per user request 2026-07-01: left-aligned (was right-
+     aligned). The bar (see ::before below) extends from the
+     left edge of the cell, so the size text reads as
+     "anchored to the right edge of the bar" — natural
+     reading order. The 7rem width is enough for the longest
+     human-readable size ("999.9 MB" or "1.0 GB"). */
   width: 7rem;
-  text-align: right;
+  text-align: left;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums; /* digits line up across rows */
+  /* Position context for the ::before pseudo-element below
+     (the light-grey relative-size bar). overflow: hidden
+     keeps the bar inside the cell (the cell-link has a
+     negative margin that could otherwise let the bar peek
+     out into the padding area). */
+  position: relative;
+  overflow: hidden;
+  padding-left: 0.5rem; /* small inset so the size text isn't
+                            flush against the cell edge */
+}
+/* Per user request 2026-07-01: light-grey bar behind the
+   size text, showing the relative size compared to the
+   rest of the directories/files in this section. The
+   width is driven by the --size-pct CSS custom property
+   set inline on the <td> by render.go (e.g. style="--size-pct: 75%").
+   The bar is a ::before pseudo-element so it doesn't
+   need a real DOM node; the cell content (the cell-link
+   with the size text) sits on top via z-index. */
+.files-table .col-size::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--size-pct, 0%);
+  background: var(--bg-chip); /* light grey, matches the page
+                                  background tint — see --bg-chip
+                                  in :root */
+  z-index: 0;
+}
+.files-table .col-size > * {
+  /* The cell-link needs to sit ABOVE the bar. */
+  position: relative;
+  z-index: 1;
 }
 
 /* Per user request 2026-06-27: # Items and # Sub-Dirs
@@ -2197,7 +2235,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           <td class="col-name"><a class="table-link" href="{{dirLinkHref $.Query .Href}}"><span class="chip-icon">📁</span>{{.Name}}/</a></td>
           <td class="col-count"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.CountItems}}</a></td>
           <td class="col-count"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.CountDirs}}</a></td>
-          <td class="col-size"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
+          <td class="col-size" style="--size-pct: {{.SizePct}}%"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
           <td class="col-date"><a class="table-link cell-link" href="{{dirLinkHref $.Query .Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}
@@ -2239,7 +2277,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <tr data-filename="{{.Name}}" data-name="{{.Name}}" data-type="{{.Type}}" data-size="{{.Size}}" data-date="{{.ModTime}}">
           <td class="col-name"><a class="table-link" href="{{.Href}}"><span class="chip-icon">📄</span>{{.Name}}</a></td>
           <td class="col-type"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Type}}</a></td>
-          <td class="col-size"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
+          <td class="col-size" style="--size-pct: {{.SizePct}}%"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Size}}</a></td>
           <td class="col-date"><a class="table-link cell-link" href="{{.Href}}" tabindex="-1" aria-hidden="true">{{.Date}}</a></td>
         </tr>
         {{end}}

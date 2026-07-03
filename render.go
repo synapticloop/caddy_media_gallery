@@ -247,6 +247,18 @@ type FileView struct {
 	Date string
 	Type string
 
+	// Per user request 2026-07-01: SizePct is the relative size
+	// of this file/directory as a percentage of the largest
+	// in the same section (dirs or others). 0-100, where 100 is
+	// the largest. The template puts this on the .col-size cell
+	// as a CSS custom property (--size-pct) so a ::before pseudo-
+	// element can draw a light-grey bar across the cell width
+	// proportional to the size. Set by computeSizePercentages()
+	// after buildFileViews() for the dirs and others slices.
+	// Zero for sections with a single item (or all items the
+	// same size — the first item gets 100, the rest get less).
+	SizePct int
+
 	// ModTime is the raw int64 timestamp (nanoseconds since
 	// epoch). Used by the JS header-sort feature to sort
 	// the others table by Modified. Formatted display goes
@@ -827,6 +839,55 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 // template funcMap in.
 func thumbStripExt(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
+}
+
+
+// computeSizePercentages sets the SizePct field on each
+// FileView in the slice, where the value is the relative
+// size as a percentage of the largest in the same slice.
+// Called on the Subdirs and OtherFiles slices separately
+// (each is its own "section" — a dir's bar is relative to
+// the largest dir, an other-file's bar is relative to the
+// largest other-file).
+//
+// Implementation: one pass to find the max Size (in bytes),
+// then a second pass to set SizePct = (Size / maxSize) * 100
+// for each entry. If all sizes are zero (no files in any
+// of the entries), SizePct stays 0 for all — the bar
+// simply doesn't show.
+//
+// The raw byte size is read from the FileView's underlying
+// FileInfo. We don't store it on FileView (would be a
+// duplicate of the formatted Size string), so this function
+// needs to also accept the []FileInfo slice. To keep the
+// caller simple, we pass the FileInfo slice and look up
+// the matching FileView by name (each FileView is 1:1 with
+// a FileInfo, built in order).
+func computeSizePercentages(views []FileView, infos []FileInfo) {
+	if len(views) == 0 {
+		return
+	}
+	// First pass: find the max size
+	var maxSize int64
+	for _, info := range infos {
+		if info.Size > maxSize {
+			maxSize = info.Size
+		}
+	}
+	if maxSize == 0 {
+		// No sizes (or all zero) — nothing to scale to
+		return
+	}
+	// Second pass: set the percentage on each FileView
+	for i, info := range infos {
+		if i >= len(views) {
+			break
+		}
+		// Cast to int with rounding (so 99.5 rounds to 100,
+		// not 99). Use integer math to avoid float rounding
+		// surprises.
+		views[i].SizePct = int((info.Size * 100) / maxSize)
+	}
 }
 
 // splitFiles partitions a []FileInfo into dirs / others / images.
@@ -2055,6 +2116,12 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// present); Subdirs is rendered in a tight row with no
 	// gap between chips, per the user's 2026-06-17 spec.
 	subdirViews := buildFileViews(dirs, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs)
+	// Per user request 2026-07-01: set SizePct on each subdir
+	// (relative to the largest subdir in this directory's
+	// Subdirs slice). The template puts this on the .col-size
+	// cell so CSS can draw a light-grey bar showing the
+	// relative size.
+	computeSizePercentages(subdirViews, dirs)
 	var up *FileView
 	if relPath != "" {
 		// Compute the parent directory's basename so the up
@@ -2086,13 +2153,18 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		}
 	}
 
+	tempOtherViews := buildFileViews(others, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs)
+	// Per user request 2026-07-01: set SizePct on each
+	// "other" file (relative to the largest other file
+	// in this directory).
+	computeSizePercentages(tempOtherViews, others)
 	data := PageData{
 		Title:       title,
 		PathPrefix:  pathPrefix,
 		ThumbPrefix: thumbPrefix,
 		Up:          up,
 		Subdirs:     subdirViews,
-		OtherFiles:  buildFileViews(others, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
+		OtherFiles:  tempOtherViews,
 		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
 		Page:        page,
 		PageSize:    pageSize,
