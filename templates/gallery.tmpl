@@ -635,6 +635,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  /* Per user request 2026-07-01: padding-right to match
+     the space taken by the sort indicator. The sort
+     indicator is 0.85rem wide + 0.25rem margin-left
+     = 1.1rem of horizontal space. We add 1.1rem
+     padding-right so the right edge of the data
+     (rightmost digit) is aligned with the right edge
+     of the sort indicator. The NAME column doesn't
+     need this because it's left-aligned — the sort
+     indicator naturally sits to the right of the
+     "Name" text. */
+  padding-right: 1.1rem;
 }
 /* The .col-count rule above applies to BOTH the <th> header
    AND the <td> data cells (since the .col-count class is
@@ -648,6 +659,15 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    selector wins. */
 .files-table thead .col-count {
   text-align: right;
+  /* Per user request 2026-07-01: also need to set
+     padding-right here because the .files-table
+     thead th rule has padding: 0.4rem 0.75rem which
+     sets padding-right to 0.75rem (overriding the
+     1.1rem in the .col-count rule). The 1.1rem
+     padding-right matches the sort indicator's
+     horizontal space (0.85rem width + 0.25rem
+     margin-left = 1.1rem). */
+  padding-right: 1.1rem;
 }
 .files-table .col-date {
   /* Date column: narrow-ish, formatted by formatDate()
