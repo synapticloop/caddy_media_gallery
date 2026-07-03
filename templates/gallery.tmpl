@@ -1489,6 +1489,26 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-variant-numeric: tabular-nums;
   z-index: 1;
 }
+/* Per user request 2026-07-02: video duration badge
+   shown at the BOTTOM-RIGHT of the thumbnail (parallel
+   to the dimensions badge at the bottom-left). Same
+   visual style as the dimensions badge — dark background,
+   white text, rounded corners, tabular-nums. */
+.thumb-duration {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.95);
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
 .open-btn {
   position: absolute;
   top: 6px;
@@ -1630,6 +1650,24 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .exif-chip {
   background: var(--bg-active);
   color: var(--accent);
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  cursor: help;
+}
+/* Per user request 2026-07-02: a META pill for video
+   cards that have video metadata. Per user spec:
+   "same as the width and height card" — so the
+   same dark background / white text / rounded
+   corners style as the .thumb-dimensions badge.
+   Distinguished from .exif-chip (which uses the
+   accent colour for images) so the two are
+   visually distinct at a glance. */
+.meta-chip {
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.95);
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
   font-size: 0.65rem;
@@ -3182,6 +3220,32 @@ input.addEventListener('input', function() {
       // frame, same as before Phase 62).
       if (thumbSrc) v.poster = thumbSrc;
       currentEl = v;
+      // Per user request 2026-07-02: hide the video
+      // metadata panel while the video is playing, show
+      // it again when paused. The user wants the panel
+      // to not distract from the video content during
+      // playback.
+      //
+      // We track the "default" visibility (set by the
+      // panel population code above) using a data
+      // attribute on the panel. play hides the panel,
+      // pause restores the default.
+      v.addEventListener('play', function() {
+        videoMetaPanel.hidden = true;
+      });
+      v.addEventListener('pause', function() {
+        // Restore the default visibility (set by the
+        // population code earlier in this function).
+        // If the panel was hidden because the video has
+        // no metadata, it stays hidden.
+        var defaultHidden = videoMetaPanel.getAttribute('data-default-hidden') === 'true';
+        videoMetaPanel.hidden = defaultHidden;
+      });
+      v.addEventListener('ended', function() {
+        // Same as pause: the video has stopped playing.
+        var defaultHidden = videoMetaPanel.getAttribute('data-default-hidden') === 'true';
+        videoMetaPanel.hidden = defaultHidden;
+      });
     } else {
       var img = document.createElement('img');
       img.src = href;
@@ -3226,12 +3290,19 @@ input.addEventListener('input', function() {
         videoMetaPanel.querySelector('[data-video="audio-codec"]').textContent = audioCodec || '\u2014';
         videoMetaPanel.querySelector('[data-video="bitrate"]').textContent = bitrate || '\u2014';
         videoMetaPanel.querySelector('[data-video="framerate"]').textContent = framerate || '\u2014';
+        // Per user request 2026-07-02: track the default
+        // visibility so the play/pause handlers can
+        // restore it. The panel was hidden here because
+        // the video has no metadata (data-default-hidden).
         videoMetaPanel.hidden = false;
+        videoMetaPanel.setAttribute('data-default-hidden', 'false');
       } else {
         videoMetaPanel.hidden = true;
+        videoMetaPanel.setAttribute('data-default-hidden', 'true');
       }
     } else {
       videoMetaPanel.hidden = true;
+      videoMetaPanel.setAttribute('data-default-hidden', 'true');
     }
     if (!isVideo) {
       var cameraMake = c.getAttribute('data-exif-camera-make') || '';

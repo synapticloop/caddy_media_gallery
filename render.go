@@ -775,6 +775,19 @@ func buildCardHTML(v FileView) template.HTML {
 		b.WriteString(html.EscapeString(v.Dimensions))
 		b.WriteString(`</span>`)
 	}
+	// Per user request 2026-07-02: video duration shown
+	// at the BOTTOM-RIGHT of the thumbnail (parallel to
+	// the dimensions at the bottom-left). Same style as
+	// the dimensions badge (per user spec: "same as the
+	// width and height card") — dark background, white
+	// text, rounded corners. Only shown for videos with
+	// a Duration field (some videos may have other metadata
+	// but no duration if ffprobe couldn't determine it).
+	if v.IsVideo && v.VideoMeta != nil && v.VideoMeta.Duration != "" {
+		b.WriteString(`<span class="thumb-duration">`)
+		b.WriteString(html.EscapeString(v.VideoMeta.Duration))
+		b.WriteString(`</span>`)
+	}
 	// Open-in-new-tab button
 	b.WriteString(`<span class="open-btn" data-open-url="`)
 	b.WriteString(html.EscapeString(v.Href))
@@ -798,6 +811,15 @@ func buildCardHTML(v FileView) template.HTML {
 	b.WriteString(`</span>`)
 	if string(v.ExifAttrs) != "" {
 		b.WriteString(`<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>`)
+	}
+	// Per user request 2026-07-02: a META pill for video
+	// cards that have video metadata (duration, codecs,
+	// etc.). Same visual style as the dimensions badge
+	// (per user spec: "same as the width and height
+	// card") — dark background, white text, rounded
+	// corners — rather than the accent-coloured EXIF pill.
+	if v.IsVideo && string(v.VideoMetaAttrs) != "" {
+		b.WriteString(`<span class="meta-chip" title="This video has ffprobe metadata (duration, codecs, etc.) — viewable in the lightbox">META</span>`)
 	}
 	b.WriteString(`</div></div>`)
 	b.WriteString(`</a>`)
