@@ -1658,16 +1658,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   cursor: help;
 }
 /* Per user request 2026-07-02: a META pill for video
-   cards that have video metadata. Per user spec:
-   "same as the width and height card" — so the
-   same dark background / white text / rounded
-   corners style as the .thumb-dimensions badge.
-   Distinguished from .exif-chip (which uses the
-   accent colour for images) so the two are
-   visually distinct at a glance. */
+   cards that have video metadata. Per user clarification
+   2026-07-02 ("sorry the META pill should be the same
+   as the EXIF pill"): same style as .exif-chip (accent
+   background, accent colour, rounded corners). Visually
+   identical to the EXIF pill — only the text differs
+   (META vs EXIF) so users can tell which kind of
+   metadata is present. */
 .meta-chip {
-  background: rgba(0, 0, 0, 0.65);
-  color: rgba(255, 255, 255, 0.95);
+  background: var(--bg-active);
+  color: var(--accent);
   padding: 0.1rem 0.4rem;
   border-radius: 3px;
   font-size: 0.65rem;
