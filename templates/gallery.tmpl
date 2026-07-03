@@ -2040,6 +2040,39 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   white-space: nowrap;
   backdrop-filter: blur(4px);
 }
+/* Per user request 2026-07-02: collapsible EXIF/META
+   panel header. Always visible when the panel is shown
+   (even when collapsed to just the header). Clickable
+   (cursor: pointer) — toggles the .collapsed class on
+   the panel to expand/collapse the body. The body
+   (.lb-exif-body) holds the <table> with the label/value
+   rows. The .collapsed class is also persisted to
+   localStorage (gallery-lb-exif-collapsed and
+   gallery-lb-video-meta-collapsed) so the user doesn't
+   have to re-pick on every visit. */
+#gallery-lightbox .lb-exif-header {
+  cursor: pointer;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding-bottom: 2px;
+  user-select: none;
+  outline: none;
+}
+#gallery-lightbox .lb-exif-header:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+#gallery-lightbox .lb-exif-header:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* When the panel is collapsed, hide the body but keep
+   the header visible. */
+#gallery-lightbox .lb-exif.collapsed .lb-exif-body,
+#gallery-lightbox .lb-video-meta.collapsed .lb-exif-body {
+  display: none;
+}
 /* Per user request 2026-07-02: video metadata panel
    (parallel to the .lb-exif panel for images). Shown
    when the current video has ffprobe-extracted metadata
@@ -3134,27 +3167,43 @@ input.addEventListener('input', function() {
     '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>' +
+    // Per user request 2026-07-02: the EXIF panel is
+    // collapsible. The header (just "EXIF" text) is
+    // always visible when the panel is shown. Clicking
+    // it toggles between expanded (showing all rows)
+    // and collapsed (just the header). The collapsed/
+    // expanded state is stored in localStorage so the
+    // user doesn't have to re-pick on every visit.
     '<div class="lb-exif" hidden>' +
-      '<table class="lb-exif-table">' +
-        '<tr><td class="lb-exif-label">Camera</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
-        '<tr><td class="lb-exif-label">Lens</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
-        '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
-        '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
-      '</table>' +
+      '<div class="lb-exif-header" data-lb-panel="exif" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">EXIF</div>' +
+      '<div class="lb-exif-body">' +
+        '<table class="lb-exif-table">' +
+          '<tr><td class="lb-exif-label">Camera</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
+          '<tr><td class="lb-exif-label">Lens</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
+          '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
+          '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
+        '</table>' +
+      '</div>' +
     '</div>' +
     // Per user request 2026-07-02: video metadata panel
     // (parallel to the EXIF panel for images). Shows
     // duration, container, codecs, bitrate, framerate
     // extracted from ffprobe (cached in .vmeta sidecars).
+    // Per user request 2026-07-02: parallel structure
+    // to the EXIF panel — collapsible header + body.
+    // Same localStorage pattern (gallery-lb-video-meta-collapsed).
     '<div class="lb-video-meta" hidden>' +
-      '<table class="lb-exif-table">' +
-        '<tr><td class="lb-exif-label">Duration</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
-        '<tr><td class="lb-exif-label">Container</td><td class="lb-exif-val" data-video="container"></td></tr>' +
-        '<tr><td class="lb-exif-label">Video</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
-        '<tr><td class="lb-exif-label">Audio</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
-        '<tr><td class="lb-exif-label">Bitrate</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
-        '<tr><td class="lb-exif-label">Framerate</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
-      '</table>' +
+      '<div class="lb-exif-header" data-lb-panel="video-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">META</div>' +
+      '<div class="lb-exif-body">' +
+        '<table class="lb-exif-table">' +
+          '<tr><td class="lb-exif-label">Duration</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
+          '<tr><td class="lb-exif-label">Container</td><td class="lb-exif-val" data-video="container"></td></tr>' +
+          '<tr><td class="lb-exif-label">Video</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">Audio</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">Bitrate</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
+          '<tr><td class="lb-exif-label">Framerate</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
+        '</table>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 
@@ -3175,6 +3224,55 @@ input.addEventListener('input', function() {
     return c.querySelector('img') || c.classList.contains('video');
   });
   var idx = 0;
+
+  // Per user request 2026-07-02: the EXIF and META
+  // panels are collapsible. Clicking the panel header
+  // ("EXIF" or "META" text) toggles between expanded
+  // (showing all rows) and collapsed (showing just the
+  // header). The state is persisted in localStorage so
+  // the user doesn't have to re-pick on every visit.
+  //
+  // Keys: gallery-lb-exif-collapsed and
+  // gallery-lb-video-meta-collapsed. Value: 'true' if
+  // collapsed (the key is removed when expanded).
+  function setupPanelToggle(panelSelector, storageKey) {
+    var panel = overlay.querySelector(panelSelector);
+    if (!panel) return;
+    var header = panel.querySelector('.lb-exif-header');
+    if (!header) return;
+    // Apply the persisted state on first render.
+    var isCollapsed = false;
+    try {
+      isCollapsed = localStorage.getItem(storageKey) === 'true';
+    } catch (e) { /* localStorage unavailable */ }
+    if (isCollapsed) {
+      panel.classList.add('collapsed');
+      header.setAttribute('aria-expanded', 'false');
+    }
+    // Click toggles and persists.
+    function toggle() {
+      var nowCollapsed = panel.classList.toggle('collapsed');
+      header.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
+      try {
+        if (nowCollapsed) {
+          localStorage.setItem(storageKey, 'true');
+        } else {
+          localStorage.removeItem(storageKey);
+        }
+      } catch (e) { /* localStorage unavailable */ }
+    }
+    header.addEventListener('click', toggle);
+    // Keyboard support: Enter / Space toggles (for the
+    // role="button" + tabindex="0" pattern).
+    header.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  }
+  setupPanelToggle('.lb-exif', 'gallery-lb-exif-collapsed');
+  setupPanelToggle('.lb-video-meta', 'gallery-lb-video-meta-collapsed');
 
   function clear() {
     // Pause the current element if it's a video (removing the
