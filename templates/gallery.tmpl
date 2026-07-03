@@ -2162,32 +2162,25 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   display: none;
 }
 /* Per user request 2026-07-02: when the panel is
-   collapsed, the whole panel moves to the LEFT side
-   of the image (becoming a vertical bar) and the
-   header text rotates 90 degrees clockwise so "EXIF"
-   or "META" reads bottom-to-top.
+   collapsed, the whole panel becomes a vertical bar
+   and the header text rotates 90 degrees clockwise
+   so "EXIF" or "META" reads bottom-to-top.
 
-   The implementation uses writing-mode: vertical-rl
-   (vertical right-to-left) which natively lays out
-   the text vertically without any transform math.
-   This is cleaner than transform: rotate() because:
-   1. No transform-origin math (writing-mode uses
-      normal layout flow)
-   2. The text reads naturally (top of the text is at
-      the bottom of the bar when reading from top-down)
-   3. The bar's width is just the natural text width
-      (no min-width override needed)
+   Positioning is handled by JS (in the show()
+   function) — the JS measures the image's position
+   and places the panel just to the left of the image,
+   vertically centered. The CSS only handles the
+   visual styling (vertical text, narrow width,
+   background).
 
-   The bar sits at left: 0.5rem from the lightbox edge,
-   vertically centered via top: 50% + translateY(-50%).
-   The writing-mode is set on the header (not the
-   panel) so the bar is as narrow as possible.
-
-   Note: the .lb-exif-body is already hidden by the
-   rule above (display: none), so only the header
-   shows in the collapsed state — the vertical bar. */
+   The fallback position (left: 0.5rem, top: 50%) is
+   used by the CSS in case JS hasn't run yet (e.g.
+   during the brief moment between adding the
+   .collapsed class and the JS measuring the image).
+   The JS replaces these values inline on the panel. */
 #gallery-lightbox .lb-exif.collapsed,
 #gallery-lightbox .lb-video-meta.collapsed {
+  /* Fallback position (JS overrides these inline). */
   left: 0.5rem;
   top: 50%;
   transform: translateY(-50%);
@@ -3405,7 +3398,18 @@ input.addEventListener('input', function() {
       panel.classList.add('collapsed');
       header.setAttribute('aria-expanded', 'false');
     }
-    // Click toggles and persists.
+    // Click toggles and persists. Per user request
+    // 2026-07-02: when collapsing, we re-position the
+    // panel so it sits to the left of the image (the
+    // show() function positions the panel when it's
+    // first opened, but the user may have toggled the
+    // panel after that — in which case we need to
+    // re-measure and re-position).
+    function positionPanel() {
+      if (typeof positionCollapsedPanel === 'function') {
+        positionCollapsedPanel();
+      }
+    }
     function toggle() {
       var nowCollapsed = panel.classList.toggle('collapsed');
       header.setAttribute('aria-expanded', nowCollapsed ? 'false' : 'true');
@@ -3416,6 +3420,12 @@ input.addEventListener('input', function() {
           localStorage.removeItem(storageKey);
         }
       } catch (e) { /* localStorage unavailable */ }
+      // Re-position the panel after toggling. Use
+      // requestAnimationFrame to let the browser apply
+      // the class change before we measure.
+      if (nowCollapsed) {
+        requestAnimationFrame(positionPanel);
+      }
     }
     header.addEventListener('click', toggle);
     // Keyboard support: Enter / Space toggles (for the
@@ -3585,6 +3595,71 @@ input.addEventListener('input', function() {
       exifPanel.hidden = true;
     }
     overlay.classList.add('open');
+    // Per user request 2026-07-02: when the panel is
+    // collapsed, position it to the left of the image.
+    // We measure the image and set the panel's inline
+    // left/top. The .collapsed CSS has fallback values
+    // (left: 0.5rem, top: 50%) in case this hasn't run
+    // yet (e.g., during the brief moment between adding
+    // the .collapsed class and the layout settling).
+    requestAnimationFrame(function() {
+      if (typeof positionCollapsedPanel === 'function') {
+        positionCollapsedPanel();
+      }
+    });
+  }
+  // Per user request 2026-07-02: when the panel is
+  // collapsed (vertical bar), position it just to
+  // the LEFT of the image, vertically centered with
+  // the image. This makes the panel feel attached
+  // to the image rather than floating at the edge
+  // of the lightbox.
+  //
+  // Implementation: measure the image's position in
+  // viewport coordinates, compute the panel's left
+  // position (= image.left - panel.width - gap) and
+  // top (= image.verticalCenter - panel.height / 2),
+  // then set inline styles on the panel. The panel's
+  // CSS already sets position: absolute, so the values
+  // are relative to the overlay (which is position:
+  // fixed, so effectively the viewport).
+  //
+  // The inline styles override the .collapsed CSS
+  // rule's left: 0.5rem and top: 50% positions. We
+  // only position the panel if it's collapsed — for
+  // the expanded state, the panel sits at the bottom
+  // of the lightbox as before (no JS positioning
+  // needed; the CSS handles it).
+  //
+  // This function is defined in the outer IIFE scope
+  // (not inside show()) so that the panel toggle
+  // handlers (also in the outer scope) can call it
+  // when the user clicks the header to collapse.
+  function positionCollapsedPanel() {
+    if (!currentEl) return;
+    var imgRect = currentEl.getBoundingClientRect();
+    // Determine which panel to position (only the
+    // visible one — if EXIF is hidden because the file
+    // has no metadata, we don't position it).
+    var panel = null;
+    if (currentEl.tagName === 'VIDEO') {
+      panel = overlay.querySelector('.lb-video-meta');
+      if (panel && panel.hidden) panel = null;
+    } else {
+      panel = overlay.querySelector('.lb-exif');
+      if (panel && panel.hidden) panel = null;
+    }
+    if (!panel || !panel.classList.contains('collapsed')) return;
+    var panelRect = panel.getBoundingClientRect();
+    var gap = 8;  // 0.5rem gap between image and panel
+    var newLeft = imgRect.left - panelRect.width - gap;
+    var newTop = imgRect.top + imgRect.height / 2 - panelRect.height / 2;
+    // Edge case: if the image is so far left that the
+    // panel would be offscreen, fall back to left: 0.5rem.
+    if (newLeft < 0) newLeft = 8;
+    panel.style.left = newLeft + 'px';
+    panel.style.top = newTop + 'px';
+    panel.style.transform = 'none';  // override the translateY(-50%) from the .collapsed rule
   }
 
   function close() {
