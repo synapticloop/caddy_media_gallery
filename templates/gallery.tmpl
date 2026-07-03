@@ -3299,7 +3299,26 @@ input.addEventListener('input', function() {
       rows.sort(function(a, b) {
         var av = a.getAttribute('data-' + key) || '';
         var bv = b.getAttribute('data-' + key) || '';
-        // Numeric vs string: detect by trying parseInt
+        // Per user request 2026-07-02: the SIZE column has
+        // values like "58.2 MB" or "1.05 GB" — a raw
+        // parseFloat would give 58.2 vs 1.05 (treating
+        // MB and GB the same), which sorts the WRONG way.
+        // We need to convert the human-readable size to
+        // bytes for proper comparison.
+        //
+        // The format is "%.1f KB" / "%.1f MB" / "%.2f GB"
+        // / "%.2f TB" (see humanSize in render.go). The
+        // parseSizeToBytes function handles all four.
+        if (key === 'size') {
+          var as = parseSizeToBytes(av);
+          var bs = parseSizeToBytes(bv);
+          if (as !== null && bs !== null) {
+            return order === 'asc' ? as - bs : bs - as;
+          }
+        }
+        // Numeric vs string: detect by trying parseFloat
+        // (handles plain integer / decimal values like
+        // data-items="19" or data-mtime="1748390400").
         var an = parseFloat(av);
         var bn = parseFloat(bv);
         if (!isNaN(an) && !isNaN(bn) && av !== '' && bv !== '' && /^-?\d/.test(av) && /^-?\d/.test(bv)) {
@@ -3310,6 +3329,27 @@ input.addEventListener('input', function() {
         if (av > bv) return order === 'asc' ? 1 : -1;
         return 0;
       });
+      // Per user request 2026-07-02: convert human-readable
+      // sizes (e.g. "58.2 MB", "1.05 GB") to bytes for
+      // proper numeric comparison. Returns null on parse
+      // failure (caller falls back to string compare).
+      // Matches the humanSize() output format in
+      // render.go: "%.1f KB" / "%.1f MB" / "%.2f GB" /
+      // "%.2f TB" / "%d B".
+      function parseSizeToBytes(s) {
+        if (!s) return null;
+        var m = s.match(/^([\d.]+)\s*(B|KB|MB|GB|TB)$/);
+        if (!m) return null;
+        var n = parseFloat(m[1]);
+        if (isNaN(n)) return null;
+        var unit = m[2];
+        if (unit === 'B') return n;
+        if (unit === 'KB') return n * 1024;
+        if (unit === 'MB') return n * 1024 * 1024;
+        if (unit === 'GB') return n * 1024 * 1024 * 1024;
+        if (unit === 'TB') return n * 1024 * 1024 * 1024 * 1024;
+        return null;
+      }
       for (var i = 0; i < rows.length; i++) {
         tbody.appendChild(rows[i]);
       }

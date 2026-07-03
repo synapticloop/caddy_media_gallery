@@ -837,6 +837,13 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		// ::after pseudo-element tooltip (custom styled).
 		DisplayName: displayNameForHover(f.Name),
 	}
+	// Per user request 2026-07-02: expose the raw ModTime
+	// to the JS header-sort feature. Was previously only
+	// set for "other" files (the default case below) — the
+	// dirs/others "Last Modified" sort was broken because
+	// the data-date attribute was always "0" for
+	// directories. Now set for ALL file kinds.
+	v.ModTime = f.ModTime
 	switch f.Kind {
 	case KindDir:
 		v.IsDir = true
@@ -893,10 +900,6 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		v.Href = pathPrefix + f.Name
 		v.Size = humanSize(f.Size)
 		v.Date = formatDate(f.ModTime)
-		// Per user request 2026-06-27: expose the raw ModTime
-		// to the JS header-sort feature. The dirs and others
-		// tables have data-date="..." attributes for sorting.
-		v.ModTime = f.ModTime
 	}
 	// Copy EXIF data through. Per user request 2026-06-27: GPS
 	// fields are NEVER extracted; see exif.go.
