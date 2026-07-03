@@ -2039,6 +2039,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   line-height: 1.5;
   white-space: nowrap;
   backdrop-filter: blur(4px);
+  /* Per user request 2026-07-02: the panel width is
+     fixed so the collapsed state (just the header) is
+     the same width as the expanded state. Without this
+     min-width, the collapsed panel shrinks to fit just
+     the "EXIF" text (~60px) instead of the full
+     expanded width (~320px). The value 340px is chosen
+     to comfortably fit the widest typical EXIF rows
+     (e.g. "Canon EOS R5" + "RF 100mm F2.8 L MACRO IS
+     USM" on the lens row). */
+  min-width: 340px;
 }
 /* Per user request 2026-07-02: collapsible EXIF/META
    panel header. Always visible when the panel is shown
@@ -2106,6 +2116,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   line-height: 1.5;
   white-space: nowrap;
   backdrop-filter: blur(4px);
+  /* Per user request 2026-07-02: same min-width as the
+     EXIF panel so the collapsed META header is the
+     same width as the expanded META rows. */
+  min-width: 340px;
 }
 #gallery-lightbox .lb-exif-table {
   border-collapse: collapse;
