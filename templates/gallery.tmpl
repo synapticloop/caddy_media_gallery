@@ -147,6 +147,18 @@
   --bg-chip: #1a1a1a;
   --bg-hover: #333333;
   --bg-active: #2a2a2a;
+  /* Per user request 2026-07-01: relative-size bar in dark
+     mode (per the user-clicked dark mode button — this
+     selector is for when the user has explicitly toggled
+     dark mode via the theme toggle, not for the OS-level
+     prefers-color-scheme media query, which is the block
+     above). Same value as the @media block: #4d4d4d
+     (a clearly visible mid-grey between #1a1a1a page bg
+     and #333333 row separator). The bug was that this
+     block was missing --bar-bg, so when the user toggled
+     to dark mode via the button, the bar fell back to
+     the inherited light-mode --bar-bg #d0d4d6. */
+  --bar-bg: #4d4d4d;
   --fg: #e5e5e5;
   --fg-muted: #aaaaaa;
   --fg-faint: #888888;
