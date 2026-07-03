@@ -669,6 +669,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      margin-left = 1.1rem). */
   padding-right: 1.1rem;
 }
+/* Same override for the body data cells: the
+   .files-table tbody td rule has padding: 0.5rem
+   0.75rem which sets padding-right to 0.75rem
+   (overriding the 1.1rem in the .col-count rule).
+   The data cells need the same 1.1rem padding-right
+   as the header so the data's right edge aligns
+   with where the sort indicator would be. */
+.files-table tbody .col-count {
+  padding-right: 1.1rem;
+}
 .files-table .col-date {
   /* Date column: narrow-ish, formatted by formatDate()
      (e.g. "2026-06-20 14:30" or "Yesterday"). */
