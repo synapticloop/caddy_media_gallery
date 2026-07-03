@@ -1829,7 +1829,12 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transform: translateX(-50%);
   background: #000;
   color: #fff;
-  padding: 0.5rem 1rem;
+  /* Per user request 2026-07-02: the padding is now
+     slightly asymmetric (more on the right) to give
+     the .back-to-top-pct badge some breathing room.
+     The flexbox layout puts the text and the percent
+     badge inline. */
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
   border-radius: 4px;
   text-decoration: none;
   font-size: 0.85rem;
@@ -1838,6 +1843,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  white-space: nowrap;
 }
 .back-to-top:hover {
   color: #fff;
@@ -1846,6 +1855,22 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .back-to-top.visible {
   opacity: 1;
   pointer-events: auto;
+}
+/* Per user request 2026-07-02: a small badge inside
+   the back-to-top button that shows the current
+   scroll percentage (e.g. "23%"). Subtle white-on-
+   black with a slightly lighter background to make
+   it visually distinct from the main text. Tabular
+   nums so the digits don't jiggle as the percent
+   changes. */
+.back-to-top-pct {
+  background: rgba(255, 255, 255, 0.18);
+  padding: 0.15rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
 }
 
 /* ---- Lightbox overlay (created by lightbox.js) ---- */
@@ -2645,7 +2670,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        scrolled at least one full screen of content)
      - On click: smooth scroll to the top of the page
        (window.scrollTo with behavior: 'smooth') -->
-<a href="#top" class="back-to-top" id="back-to-top" aria-label="Back to top">Back To Top</a>
+<a href="#top" class="back-to-top" id="back-to-top" aria-label="Back to top">
+  <span class="back-to-top-text">Back To Top</span>
+  <span class="back-to-top-pct" aria-hidden="true">0%</span>
+</a>
 <script>
 
 /* Per user feedback 2026-07-01: shimmer animation while
@@ -3713,28 +3741,60 @@ input.addEventListener('input', function() {
    the top of the page using window.scrollTo with
    behavior: 'smooth' (CSS scroll-behavior would be
    equivalent, but the JS approach is more explicit and
-   works in older browsers). */
+   works in older browsers).
+
+   Per user request 2026-07-02: the button now also
+   displays the scroll percentage (e.g. "23%") as a
+   small badge. The percentage is computed as
+   scrollY / (scrollHeight - clientHeight) * 100,
+   giving 0% at the top and 100% at the bottom.
+   Edge cases:
+   - If scrollHeight === clientHeight (page is shorter
+     than the viewport), the page can't be scrolled, so
+     the percentage is 0 (or 100 — both are fine).
+   - requestAnimationFrame is used to throttle the DOM
+     write to the next frame, so the scroll handler
+     stays cheap even for fast scrolls.
+   - The percentage is clamped to [0, 100] so the badge
+     never shows negative or >100 values (e.g. if the
+     user scrolls past the end with momentum). */
 (function() {
   var btn = document.getElementById('back-to-top');
   if (!btn) return;
+  var pctEl = btn.querySelector('.back-to-top-pct');
   // Threshold: one full viewport height. The button
   // appears after the user has scrolled at least one
   // screen's worth of content (per user spec).
   var threshold = window.innerHeight;
+  var rafId = 0;
   function update() {
+    rafId = 0;
     if (window.scrollY > threshold) {
       btn.classList.add('visible');
     } else {
       btn.classList.remove('visible');
     }
+    // Compute and display the scroll percentage
+    var scrollable = document.documentElement.scrollHeight - window.innerHeight;
+    var pct = scrollable > 0
+      ? Math.round((window.scrollY / scrollable) * 100)
+      : 0;
+    // Clamp to [0, 100]
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    if (pctEl) pctEl.textContent = pct + '%';
   }
-  window.addEventListener('scroll', update, { passive: true });
+  function scheduleUpdate() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(update);
+  }
+  window.addEventListener('scroll', scheduleUpdate, { passive: true });
   // Also update on resize (the threshold changes if the
   // viewport height changes — e.g. user resizes browser,
   // or rotates a tablet).
-  window.addEventListener('resize', update);
+  window.addEventListener('resize', scheduleUpdate);
   // Initial state (in case the page loads scrolled).
-  update();
+  scheduleUpdate();
   // Click handler: smooth scroll to top.
   btn.addEventListener('click', function(e) {
     e.preventDefault();
