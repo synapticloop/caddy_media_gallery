@@ -636,6 +636,19 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* The .col-count rule above applies to BOTH the <th> header
+   AND the <td> data cells (since the .col-count class is
+   on both). But the .files-table thead th rule above
+   has text-align: left (the default for all table
+   headers), which has the same specificity as .col-count
+   and comes LATER in the cascade — so the thead th
+   rule would override the .col-count rule for the
+   header. To make sure the header is also right-aligned
+   (per user request 2026-07-01), this more specific
+   selector wins. */
+.files-table thead .col-count {
+  text-align: right;
+}
 .files-table .col-date {
   /* Date column: narrow-ish, formatted by formatDate()
      (e.g. "2026-06-20 14:30" or "Yesterday"). */
