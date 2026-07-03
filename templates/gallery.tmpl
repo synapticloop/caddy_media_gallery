@@ -2187,6 +2187,23 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   min-width: 0;
   width: auto;
   padding: 0;
+  /* Per user report 2026-07-02: when the panel is
+     collapsed, override bottom: 6rem (from the base
+     .lb-exif / .lb-video-meta rules) to bottom: auto.
+     Without this override, the panel has BOTH top: 50%
+     (from .collapsed) AND bottom: 6rem (from base)
+     simultaneously, which forces the panel's height to
+     be (viewport.height - top - bottom) = 354px on a
+     900px viewport — way taller than the content.
+
+     With bottom: auto, the panel sizes to its content
+     height (~50px for the vertical-text header), and
+     the transform: translateY(-50%) centers it
+     vertically. The JS positioning (via positionCollapsedPanel)
+     overrides top and transform when needed, so this
+     CSS rule is mainly the fallback for before the JS
+     runs. */
+  bottom: auto;
 }
 #gallery-lightbox .lb-exif.collapsed .lb-exif-header,
 #gallery-lightbox .lb-video-meta.collapsed .lb-exif-header {
@@ -2196,7 +2213,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      default ltr direction). The horizontal divider
      and the negative margin trick from the base rule
      don't make sense for a vertical bar — remove them. */
-  writing-mode: vertical-rl;
+  /* Per user request 2026-07-02: vertical-lr (not vertical-rl)
+     so the text reads top-to-bottom (ANTICLOCKWISE rotation).
+     vertical-rl reads bottom-to-top (clockwise); vertical-lr
+     reads top-to-bottom (anticlockwise). */
+  writing-mode: vertical-lr;
   text-orientation: mixed;
   margin: 0;
   padding: 8px 4px;
@@ -3432,6 +3453,19 @@ input.addEventListener('input', function() {
         readyPromise.then(function() {
           requestAnimationFrame(positionPanel);
         });
+      } else {
+        // Per user feedback 2026-07-02: when expanding,
+        // clear the inline top/left/transform styles
+        // so the expanded CSS (bottom: 6rem, left: 50%,
+        // transform: translateX(-50%)) takes effect
+        // cleanly. Without this, the inline top from the
+        // previous collapse persists, which combined
+        // with the CSS bottom forces the panel to a
+        // weird tall height (viewport.height - top -
+        // bottom).
+        panel.style.left = '';
+        panel.style.top = '';
+        panel.style.transform = '';
       }
     }
     header.addEventListener('click', toggle);
@@ -3692,8 +3726,19 @@ input.addEventListener('input', function() {
     }
     if (!panel || !panel.classList.contains('collapsed')) return;
     var panelRect = panel.getBoundingClientRect();
-    var gap = 8;  // 0.5rem gap between image and panel
-    var newLeft = imgRect.left - panelRect.width - gap;
+    // Per user request 2026-07-02: position the collapsed
+    // panel on the RIGHT side of the image, slightly
+    // OVERLAPPING the image's right edge (instead of
+    // positioned to the LEFT of the image with a gap).
+    // This makes the panel feel more attached to the
+    // image — the bar "leans against" the right edge.
+    //
+    // overlap is negative (= -panelRect.width * fraction)
+    // so the panel's left edge sits INSIDE the image's
+    // right edge by `overlap` pixels. With overlap=8,
+    // the panel's left edge is 8px inside the image.
+    var overlap = 8;
+    var newLeft = imgRect.right - panelRect.width + overlap;
     var newTop = imgRect.top + imgRect.height / 2 - panelRect.height / 2;
     // Edge case: if the image is so far left that the
     // panel would be offscreen, fall back to left: 0.5rem.
