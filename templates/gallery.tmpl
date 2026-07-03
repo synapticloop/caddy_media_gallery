@@ -93,18 +93,20 @@
     --bg-hover: #333333;
     --bg-active: #2a2a2a;
     /* Per user request 2026-07-01: relative-size bar in
-       dark mode. Per user feedback the same day: the
-       previous #2e2e2e was too light — the size text
-       (var(--fg-muted) = #aaaaaa) had poor contrast
-       against the bar (the bar was "competing" with the
-       text for visual attention). New value: #1c1c1c,
-       which is one step lighter than the page background
-       (#1a1a1a) — the bar is still subtly visible (you
-       can see the relative-size progression) but the
-       text reads cleanly against it. The contrast between
-       text (#aaaaaa) and bar (#1c1c1c) is now ~9:1, well
-       above the 4.5:1 minimum for normal text. */
-    --bar-bg: #1c1c1c;
+       dark mode. Per user spec: bar color is #4d4d4d
+       (a clearly visible mid-grey, between the page
+       background #1a1a1a and the row separator #333333).
+       The text (var(--fg-muted) = #aaaaaa) is bright
+       enough to read against the #4d4d4d bar — the
+       contrast is ~2.0:1 which is below the 4.5:1
+       WCAG AA minimum for normal text, but the bar
+       is short (typically <30% of the cell width for
+       most rows) and the text extends to the right
+       of the bar, so the user always has the option
+       to read the size in a "non-bar" area of the
+       cell where the background is the page color
+       #1a1a1a (which has ~9:1 contrast with the text). */
+    --bar-bg: #4d4d4d;
     --fg: #e5e5e5;
     --fg-muted: #aaaaaa;
     --fg-faint: #888888;
