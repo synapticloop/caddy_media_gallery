@@ -3447,28 +3447,23 @@ input.addEventListener('input', function() {
       // measuring, so we don't catch a half-laid-out
       // image with width=0.
       if (nowCollapsed) {
-        // Same image-ready / video-metadata approach
-        // as in show() — wait for the video's actual
-        // dimensions (loadedmetadata) or the image's
-        // decoded state before measuring.
-        var readyPromise;
-        if (currentEl && currentEl.tagName === 'VIDEO') {
-          readyPromise = new Promise(function(resolve) {
-            var resolved = false;
-            function done() {
-              if (!resolved) { resolved = true; resolve(); }
-            }
-            currentEl.addEventListener('loadedmetadata', done, { once: true });
-            setTimeout(done, 3000);
+        // Same approach as in show() — position
+        // immediately using the current bounding rect
+        // (poster-sized for videos), then re-position
+        // on loadedmetadata when the actual video
+        // dimensions are known.
+        if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
+          currentEl.decode().catch(function() {}).then(function() {
+            requestAnimationFrame(positionPanel);
           });
-        } else if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
-          readyPromise = currentEl.decode().catch(function() {});
-        } else {
-          readyPromise = Promise.resolve();
-        }
-        readyPromise.then(function() {
+        } else if (currentEl && currentEl.tagName === 'VIDEO') {
           requestAnimationFrame(positionPanel);
-        });
+          currentEl.addEventListener('loadedmetadata', function() {
+            requestAnimationFrame(positionPanel);
+          }, { once: true });
+        } else {
+          requestAnimationFrame(positionPanel);
+        }
       } else {
         // Per user feedback 2026-07-02: when expanding,
         // clear the inline top/left/transform styles
@@ -3654,67 +3649,56 @@ input.addEventListener('input', function() {
     overlay.classList.add('open');
     // Per user request 2026-07-02: when the panel is
     // collapsed, position it to the right of the image,
-    // slightly overlapping. We measure the image/video
-    // and set the panel's inline left/top.
+    // slightly overlapping.
     //
-    // IMAGE: wait for the image to be ready (decoded +
-    // painted) before measuring. The .decode() method
-    // returns a Promise that resolves when the image is
-    // decoded and ready to paint. This prevents the
-    // race where the rAF fires before the layout pass
-    // for the newly-appended image (image width=0).
+    // For images: wait for decode() before measuring
+    // (prevents width=0 race condition).
     //
-    // VIDEO: wait for the loadedmetadata event before
-    // measuring. Per user report 2026-07-02: when a
-    // video is opened with the META panel collapsed
-    // (via localStorage), the panel was positioned for
-    // the POSTER IMAGE dimensions (small, e.g. 320x180)
-    // instead of the actual VIDEO dimensions (large,
-    // e.g. 1366x768). This caused the panel to sit to
-    // the right of centre, because the small poster was
-    // centered in the lightbox (which is wider than
-    // the poster) and the panel was at the poster's
-    // right edge.
+    // For videos: per user report 2026-07-02, the
+    // previous approach of waiting for loadedmetadata
+    // had two problems:
+    //   1. Until loadedmetadata fires, the panel sat at
+    //      the CSS fallback position (left: 0.5rem —
+    //      "left hand side of the lightbox"), which
+    //      looked broken to the user.
+    //   2. If loadedmetadata never fires (broken video,
+    //      no network), the panel stayed broken for
+    //      3 seconds (the fallback timeout).
     //
-    // The video element shows the poster image
-    // immediately (same dimensions as the poster) until
-    // the loadedmetadata event fires and the browser
-    // resizes the video to match its actual aspect
-    // ratio. So we MUST wait for loadedmetadata before
-    // measuring the video's bounding rect, otherwise
-    // we'll measure the poster-sized version.
-    //
-    // Edge case: if the video fails to load (e.g.
-    // network error in the test environment), the
-    // loadedmetadata event might never fire. To handle
-    // this, we use a Promise.race with a timeout — if
-    // the metadata doesn't load within 3 seconds, we
-    // fall back to the current poster-sized measurement.
+    // The new approach: position IMMEDIATELY using the
+    // current bounding rect (which is the POSTER size
+    // for videos — small but at least positioned). Then
+    // listen for loadedmetadata and re-position when
+    // the actual video dimensions become known. If
+    // loadedmetadata never fires (3s timeout), the
+    // initial poster-sized position remains.
     if (typeof positionCollapsedPanel === 'function') {
-      var readyPromise;
-      if (currentEl && currentEl.tagName === 'VIDEO') {
-        readyPromise = new Promise(function(resolve) {
-          var resolved = false;
-          function done() {
-            if (!resolved) { resolved = true; resolve(); }
-          }
-          // Wait for loadedmetadata
-          currentEl.addEventListener('loadedmetadata', done, { once: true });
-          // Fallback timeout: if the video doesn't load
-          // metadata within 3 seconds, use the
-          // poster-sized measurement anyway.
-          setTimeout(done, 3000);
+      if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
+        currentEl.decode().catch(function() {}).then(function() {
+          requestAnimationFrame(positionCollapsedPanel);
         });
-      } else if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
-        readyPromise = currentEl.decode().catch(function() {});
+      } else if (currentEl && currentEl.tagName === 'VIDEO') {
+        // Position immediately using the current
+        // (poster-sized) bounding rect, so the panel
+        // is at least on the right side of the lightbox
+        // instead of the CSS fallback (left side).
+        requestAnimationFrame(positionCollapsedPanel);
+        // Then re-position when the actual video
+        // dimensions are known (loadedmetadata fires).
+        // The { once: true } ensures the listener fires
+        // at most once per video element.
+        currentEl.addEventListener('loadedmetadata', function() {
+          // Wait for one more frame so the browser
+          // has had time to resize the video element.
+          requestAnimationFrame(positionCollapsedPanel);
+        }, { once: true });
+        // Fallback: if loadedmetadata never fires
+        // within 3 seconds, the initial poster-sized
+        // position remains (better than the CSS
+        // fallback on the left).
       } else {
-        readyPromise = Promise.resolve();
+        requestAnimationFrame(positionCollapsedPanel);
       }
-      readyPromise.then(function() {
-        requestAnimationFrame(function() {
-          positionCollapsedPanel();
-        });
-      });
     }
   }
   // Per user request 2026-07-02: when the panel is
