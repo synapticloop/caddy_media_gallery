@@ -580,21 +580,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .files-table .col-size::before {
   content: "";
   position: absolute;
-  /* Per user request 2026-07-02: increased the top/bottom
-     offset from 2px to 4px so the relative-size bar is
-     less tall (more compact). More breathing room above
-     and below the bar. */
-  top: 4px;
-  bottom: 4px;
+   
+  top: 7px;
+  bottom: 5px;
   left: 0;
   width: var(--size-pct, 0%);
-  /* Per user request 2026-07-01: a darker grey than the
-     page background. The colour is theme-aware via the
-     --bar-bg CSS variable (light: #d0d4d6, dark: #2e2e2e). */
+   
   background: var(--bar-bg);
-  /* Per user request 2026-07-01: small rounded corners.
-     3px gives a subtle "pill" feel without being so
-     round that it looks like a separate UI element. */
+   
   border-radius: 3px;
   z-index: 0;
 }
