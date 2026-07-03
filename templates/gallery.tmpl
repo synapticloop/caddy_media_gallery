@@ -2053,7 +2053,17 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      table (label + value) for readability. Hidden via the
      hidden HTML attribute when there is no EXIF. */
   position: absolute;
-  bottom: 3.5rem;
+  /* Per user request 2026-07-02: the panel is now
+     positioned higher (6rem from the bottom instead of
+     3.5rem) so it doesn't overlap the video player's
+     trackbar when viewing a video in the lightbox.
+     The native HTML5 <video controls> overlays the
+     player controls (play/pause, trackbar, fullscreen)
+     at the bottom of the video element. With a 6rem
+     offset, the panel sits well above the player
+     controls even when the video is taller and closer
+     to the bottom of the viewport. */
+  bottom: 6rem;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.55);
@@ -2130,7 +2140,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    Reuses the .lb-exif-table styles for the table layout. */
 #gallery-lightbox .lb-video-meta {
   position: absolute;
-  bottom: 3.5rem;
+  /* Per user request 2026-07-02: positioned 6rem from
+     the bottom (same as .lb-exif) so it doesn't overlap
+     the video player's trackbar. */
+  bottom: 6rem;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.55);
