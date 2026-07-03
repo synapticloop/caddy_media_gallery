@@ -15,7 +15,8 @@ import _ "embed"
 // on-disk file directly. See writeBundledTemplates and loadTemplate
 // for the resolution order.
 //
-// Per the project convention (see docs/03-templates.md), the
+// Per the project convention (see docs/03-templates.md and its
+// sub-pages, especially 03a-structure.md), the
 // template is a single self-contained file. The HTML, CSS
 // (inside <style>), and JS (inside <script>) all live together
 // in one .tmpl file. There are no separate style.css or

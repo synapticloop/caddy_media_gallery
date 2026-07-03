@@ -7,7 +7,7 @@ per-topic docs linked below.
 
 For per-topic deep dives:
 - [configuration.md](01-configuration.md) — Caddyfile directive details + env vars
-- [templates.md](03-templates.md) — the template file + variables
+- [templates.md](03-templates.md) — the template index page (links to the per-topic pages: 03a-structure, 03b-customization, 03c-feature-dark-mode, 03d-feature-localstorage, 03e-feature-lightbox, 03f-feature-layout, 03g-building-pdf)
 - [sort-and-pagination.md](04-sort-and-pagination.md) — the URL query API
 
 ---

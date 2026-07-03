@@ -49,6 +49,13 @@ SOURCES=(
     "$DOCS_DIR/01-configuration.md"
     "$DOCS_DIR/02-configuration-reference.md"
     "$DOCS_DIR/03-templates.md"
+    "$DOCS_DIR/03a-structure.md"
+    "$DOCS_DIR/03b-customization.md"
+    "$DOCS_DIR/03c-feature-dark-mode.md"
+    "$DOCS_DIR/03d-feature-localstorage.md"
+    "$DOCS_DIR/03e-feature-lightbox.md"
+    "$DOCS_DIR/03f-feature-layout.md"
+    "$DOCS_DIR/03g-building-pdf.md"
     "$DOCS_DIR/04-sort-and-pagination.md"
     "$DOCS_DIR/05-font-credits.md"
     "$DOCS_DIR/06-endplate.md"
@@ -76,7 +83,7 @@ if [ ! -d "$DOCS_DIR/fonts" ] || [ -z "$(ls -A "$DOCS_DIR/fonts" 2>/dev/null)" ]
 fi
 
 echo "Building $OUTPUT ..."
-echo "  sources:    ${#SOURCES[@]} markdown files in docs/"  # 7 as of Phase 107: cover, 01-04, 05-font-credits, 06-endplate
+echo "  sources:    ${#SOURCES[@]} markdown files in docs/"  # 14 as of 2026-07-03: cover, 01-02, 03 + 03a-03g, 04-06
 echo "  engine:     xelatex via pandoc"
 echo "  preamble:   docs/preamble.tex (Libre Baskerville + JetBrains Mono)"
 echo "  output:     $OUTPUT"
@@ -90,6 +97,13 @@ pandoc -t pdf --pdf-engine=xelatex \
     01-configuration.md \
     02-configuration-reference.md \
     03-templates.md \
+    03a-structure.md \
+    03b-customization.md \
+    03c-feature-dark-mode.md \
+    03d-feature-localstorage.md \
+    03e-feature-lightbox.md \
+    03f-feature-layout.md \
+    03g-building-pdf.md \
     04-sort-and-pagination.md \
     05-font-credits.md \
     06-endplate.md \

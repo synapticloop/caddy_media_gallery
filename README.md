@@ -41,7 +41,7 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **Video support** — videos show a play-button overlay and link to the raw file. ffmpeg extracts the first frame for the poster thumbnail.
 - **"Directories" section** for sub-directories with breadcrumbs (showing the path from the gallery root), counts (# items, # sub-dirs), and the directory's total size. The header shows `Directories (N)` plus `+ Parent Directory` (italicized) when there's an Up entry.
 - **"Other files" section** for non-image/non-video content in a directory.
-- **Visitor preferences persisted in localStorage** — theme choice (auto/light/dark), table sort state (dirs + others), and per-section collapse state. Full reference: see [What the template stores in localStorage](docs/03-templates.md#what-the-template-stores-in-localstorage). All keys are namespaced with the `gallery-` prefix to avoid collisions with the host site's own localStorage usage.
+- **Visitor preferences persisted in localStorage** — theme choice (auto/light/dark), table sort state (dirs + others), and per-section collapse state. Full reference: see [What the template stores in localStorage](docs/03d-feature-localstorage.md). All keys are namespaced with the `gallery-` prefix to avoid collisions with the host site's own localStorage usage.
 
 ## Install
 
@@ -313,7 +313,14 @@ Detailed operator documentation lives in [`docs/`](docs/):
 - [docs/00-readme.md](docs/00-readme.md) — documentation index + quickstart
 - [docs/01-configuration.md](docs/01-configuration.md) — Caddyfile directive, JSON config, env vars
 - [docs/02-configuration-reference.md](docs/02-configuration-reference.md) — one-page reference of every config knob
-- [docs/03-templates.md](docs/03-templates.md) — template structure, all template variables, how to override
+- [docs/03-templates.md](docs/03-templates.md) — template index (links to the per-topic pages below)
+- [docs/03a-structure.md](docs/03a-structure.md) — how the template loads, what's in the file, template variables
+- [docs/03b-customization.md](docs/03b-customization.md) — editing, walkthroughs, troubleshooting, upgrading
+- [docs/03c-feature-dark-mode.md](docs/03c-feature-dark-mode.md) — dark mode and the theme toggle
+- [docs/03d-feature-localstorage.md](docs/03d-feature-localstorage.md) — localStorage keys
+- [docs/03e-feature-lightbox.md](docs/03e-feature-lightbox.md) — lightbox (image + video), EXIF/META panels
+- [docs/03f-feature-layout.md](docs/03f-feature-layout.md) — header, pagination, footer, section heading, open-in-new-tab
+- [docs/03g-building-pdf.md](docs/03g-building-pdf.md) — building the operator manual PDF locally
 - [docs/04-sort-and-pagination.md](docs/04-sort-and-pagination.md) — the `?sort=&order=&page=` URL API
 - [docs/05-font-credits.md](docs/05-font-credits.md) — SIL OFL 1.1 copyright notice for Libre Baskerville + JetBrains Mono (the two fonts used in the PDF)
 - [docs/06-endplate.md](docs/06-endplate.md) — the back-cover ASCII art (closing plate of the PDF)

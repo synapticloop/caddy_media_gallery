@@ -46,12 +46,12 @@ before the switch statement. Now sorts correctly by
 modification time.
   persists in `localStorage` (per table) and in the URL
   (`?dirs_sort=...&dirs_order=...`). See
-  [docs/03-templates.md#what-the-template-stores-in-localstorage](../docs/03-templates.md#what-the-template-stores-in-localstorage)
-  for the full key reference.
+[docs/03d-feature-localstorage.md](../docs/03d-feature-localstorage.md)
+for the full key reference.
 - Other files: scanner order (newest-first by mtime). The
   Other Files table has its own click-to-sort headers
   (name, type, size, modified). Same persistence as Directories (see the
-[localStorage reference](../docs/03-templates.md#what-the-template-stores-in-localstorage)).
+[localStorage reference](../docs/03d-feature-localstorage.md)).
 
 The main image sort does NOT affect the dirs/other-files
 sorts. This is intentional: the dirs strip is a navigation
@@ -78,7 +78,8 @@ the direction that's the "natural" opposite of the current
 order (so you don't get the same direction twice in a row).
 
 The button labels are produced by the `sortLabel` template
-function (see the [Templates](03-templates.md) doc for the full
+function (see the [Templates](03-templates.md) index page,
+which links to the per-topic pages) doc for the full
 map). To add a new sort field:
 
 1. Add a `case` to `sortLabel` in `render.go`
