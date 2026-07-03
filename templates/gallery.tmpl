@@ -2114,6 +2114,34 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   user-select: none;
   outline: none;
+  /* Per user request 2026-07-02: when the panel is
+     collapsed, the whole panel moves to the LEFT side
+     of the image (vertical bar) and the header text
+     rotates 90 degrees clockwise so "EXIF" or "META"
+     reads bottom-to-top.
+
+     The CSS positioning:
+     - position: absolute (anchored to the lightbox)
+     - left: 0.5rem (sits just inside the left edge)
+     - top: 50% + transform: translateY(-50%) + rotate(-90deg)
+       (vertically centered, rotated -90 degrees so
+       the text reads bottom-to-top when viewed normally)
+     - transform-origin: left center (rotates around
+       the left-middle of the header, so the text appears
+       to "hang" from the left side)
+     - border-right: 1px solid rgba(255,255,255,0.15)
+       (vertical divider line on the right of the
+       vertical bar)
+     - border-bottom: none (no horizontal divider
+       when collapsed — it doesn't make sense for a
+       vertical bar)
+     - min-width: 0 (let it shrink to fit the text)
+     - width: auto (no fixed width)
+     - white-space: nowrap (text stays on one line)
+
+     The transition makes the move/rotate smooth
+     (~0.25s ease-in-out). */
+  transition: transform 0.25s ease-in-out, background 0.2s ease-in-out;
 }
 #gallery-lightbox .lb-exif-header:hover {
   /* No text-decoration: underline per user request.
@@ -2132,6 +2160,64 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 #gallery-lightbox .lb-exif.collapsed .lb-exif-body,
 #gallery-lightbox .lb-video-meta.collapsed .lb-exif-body {
   display: none;
+}
+/* Per user request 2026-07-02: when the panel is
+   collapsed, the whole panel moves to the LEFT side
+   of the image (becoming a vertical bar) and the
+   header text rotates 90 degrees clockwise so "EXIF"
+   or "META" reads bottom-to-top.
+
+   The implementation uses writing-mode: vertical-rl
+   (vertical right-to-left) which natively lays out
+   the text vertically without any transform math.
+   This is cleaner than transform: rotate() because:
+   1. No transform-origin math (writing-mode uses
+      normal layout flow)
+   2. The text reads naturally (top of the text is at
+      the bottom of the bar when reading from top-down)
+   3. The bar's width is just the natural text width
+      (no min-width override needed)
+
+   The bar sits at left: 0.5rem from the lightbox edge,
+   vertically centered via top: 50% + translateY(-50%).
+   The writing-mode is set on the header (not the
+   panel) so the bar is as narrow as possible.
+
+   Note: the .lb-exif-body is already hidden by the
+   rule above (display: none), so only the header
+   shows in the collapsed state — the vertical bar. */
+#gallery-lightbox .lb-exif.collapsed,
+#gallery-lightbox .lb-video-meta.collapsed {
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 0;
+  width: auto;
+  padding: 0;
+}
+#gallery-lightbox .lb-exif.collapsed .lb-exif-header,
+#gallery-lightbox .lb-video-meta.collapsed .lb-exif-header {
+  /* When collapsed, the header becomes the entire
+     visible panel. Use writing-mode to display the
+     text vertically (reads bottom-to-top in the
+     default ltr direction). The horizontal divider
+     and the negative margin trick from the base rule
+     don't make sense for a vertical bar — remove them. */
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  margin: 0;
+  padding: 8px 4px;
+  border-bottom: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  /* The vertical bar needs a slightly different
+     background — a subtle vertical wash rather than
+     the horizontal one. We keep the same color so
+     the visual identity is preserved. */
+  background: rgba(255, 255, 255, 0.06);
+  /* The text inside the vertical bar should be
+     centered horizontally — writing-mode changes
+     the text orientation but not the layout flow. */
+  text-align: center;
 }
 /* Per user request 2026-07-02: video metadata panel
    (parallel to the .lb-exif panel for images). Shown
