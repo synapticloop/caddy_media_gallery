@@ -582,12 +582,20 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 
 /* Per user request 2026-06-27: # Items and # Sub-Dirs
-   columns in the dirs table. Right-aligned, tabular-nums
-   so the digits line up across rows. Narrow (5rem) since
-   these are small integers.
+   columns in the dirs table. Per user request 2026-07-01:
+   the column header and values are now left-aligned
+   (was right-aligned). Tabular-nums is still applied
+   so the digits line up across rows when the column
+   was right-aligned; left-align also works because
+   the column width is 5rem and the counts are 1-3
+   digits — the right edge of the longest count
+   varies by row, but the left edge is the same
+   (digits start at the same x), which gives a
+   consistent left rail. Narrow (5rem) since these
+   are small integers.
 
    Per user request 2026-06-27: the column heading
-   "#&nbsp;Items" / "#&nbsp;Sub-Dirs" uses non-breaking
+   "#&nbsp;Files" / "#&nbsp;Dirs" uses non-breaking
    spaces (the entity inside the HTML, not just CSS) so
    the heading never splits across lines. The
    white-space: nowrap rule below is a defensive
@@ -596,7 +604,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    which would break the column alignment. */
 .col-count {
   width: 5rem;
-  text-align: right;
+  text-align: left;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2242,8 +2250,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                The default sort for the dirs table is
                "name asc" (matches the server-side order). -->
           <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Items</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Sub-Dirs</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Files</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Dirs</span><span class="sort-indicator"></span></th>
           <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
           <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Last Modified</span><span class="sort-indicator"></span></th>
         </tr>
