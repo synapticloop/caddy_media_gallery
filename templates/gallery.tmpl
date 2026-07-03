@@ -603,18 +603,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   z-index: 1;
 }
 
-/* Per user request 2026-06-27: # Items and # Sub-Dirs
+/* Per user request 2026-06-27: # Files and # Dirs
    columns in the dirs table. Per user request 2026-07-01:
-   the column header and values are now left-aligned
-   (was right-aligned). Tabular-nums is still applied
-   so the digits line up across rows when the column
-   was right-aligned; left-align also works because
-   the column width is 5rem and the counts are 1-3
-   digits — the right edge of the longest count
-   varies by row, but the left edge is the same
-   (digits start at the same x), which gives a
-   consistent left rail. Narrow (5rem) since these
-   are small integers.
+   right-aligned (was left-aligned in the prior commit).
+   Tabular-nums is still applied so the digits are the
+   same width across rows — "1" and "11" align
+   digit-by-digit, and the right edge of each count
+   sits flush at the right margin of the column.
+   Narrow (5rem) since these are small integers.
 
    Per user request 2026-06-27: the column heading
    "#&nbsp;Files" / "#&nbsp;Dirs" uses non-breaking
@@ -626,7 +622,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    which would break the column alignment. */
 .col-count {
   width: 5rem;
-  text-align: left;
+  /* Per user request 2026-07-01: right-aligned (was
+     left-aligned). The 5rem width + 1-3 digit counts means
+     the right edge of the counts varies by row (a "1" sits
+     further right than "1359"), but the right margin of
+     the column is the same for every row — the visual
+     rail is on the right, where the eye expects
+     right-aligned numbers to land. Tabular-nums ensures
+     the digits themselves are the same width across rows
+     (so "1" and "11" align digit-by-digit). */
+  text-align: right;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
