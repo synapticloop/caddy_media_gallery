@@ -3447,9 +3447,25 @@ input.addEventListener('input', function() {
       // measuring, so we don't catch a half-laid-out
       // image with width=0.
       if (nowCollapsed) {
-        var readyPromise = (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function')
-          ? currentEl.decode().catch(function() {})
-          : Promise.resolve();
+        // Same image-ready / video-metadata approach
+        // as in show() — wait for the video's actual
+        // dimensions (loadedmetadata) or the image's
+        // decoded state before measuring.
+        var readyPromise;
+        if (currentEl && currentEl.tagName === 'VIDEO') {
+          readyPromise = new Promise(function(resolve) {
+            var resolved = false;
+            function done() {
+              if (!resolved) { resolved = true; resolve(); }
+            }
+            currentEl.addEventListener('loadedmetadata', done, { once: true });
+            setTimeout(done, 3000);
+          });
+        } else if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
+          readyPromise = currentEl.decode().catch(function() {});
+        } else {
+          readyPromise = Promise.resolve();
+        }
         readyPromise.then(function() {
           requestAnimationFrame(positionPanel);
         });
@@ -3637,46 +3653,64 @@ input.addEventListener('input', function() {
     }
     overlay.classList.add('open');
     // Per user request 2026-07-02: when the panel is
-    // collapsed, position it to the left of the image.
-    // We measure the image and set the panel's inline
-    // left/top. The .collapsed CSS has fallback values
-    // (left: 0.5rem, top: 50%) in case this hasn't run
-    // yet (e.g., during the brief moment between adding
-    // the .collapsed class and the layout settling).
+    // collapsed, position it to the right of the image,
+    // slightly overlapping. We measure the image/video
+    // and set the panel's inline left/top.
     //
-    // BUG FIX 2026-07-02: previously this used a single
-    // requestAnimationFrame to defer the measurement to
-    // the next frame. But on some browsers (notably when
-    // the image is already cached/complete), a single
-    // rAF fires BEFORE the browser has done the layout
-    // pass for the newly-appended image. The image's
-    // getBoundingClientRect() then returns a width of 0
-    // (because the layout hasn't been computed yet),
-    // and the panel ends up positioned at the center of
-    // the viewport (left = (viewport.width - 0) / 2)
-    // instead of to the left of the image.
-    //
-    // The fix: wait for the image to be ready (decoded
-    // + painted) before measuring. The .decode() method
+    // IMAGE: wait for the image to be ready (decoded +
+    // painted) before measuring. The .decode() method
     // returns a Promise that resolves when the image is
-    // decoded and ready to paint. For images that are
-    // already loaded (cached or already painted),
-    // decode() resolves immediately. For images that
-    // are still loading, decode() resolves when the
-    // load completes. We always wait for the next
-    // animation frame AFTER decode resolves, to ensure
-    // the browser has done the layout pass.
+    // decoded and ready to paint. This prevents the
+    // race where the rAF fires before the layout pass
+    // for the newly-appended image (image width=0).
+    //
+    // VIDEO: wait for the loadedmetadata event before
+    // measuring. Per user report 2026-07-02: when a
+    // video is opened with the META panel collapsed
+    // (via localStorage), the panel was positioned for
+    // the POSTER IMAGE dimensions (small, e.g. 320x180)
+    // instead of the actual VIDEO dimensions (large,
+    // e.g. 1366x768). This caused the panel to sit to
+    // the right of centre, because the small poster was
+    // centered in the lightbox (which is wider than
+    // the poster) and the panel was at the poster's
+    // right edge.
+    //
+    // The video element shows the poster image
+    // immediately (same dimensions as the poster) until
+    // the loadedmetadata event fires and the browser
+    // resizes the video to match its actual aspect
+    // ratio. So we MUST wait for loadedmetadata before
+    // measuring the video's bounding rect, otherwise
+    // we'll measure the poster-sized version.
+    //
+    // Edge case: if the video fails to load (e.g.
+    // network error in the test environment), the
+    // loadedmetadata event might never fire. To handle
+    // this, we use a Promise.race with a timeout — if
+    // the metadata doesn't load within 3 seconds, we
+    // fall back to the current poster-sized measurement.
     if (typeof positionCollapsedPanel === 'function') {
-      var readyPromise = (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function')
-        ? currentEl.decode().catch(function() { /* decode may fail on broken images — ignore */ })
-        : Promise.resolve();
+      var readyPromise;
+      if (currentEl && currentEl.tagName === 'VIDEO') {
+        readyPromise = new Promise(function(resolve) {
+          var resolved = false;
+          function done() {
+            if (!resolved) { resolved = true; resolve(); }
+          }
+          // Wait for loadedmetadata
+          currentEl.addEventListener('loadedmetadata', done, { once: true });
+          // Fallback timeout: if the video doesn't load
+          // metadata within 3 seconds, use the
+          // poster-sized measurement anyway.
+          setTimeout(done, 3000);
+        });
+      } else if (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function') {
+        readyPromise = currentEl.decode().catch(function() {});
+      } else {
+        readyPromise = Promise.resolve();
+      }
       readyPromise.then(function() {
-        // Wait for the next animation frame so the
-        // browser has done the layout pass after the
-        // decode. This is the second rAF in the chain
-        // — the first is implicit in decode(), the
-        // second ensures we're after any pending style
-        // / layout recalc.
         requestAnimationFrame(function() {
           positionCollapsedPanel();
         });
