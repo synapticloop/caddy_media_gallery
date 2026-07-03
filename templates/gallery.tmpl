@@ -3420,11 +3420,18 @@ input.addEventListener('input', function() {
           localStorage.removeItem(storageKey);
         }
       } catch (e) { /* localStorage unavailable */ }
-      // Re-position the panel after toggling. Use
-      // requestAnimationFrame to let the browser apply
-      // the class change before we measure.
+      // Re-position the panel after toggling. Same
+      // image-ready approach as in show() — wait for
+      // the image's decode() promise to resolve before
+      // measuring, so we don't catch a half-laid-out
+      // image with width=0.
       if (nowCollapsed) {
-        requestAnimationFrame(positionPanel);
+        var readyPromise = (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function')
+          ? currentEl.decode().catch(function() {})
+          : Promise.resolve();
+        readyPromise.then(function() {
+          requestAnimationFrame(positionPanel);
+        });
       }
     }
     header.addEventListener('click', toggle);
@@ -3602,11 +3609,45 @@ input.addEventListener('input', function() {
     // (left: 0.5rem, top: 50%) in case this hasn't run
     // yet (e.g., during the brief moment between adding
     // the .collapsed class and the layout settling).
-    requestAnimationFrame(function() {
-      if (typeof positionCollapsedPanel === 'function') {
-        positionCollapsedPanel();
-      }
-    });
+    //
+    // BUG FIX 2026-07-02: previously this used a single
+    // requestAnimationFrame to defer the measurement to
+    // the next frame. But on some browsers (notably when
+    // the image is already cached/complete), a single
+    // rAF fires BEFORE the browser has done the layout
+    // pass for the newly-appended image. The image's
+    // getBoundingClientRect() then returns a width of 0
+    // (because the layout hasn't been computed yet),
+    // and the panel ends up positioned at the center of
+    // the viewport (left = (viewport.width - 0) / 2)
+    // instead of to the left of the image.
+    //
+    // The fix: wait for the image to be ready (decoded
+    // + painted) before measuring. The .decode() method
+    // returns a Promise that resolves when the image is
+    // decoded and ready to paint. For images that are
+    // already loaded (cached or already painted),
+    // decode() resolves immediately. For images that
+    // are still loading, decode() resolves when the
+    // load completes. We always wait for the next
+    // animation frame AFTER decode resolves, to ensure
+    // the browser has done the layout pass.
+    if (typeof positionCollapsedPanel === 'function') {
+      var readyPromise = (currentEl && currentEl.tagName === 'IMG' && typeof currentEl.decode === 'function')
+        ? currentEl.decode().catch(function() { /* decode may fail on broken images — ignore */ })
+        : Promise.resolve();
+      readyPromise.then(function() {
+        // Wait for the next animation frame so the
+        // browser has done the layout pass after the
+        // decode. This is the second rAF in the chain
+        // — the first is implicit in decode(), the
+        // second ensures we're after any pending style
+        // / layout recalc.
+        requestAnimationFrame(function() {
+          positionCollapsedPanel();
+        });
+      });
+    }
   }
   // Per user request 2026-07-02: when the panel is
   // collapsed (vertical bar), position it just to
