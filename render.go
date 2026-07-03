@@ -295,6 +295,18 @@ type FileView struct {
 	// access (no reflection, no function call).
 	ExifAttrs template.HTMLAttr // pre-rendered EXIF data attributes (trusted HTML attribute — values are html.EscapeString'd, template trusts the result)
 
+	// Per user request 2026-07-02: VideoMeta holds the
+	// extracted video metadata (duration, container,
+	// codecs, bitrate, framerate). Only meaningful for
+	// KindVideo entries; nil for non-videos.
+	VideoMeta *VideoMeta
+	// VideoMetaAttrs is the pre-rendered `data-video-*`
+	// attribute string (similar to ExifAttrs for EXIF).
+	// Empty if no video metadata. The lightbox JS
+	// reads these attributes and populates a separate
+	// "video metadata" panel.
+	VideoMetaAttrs template.HTMLAttr // pre-rendered video data attributes (trusted HTML — values are html.EscapeString'd)
+
 	// CardHTML is the entire card markup pre-rendered as a
 	// single string. Per optimization 2026-07-01: instead of
 	// the template walking 60×(~50) nodes for 60 cards (the
@@ -589,6 +601,66 @@ func displayNameForHover(name string) string {
 	return repl.Replace(name)
 }
 
+// buildVideoMetaAttrString formats VideoMeta into a
+// single template.HTMLAttr string of `data-video-*`
+// attributes for the template. Same approach as
+// buildExifAttrString (hand-formatted, no reflection).
+//
+// Per user request 2026-07-02: video files get the
+// same kind of metadata enrichment as EXIF for images.
+// The data is extracted via ffprobe (cached in a .vmeta
+// sidecar next to the video's thumb) and rendered as
+// `data-video-*` attributes on the card. The lightbox
+// JS reads these attributes and populates a separate
+// "video metadata" panel (vs the EXIF panel for images).
+//
+// Attributes emitted (one per VideoMeta field, only if
+// non-empty):
+//   data-video-duration="5s"        (e.g. "0:05" or "1:23:45")
+//   data-video-container="mov,mp4,m4a,3gp,3g2,mj2"
+//   data-video-video-codec="h264"
+//   data-video-audio-codec="aac"   (only if audio stream)
+//   data-video-bitrate="5.2 Mbps"
+//   data-video-framerate="24 fps"
+func buildVideoMetaAttrString(v *VideoMeta) template.HTMLAttr {
+	if v == nil {
+		return template.HTMLAttr("")
+	}
+	var b strings.Builder
+	b.Grow(192) // pre-allocate ~192 bytes (typical size)
+	if v.Duration != "" {
+		b.WriteString(` data-video-duration="`)
+		b.WriteString(html.EscapeString(v.Duration))
+		b.WriteString(`"`)
+	}
+	if v.Container != "" {
+		b.WriteString(` data-video-container="`)
+		b.WriteString(html.EscapeString(v.Container))
+		b.WriteString(`"`)
+	}
+	if v.VideoCodec != "" {
+		b.WriteString(` data-video-video-codec="`)
+		b.WriteString(html.EscapeString(v.VideoCodec))
+		b.WriteString(`"`)
+	}
+	if v.AudioCodec != "" {
+		b.WriteString(` data-video-audio-codec="`)
+		b.WriteString(html.EscapeString(v.AudioCodec))
+		b.WriteString(`"`)
+	}
+	if v.Bitrate != "" {
+		b.WriteString(` data-video-bitrate="`)
+		b.WriteString(html.EscapeString(v.Bitrate))
+		b.WriteString(`"`)
+	}
+	if v.Framerate != "" {
+		b.WriteString(` data-video-framerate="`)
+		b.WriteString(html.EscapeString(v.Framerate))
+		b.WriteString(`"`)
+	}
+	return template.HTMLAttr(b.String())
+}
+
 // buildExifAttrString formats the EXIF data for the
 // data-exif-* HTML attributes. Per optimization 2026-06-30:
 // this avoids 8 separate reflection-based field lookups in
@@ -662,6 +734,9 @@ func buildCardHTML(v FileView) template.HTML {
 	b.WriteString(html.EscapeString(v.DisplayName))
 	b.WriteString(`"`)
 	b.WriteString(string(v.ExifAttrs))
+	if v.VideoMetaAttrs != "" {
+		b.WriteString(string(v.VideoMetaAttrs))
+	}
 	b.WriteString(`>`)
 	// <div class="thumb...">
 	// Per user feedback 2026-07-01: the 'loading' class
@@ -816,6 +891,17 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 	if f.Exif != nil && f.Exif.HasAny() {
 		v.Exif = f.Exif
 		v.ExifAttrs = buildExifAttrString(f.Exif)
+	}
+	// Per user request 2026-07-02: copy video metadata
+	// through. Only meaningful for video files, but we
+	// copy it through unconditionally (the field is
+	// nil for non-videos; the template and lightbox
+	// check for nil). Same pre-render optimization as
+	// EXIF: pre-compute the attribute string instead
+	// of having the template do 6 separate lookups.
+	if f.VideoMeta != nil && f.VideoMeta.HasAny() {
+		v.VideoMeta = f.VideoMeta
+		v.VideoMetaAttrs = buildVideoMetaAttrString(f.VideoMeta)
 	}
 	// Copy dimensions through. Per user request 2026-06-27:
 	// the bottom-right watermark shows the source file's

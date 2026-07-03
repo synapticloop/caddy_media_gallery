@@ -119,6 +119,14 @@ type FileInfo struct {
 	// ISOSpeedRatings, FocalLength) is preserved; GPS is
 	// never extracted. See exif.go for details.
 	Exif *ExifData `json:"exif,omitempty"`
+	// Per user request 2026-07-02: VideoMeta holds the
+	// extracted video metadata (duration, container,
+	// codecs, bitrate, framerate). Only meaningful for
+	// KindVideo entries; nil for non-videos. Populated
+	// lazily via the same background-enrich pipeline
+	// that handles EXIF (when the scanner runs, it
+	// can also queue a video metadata extraction).
+	VideoMeta *VideoMeta `json:"video_meta,omitempty"`
 	CountItems int       `json:"count_items"`
 	// CountDirs is the number of directories inside this
 	// subdirectory. Includes real directories AND symlinks
@@ -417,6 +425,25 @@ func (s *Scanner) Enrich(files []FileInfo) {
 				fi.Height = h
 			}
 		}
+		// Per user request 2026-07-02: video metadata
+		// (duration, container, codecs, bitrate, framerate)
+		// for video files. Uses ffprobe (already a build
+		// dependency for video thumbnails) with a 10s
+		// timeout. The result is cached in a .vmeta sidecar
+		// next to the video's thumb, so the next enrichment
+		// is a ~50µs file read. Always runs for video
+		// files (no NoExif equivalent — video metadata is
+		// a different concept from EXIF).
+		if fi.Kind == KindVideo {
+			thumbExt := s.ThumbFormat
+			if thumbExt == "" {
+				thumbExt = "webp"
+			}
+			vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
+			if err == nil {
+				fi.VideoMeta = vmeta
+			}
+		}
 	}
 }
 
@@ -504,6 +531,20 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 				if err == nil && w > 0 && h > 0 {
 					fi.Width = w
 					fi.Height = h
+				}
+			}
+			// Per user request 2026-07-02: video metadata
+			// (duration, container, codecs, bitrate,
+			// framerate) for video files. Uses ffprobe
+			// (already a build dependency for video
+			// thumbnails) with a 10s timeout. The result
+			// is cached in a .vmeta sidecar next to the
+			// video's thumb, so the next enrichment is
+			// a ~50µs file read.
+			if fi.Kind == KindVideo {
+				vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
+				if err == nil && vmeta != nil && vmeta.HasAny() {
+					fi.VideoMeta = vmeta
 				}
 			}
 		}(i)

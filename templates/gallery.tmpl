@@ -2002,6 +2002,25 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   white-space: nowrap;
   backdrop-filter: blur(4px);
 }
+/* Per user request 2026-07-02: video metadata panel
+   (parallel to the .lb-exif panel for images). Shown
+   when the current video has ffprobe-extracted metadata
+   (duration, container, codecs, bitrate, framerate).
+   Reuses the .lb-exif-table styles for the table layout. */
+#gallery-lightbox .lb-video-meta {
+  position: absolute;
+  bottom: 3.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
 #gallery-lightbox .lb-exif-table {
   border-collapse: collapse;
 }
@@ -3084,6 +3103,20 @@ input.addEventListener('input', function() {
         '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
         '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
       '</table>' +
+    '</div>' +
+    // Per user request 2026-07-02: video metadata panel
+    // (parallel to the EXIF panel for images). Shows
+    // duration, container, codecs, bitrate, framerate
+    // extracted from ffprobe (cached in .vmeta sidecars).
+    '<div class="lb-video-meta" hidden>' +
+      '<table class="lb-exif-table">' +
+        '<tr><td class="lb-exif-label">Duration</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
+        '<tr><td class="lb-exif-label">Container</td><td class="lb-exif-val" data-video="container"></td></tr>' +
+        '<tr><td class="lb-exif-label">Video</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
+        '<tr><td class="lb-exif-label">Audio</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
+        '<tr><td class="lb-exif-label">Bitrate</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
+        '<tr><td class="lb-exif-label">Framerate</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
+      '</table>' +
     '</div>';
   document.body.appendChild(overlay);
 
@@ -3173,8 +3206,33 @@ input.addEventListener('input', function() {
     // data-exif-* attributes are absent and the panel is
     // hidden.
     var exifPanel = overlay.querySelector('.lb-exif');
-    // Only show for image files (videos don't have EXIF in
-    // our scope).
+    var videoMetaPanel = overlay.querySelector('.lb-video-meta');
+    if (isVideo) {
+      // Per user request 2026-07-02: populate the video
+      // metadata panel for video files. Reads the
+      // data-video-* attributes that buildVideoMetaAttrString
+      // rendered onto the card. The panel is hidden if no
+      // attributes are present (no ffprobe data cached).
+      var duration = c.getAttribute('data-video-duration') || '';
+      var container = c.getAttribute('data-video-container') || '';
+      var videoCodec = c.getAttribute('data-video-video-codec') || '';
+      var audioCodec = c.getAttribute('data-video-audio-codec') || '';
+      var bitrate = c.getAttribute('data-video-bitrate') || '';
+      var framerate = c.getAttribute('data-video-framerate') || '';
+      if (duration || container || videoCodec || audioCodec || bitrate || framerate) {
+        videoMetaPanel.querySelector('[data-video="duration"]').textContent = duration || '\u2014';
+        videoMetaPanel.querySelector('[data-video="container"]').textContent = container || '\u2014';
+        videoMetaPanel.querySelector('[data-video="video-codec"]').textContent = videoCodec || '\u2014';
+        videoMetaPanel.querySelector('[data-video="audio-codec"]').textContent = audioCodec || '\u2014';
+        videoMetaPanel.querySelector('[data-video="bitrate"]').textContent = bitrate || '\u2014';
+        videoMetaPanel.querySelector('[data-video="framerate"]').textContent = framerate || '\u2014';
+        videoMetaPanel.hidden = false;
+      } else {
+        videoMetaPanel.hidden = true;
+      }
+    } else {
+      videoMetaPanel.hidden = true;
+    }
     if (!isVideo) {
       var cameraMake = c.getAttribute('data-exif-camera-make') || '';
       var cameraModel = c.getAttribute('data-exif-camera-model') || '';
