@@ -17,7 +17,7 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 ## Features
 
 - **Drop-in replacement** for `file_server browse` in a `handle_path` block.
-- **Recursive** — every subdirectory under the matched route is rendered as a gallery.
+- **Recursive** every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime. The thumb's mtime matches the source's mtime, and an LRU eviction runs when the cache exceeds `max_cache_size_mb`.
 - **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos. Both are cached in `.meta` sidecar files alongside the thumbnails so the second page load hits the sidecar fast path (<100µs per file).
 - **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF + dimensions are computed **synchronously during the page request** (the 60 visible-page files take ~75ms with 8 parallel workers, hidden behind the HTML render), then cached in `.meta` and `.exif` sidecar files alongside the thumb. The next page load hits the sidecar fast path (<100µs per file). The `no_exif` directive disables EXIF reading entirely (no sidecar is created, no EXIF pill on cards, no EXIF panel in lightbox).
@@ -61,7 +61,8 @@ Or use the included build script (pins Caddy to v2.11.4 and the local module pat
 ./build.sh
 ```
 
-The build script also restarts Caddy via systemd (you may need to be root or use sudo).
+The build script also restarts Caddy via systemd (you will need to be root or 
+use sudo).
 
 ### Local install (no root, no sudo)
 
@@ -99,9 +100,14 @@ echo $! > ~/caddy.pid
 kill $(cat ~/caddy.pid)
 ```
 
-Open <http://localhost:3245> in your browser to see the gallery. If 3245 is taken, choose another port — any number from 1025 to 65535 works (the script validates this for you).
+Open <http://localhost:3245> in your browser to see the gallery. If 3245 is taken, 
+choose another port — any number from 1025 to 65535 works (the script validates 
+this for you).
 
-**Why 3245 as the default?** Small easter egg for the project's homepage — 3245 = `0xCAD` in hex (and C-A-D happen to be valid hex digits, which makes for a memorable abbreviation). If you prefer something more conventional, pass `--user 8080` or set `CADDY_USER_PORT=8080`.
+**Why 3245 as the default?** Small easter egg for the project's homepage - 
+3245 = `0xCAD` in hex (and C-A-D happen to be valid hex digits, which makes for 
+a memorable abbreviation). If you prefer something more conventional, 
+pass `--user 8080` or set `CADDY_USER_PORT=8080`.
 
 
 ## Caddyfile usage
@@ -120,36 +126,41 @@ handle_path /images/crosswords/* {
 }
 ```
 
-The `media_gallery` directive MUST come before `file_server` in the handle block — that way it gets a chance to handle the request (gallery HTML, thumbnail requests), and only falls through to `file_server` for direct file access (e.g. `/images/foo.jpg`).
+The `media_gallery` directive MUST come before `file_server` in the handle 
+block - that way it gets a chance to handle the request (gallery HTML, 
+thumbnail requests), and only falls through to `file_server` for direct 
+file access (e.g. `/images/foo.jpg`).
 
 ### Auth
 
-The gallery slots behind any standard Caddy auth layer (basic_auth, forward_auth, JWT, etc.) — it's just a regular HTTP handler. It does not implement its own auth.
+The gallery slots behind any standard Caddy auth layer (basic_auth, forward_auth, 
+JWT, etc.) — it's just a regular HTTP handler. It does not implement its own auth.
 
 ## Caddyfile directive options
 
-The `media_gallery` directive accepts these sub-options (full reference in [`docs/01-configuration.md`](docs/01-configuration.md)):
+The `media_gallery` directive accepts these sub-options (full reference 
+in [`docs/01-configuration.md`](docs/01-configuration.md)):
 
-| Subdirective | Default | Description |
-|---|---|---|
-| `sort` | `mtime` | Sort field: `mtime` (newest first) or `name` (alphabetical) |
-| `path_prefix` | (none) | URL mount prefix used in breadcrumbs (e.g. `images`). Defaults to the directory name. |
-| `root_name` | (none) | Display name for the root breadcrumb. Defaults to "media root". |
-| `image_types` | built-in list | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp`. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, shown with a 📄 icon). Operators can opt in with `image_types .heic .avif .svg` if they have external tooling to handle these formats. |
-| `video_types` | built-in list | Space-separated list of video extensions. Default: `mp4 webm m4v mov mkv avi ogv ogg`. |
-| `page_size` | `60` | Per-page default (the first item in `page_sizes` if set). |
-| `page_sizes` | `60 30 120 all` | Space-separated list of dropdown options; the first item is the default. Use `all` for "show all on one page". |
-| `thumb_width` | `320` | Max width of generated thumbnails (px). |
-| `thumb_height` | `320` | Max height of generated thumbnails (px). |
-| `thumb_format` | `webp` | Output format: `webp`, `png`, `jpeg` (or `jpg`). |
-| `thumb_ttl` | `1440` | HTTP `Cache-Control: max-age` in minutes for thumb responses. |
-| `cache_scan` | `1440` (24h) | In-memory scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net. |
-| `no_thumbs` | `false` | Skip thumbnail generation (use original file in `<img src>`). |
-| `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | `false` | Skip EXIF reading entirely. Disables both the per-thumb sidecar creation in `serveThumb` and the sync visible-page enrich in `ServeHTTP`. Cards no longer show the "EXIF" pill; lightbox hides the EXIF panel. Useful for privacy-sensitive deployments. |
-| `template` | `gallery.tmpl` | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed). |
-| `search_match` | `substring` | Filename match rule for search: `substring` (default) or `word` (word-boundary). |
-| `max_cache_size_mb` | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). Enforced via an on-write check (cheap, runs in a goroutine after each cache write) and a background sweep every 30 min. |
+| Subdirective        | Default         | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|---------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `sort`              | `mtime`         | Sort field: `mtime` (newest first) or `name` (alphabetical)                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `path_prefix`       | (none)          | URL mount prefix used in breadcrumbs (e.g. `images`). Defaults to the directory name.                                                                                                                                                                                                                                                                                                                                                                        |
+| `root_name`         | (none)          | Display name for the root breadcrumb. Defaults to "media root".                                                                                                                                                                                                                                                                                                                                                                                              |
+| `image_types`       | built-in list   | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp`. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, shown with a 📄 icon). Operators can opt in with `image_types .heic .avif .svg` if they have external tooling to handle these formats. |
+| `video_types`       | built-in list   | Space-separated list of video extensions. Default: `mp4 webm m4v mov mkv avi ogv ogg`.                                                                                                                                                                                                                                                                                                                                                                       |
+| `page_size`         | `60`            | Per-page default (the first item in `page_sizes` if set).                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `page_sizes`        | `60 30 120 all` | Space-separated list of dropdown options; the first item is the default. Use `all` for "show all on one page".                                                                                                                                                                                                                                                                                                                                               |
+| `thumb_width`       | `320`           | Max width of generated thumbnails (px).                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `thumb_height`      | `320`           | Max height of generated thumbnails (px).                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `thumb_format`      | `webp`          | Output format: `webp`, `png`, `jpeg` (or `jpg`).                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `thumb_ttl`         | `1440`          | HTTP `Cache-Control: max-age` in minutes for thumb responses.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `cache_scan`        | `1440` (24h)    | In-memory scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net.                                                                                                                                                                                                                                                                                                                         |
+| `no_thumbs`         | `false`         | Skip thumbnail generation (use original file in `<img src>`).                                                                                                                                                                                                                                                                                                                                                                                                |
+| `no_video_thumbs`   | `false`         | Skip ffmpeg-based video poster extraction.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `no_exif`           | `false`         | Skip EXIF reading entirely. Disables both the per-thumb sidecar creation in `serveThumb` and the sync visible-page enrich in `ServeHTTP`. Cards no longer show the "EXIF" pill; lightbox hides the EXIF panel. Useful for privacy-sensitive deployments.                                                                                                                                                                                                     |
+| `template`          | `gallery.tmpl`  | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed).                                                                                                                                                                                                                                                                                                                                                                                  |
+| `search_match`      | `substring`     | Filename match rule for search: `substring` (default) or `word` (word-boundary).                                                                                                                                                                                                                                                                                                                                                                             |
+| `max_cache_size_mb` | `1024` (1 GB)   | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). Enforced via an on-write check (cheap, runs in a goroutine after each cache write) and a background sweep every 30 min.                                                                                                |
 
 Example:
 ```caddyfile
@@ -163,7 +174,9 @@ media_gallery {
 
 ## How thumbs work
 
-Thumb URLs look like `/_thumbs/<basename>.webp` (e.g. for source `photo.jpg`, the thumb is at `/_thumbs/photo.webp`). On first request, `serveThumb` calls `GenerateOrLoadThumb` which:
+Thumb URLs look like `/_thumbs/<basename>.webp` (e.g. for source `photo.jpg`, 
+the thumb is at `/_thumbs/photo.webp`). On first request, `serveThumb` calls 
+`GenerateOrLoadThumb` which:
 
 1. Hashes the source's absolute path (sha256, first 16 bytes / 32 hex chars).
 2. Splits the hash into 2 hex chars per level: `<aa>/<bb>/<rest28>`.
@@ -184,41 +197,65 @@ Cache invalidation is purely mtime-based — no cron job, no inotify watcher. Th
 
 ## Caching & performance
 
-The gallery has a layered cache: scan cache (in-memory) + thumb cache (on-disk) + sidecar caches (in-memory + on-disk). The design pattern is **eager metadata, lazy thumbs**: metadata + EXIF are computed synchronously during the page request so the visitor sees them on the first visit; thumbnails are generated lazily when the browser requests them.
+The gallery has a layered cache: scan cache (in-memory) + thumb cache (on-disk) + 
+sidecar caches (in-memory + on-disk). The design pattern is **eager metadata, 
+lazy thumbs**: metadata + EXIF are computed synchronously during the page request 
+so the visitor sees them on the first visit; thumbnails are generated lazily 
+when the browser requests them.
 
 ### The three caches
 
-- **Scan cache** (in-memory) — `[]FileInfo` per directory, keyed by absolute dir path. Invalidation is **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and forces a fresh scan). The TTL (`cache_scan` directive, default **1440 = 24h**) is a safety net for edge cases (clock skew, manual mtime changes, in-place file modifications that don't bump dir mtime). Cache state is internally consistent within a TTL window (enrichment happens via atomic `SetFiles` swap, no in-progress mutation is observable).
+- **Scan cache** (in-memory) — `[]FileInfo` per directory, keyed by absolute dir 
+  path. Invalidation is **directory mtime** (checked on every access — adding 
+  or removing a file changes the dir mtime and forces a fresh scan). The TTL 
+  (`cache_scan` directive, default **1440 = 24h**) is a safety net for edge cases (clock skew, manual mtime changes, in-place file modifications that don't bump dir mtime). Cache state is internally consistent within a TTL window (enrichment happens via atomic `SetFiles` swap, no in-progress mutation is observable).
 
-- **Thumb cache** (on-disk at `/var/cache/caddy-gallery/`) — 2-level nested hash subdirs (`<aa>/<bb>/<hash28>.webp`). Default cap: **1 GB** (`max_cache_size_mb`). LRU eviction when the cap is hit (sorts by `.meta` mtime, oldest first). 2 hex chars per level keeps leaf dirs to ~5 entries (well under ext4's ~10k-entry slowdown threshold). LRU marker is the `.meta` mtime, touched on every thumb access (decouples eviction from the thumb's own mtime which mirrors the source's mtime for semantic correctness).
+- **Thumb cache** (on-disk at `/var/cache/caddy-gallery/`) — 2-level nested 
+  hash subdirs (`<aa>/<bb>/<hash28>.webp`). Default cap: **1 GB** (`max_cache_size_mb`). LRU eviction when the cap is hit (sorts by `.meta` mtime, oldest first). 2 hex chars per level keeps leaf dirs to ~5 entries (well under ext4's ~10k-entry slowdown threshold). LRU marker is the `.meta` mtime, touched on every thumb access (decouples eviction from the thumb's own mtime which mirrors the source's mtime for semantic correctness).
 
-- **Sidecar caches** (per thumb file, in the same subdir) — `.webp.meta` (dimensions, plain text "W H\n") and `.webf.exif` (EXIF data, plain text with Human-Readable keys: `Camera Make`, `Lens Model`, `Exposure Time`, etc.; first line is `has=true|false`). Created lazily on the first thumb request (synchronous with the thumb gen) and reused on subsequent requests. Staleness check: `sidecar.mtime < source.mtime` → sidecar is stale → re-read source and overwrite. Both sidecars are written/checked atomically.
+- **Sidecar caches** (per thumb file, in the same subdir) — `.webp.meta` 
+  (dimensions, plain text "W H\n") and `.webf.exif` (EXIF data, plain text 
+  with Human-Readable keys: `Camera Make`, `Lens Model`, `Exposure Time`, 
+  etc.; first line is `has=true|false`). Created lazily on the first thumb 
+  request (synchronous with the thumb gen) and reused on subsequent requests.
+  Staleness check: `sidecar.mtime < source.mtime` → sidecar is stale → 
+  re-read source and overwrite. Both sidecars are written/checked atomically.
 
 ### First-visit latency budget
 
 For `/images/media_gallery/` (89 files, 4 with EXIF), cold cache:
 
-| Step | Time |
-|---|---|
-| TLS handshake | ~16ms |
-| Scan (cold, 89 files) | ~20ms |
-| Sync enrich of 89 files (8 workers × ~10ms each) | ~110ms |
-| Template render | ~30ms |
-| Body transfer (gzip 160 KB → 20 KB) | ~50ms |
-| **HTML total** | **~225ms** |
-| First thumb request (cold, decode + resize + WebP encode) | ~250ms |
-| Subsequent thumbs (browser parallelizes 6 at a time) | wave over ~1s |
-| Warm reload (within 24h TTL) | ~30ms |
+| Step                                                      | Time          |
+|-----------------------------------------------------------|---------------|
+| TLS handshake                                             | ~16ms         |
+| Scan (cold, 89 files)                                     | ~20ms         |
+| Sync enrich of 89 files (8 workers × ~10ms each)          | ~110ms        |
+| Template render                                           | ~30ms         |
+| Body transfer (gzip 160 KB → 20 KB)                       | ~50ms         |
+| **HTML total**                                            | **~225ms**    |
+| First thumb request (cold, decode + resize + WebP encode) | ~250ms        |
+| Subsequent thumbs (browser parallelizes 6 at a time)      | wave over ~1s |
+| Warm reload (within 24h TTL)                              | ~30ms         |
 
 ### HTTP caching
 
-- **Thumb responses**: `Cache-Control: public, max-age=86400` (24h, set via the `thumb_ttl` directive). Thumbs are immutable per source mtime, so the visitor's browser cache is safe.
-- **Gallery HTML**: `Cache-Control: no-cache` (always fresh). New images need to show up on the next refresh.
-- **Caddy-level `encode`**: `encode zstd gzip` for all text responses (HTML, CSS, JS, JSON). 8x compression ratio on the 160 KB gallery HTML — 7.7x smaller wire size.
+- **Thumb responses**: `Cache-Control: public, max-age=86400` (24h, set via 
+  the `thumb_ttl` directive). Thumbs are immutable per source mtime, so the 
+  visitor's browser cache is safe.
+- **Gallery HTML**: `Cache-Control: no-cache` (always fresh). New images 
+  need to show up on the next refresh.
+- **Caddy-level `encode`**: `encode zstd gzip` for all text responses (HTML, 
+  CSS, JS, JSON). 8x compression ratio on the 160 KB gallery HTML — 7.7x smaller wire size.
 
 ### Cache size cap
 
-`max_cache_size_mb` (default 1024 MB = 1 GB) — when the on-disk thumb cache grows past the cap, the oldest thumbs (by `.meta` mtime) are evicted in a background goroutine until the cache is at 80% of the cap. A 30-min background sweep catches the case where the cache grows without new writes. Operators can set `max_cache_size_mb 0` for unbounded (the pre-feature behavior). The footer shows current usage as a 2-digit hex percentage (`01` = 1%, `28` = 40%, `64` = 100%).
+`max_cache_size_mb` (default 1024 MB = 1 GB) — when the on-disk thumb cache 
+grows past the cap, the oldest thumbs (by `.meta` mtime) are evicted in a 
+background goroutine until the cache is at 80% of the cap. A 30-min 
+background sweep catches the case where the cache grows without new writes. 
+Operators can set `max_cache_size_mb 0` for unbounded (the pre-feature 
+behaviour). The footer shows current usage as a 2-digit hex percentage 
+(`01` = 1%, `28` = 40%, `64` = 100%).
 
 ## Dependencies
 
@@ -270,11 +307,18 @@ caddy_media_gallery/
 
 ## Customizing the template
 
-The HTML template lives in `templates/gallery.tmpl` and is bundled into the Go binary at build time via `//go:embed`. Two ways to customize:
+The HTML template lives in `templates/gallery.tmpl` and is bundled into the 
+Go binary at build time via `//go:embed`. Two ways to customize:
 
-1. **Edit the source template** — modify `templates/gallery.tmpl` and rebuild. The new template is bundled into the binary on the next `./build.sh`.
+1. **Edit the source template** — modify `templates/gallery.tmpl` and 
+   rebuild. The new template is bundled into the binary on the next `./build.sh`.
 
-2. **Override at runtime** — place a modified `gallery.tmpl` at `$GALLERY_TEMPLATES_DIR/gallery.tmpl` (default `/etc/caddy/gallery-templates/gallery.tmpl`). The operator-installed template takes precedence over the bundled one. If the file is missing on startup, it's auto-extracted from the embedded copy, so you always have a starting point to edit.
+2. **Override at runtime** — place a modified `gallery.tmpl` at 
+   `$GALLERY_TEMPLATES_DIR/gallery.tmpl` (default 
+   `/etc/caddy/gallery-templates/gallery.tmpl`). The operator-installed 
+   template takes precedence over the bundled one. If the file is missing 
+   on startup, it's auto-extracted from the embedded copy, so you always 
+   have a starting point to edit.
 
 ## Caddyfile example (full)
 
