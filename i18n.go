@@ -326,6 +326,32 @@ func (t *Translator) Locales() []string {
 	return out
 }
 
+// tr is a package-level helper that looks up a translation
+// key using the currently-active translator + locale. Set
+// per-render by RenderPage via tMu. Returns the key itself
+// if the translator or locale is unset (defensive — should
+// not happen in production but might in unit tests).
+//
+// Used by Go code that needs to produce translated strings
+// outside the template engine (e.g. computeFilterGroups
+// building the filter dropdown labels in render.go). The
+// template's "t" function (in render.go's galleryFuncs) is
+// the SAME thing, just for templates. Both read currentT +
+// currentLang under tMu.
+func tr(key string) string {
+	tMu.RLock()
+	translator := currentT
+	lang := currentLang
+	tMu.RUnlock()
+	if translator == nil {
+		return key
+	}
+	if lang == "" {
+		lang = "en"
+	}
+	return translator.T(lang, key)
+}
+
 // NativeName returns the native-script name of a locale
 // (e.g. "English" for "en", "Deutsch" for "de", "日本語"
 // for "ja"). The name is ALWAYS rendered in the locale's

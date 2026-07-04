@@ -15,15 +15,37 @@ import (
 	"regexp"
 )
 
-// TestMain sets GALLERY_TEMPLATES_DIR to a non-existent temp
-// dir for the entire test process. Without this, any RenderPage
-// call would pick up the real /etc/caddy/gallery-templates/gallery.tmpl
-// if it happens to exist on the test host (e.g. from a previous
-// build), which would diverge from the bundled template the tests
-// are written against. By isolating tests to a temp dir, the
-// loadTemplate() fallback to the bundled galleryTemplateFS (//go:embed-ed)
-// is what gets used.
+// TestMain sets up the package-level translator + locale
+// once per test binary, so any {{t "key"}} lookups in
+// RenderPage return English strings (instead of the key
+// name, which would happen if the translator is nil).
+// Per user request 2026-07-04: filter labels, media header,
+// and other parts of the rendered page now use {{t}} for
+// translation. Tests that check for the rendered English
+// strings need a real translator to be wired in.
+//
+// If GALLERY_TEST_NO_TRANSLATOR is set in the environment,
+// the package-level vars are left nil and tests that
+// pre-date i18n (and check for the raw key name in the
+// output) can still pass.
 func TestMain(m *testing.M) {
+	// Per user request 2026-07-04: set up the package-level
+	// translator + locale so {{t "key"}} lookups in RenderPage
+	// return English strings (instead of the key name, which
+	// would happen if the translator is nil). If the env var
+	// GALLERY_TEST_NO_TRANSLATOR is set, leave them nil so
+	// tests that pre-date i18n (and check for the raw key
+	// name in the output) can still pass.
+	if os.Getenv("GALLERY_TEST_NO_TRANSLATOR") == "" {
+		tr, err := NewTranslator("")
+		if err != nil {
+			panic(err)
+		}
+		tMu.Lock()
+		currentT = tr
+		currentLang = "en"
+		tMu.Unlock()
+	}
 	tmp, err := os.MkdirTemp("", "caddy-media-gallery-test-*")
 	if err != nil {
 		panic(err)
@@ -32,7 +54,6 @@ func TestMain(m *testing.M) {
 	os.Setenv("GALLERY_TEMPLATES_DIR", tmp)
 	os.Exit(m.Run())
 }
-
 func TestRenderPage_ContainsImagesAndFilenames(t *testing.T) {
 	files := []FileInfo{
 		{Name: "alpha.jpg", ModTime: time.Now().UnixNano(), Size: 12345, Kind: KindImage},
@@ -2678,7 +2699,18 @@ func TestRenderPage_TotalFilesInMetaLine(t *testing.T) {
 		{Name: "vid1.mp4", ModTime: 1, Size: 100, Kind: KindVideo},
 		{Name: "readme.txt", ModTime: 1, Size: 100, Kind: KindOther},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
+	// Per user request 2026-07-04: the meta line is now
+	// translated. Create a real translator and pass it so
+	// the package-level tr() helper returns English
+	// strings (instead of falling back to the key name).
+	tr, err := NewTranslator("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, nil, nil, "", "", "substring", "en", tr, "00", "00", "00", "00")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2715,17 +2747,22 @@ func TestRenderPage_TotalFilesInMetaLine(t *testing.T) {
 	}
 	// 3. The "1 videos" (videos is grammatically a bit off but
 	// matches the existing style).
-	if !strings.Contains(meta, `<span>1 videos</span>`) {
-		t.Error("expected '<span>1 videos</span>' in meta line")
+	if !strings.Contains(meta, `<span>1 video</span>`) {
+		t.Error("expected '<span>1 video</span>' in meta line")
 	}
-	// 4. The "1 other files" (other files is plural-only even for 1).
-	if !strings.Contains(meta, `<span>1 other files</span>`) {
-		t.Error("expected '<span>1 other files</span>' in meta line")
+	// 4. The "1 other file" — per user request 2026-07-04
+	// we now pluralize correctly (1 other file, 2+ other files).
+	if !strings.Contains(meta, `<span>1 other file</span>`) {
+		t.Error("expected '<span>1 other file</span>' in meta line")
 	}
 
 	// 5. With NO files, the meta line should show "0 files"
 	// (plural form for 0).
-	noFiles, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
+	// Per user request 2026-07-04: use a real translator
+	// so the package-level tr() returns English strings
+	// (instead of falling back to the key name). Reuse the
+	// translator from above.
+	noFiles, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, nil, nil, nil, nil, "", "", "substring", "en", tr, "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3593,6 +3630,28 @@ func TestRenderPage_SortLinksPreservePage(t *testing.T) {
 //   - Options are sorted alphabetically
 //   - Empty file list returns three empty groups
 func TestComputeFilterGroups(t *testing.T) {
+	// Per user request 2026-07-04: filter labels are now
+	// translated. Set up a translator + locale (en) so the
+	// package-level tr() returns "Images", "Videos", "Other"
+	// instead of the key names. The translator is read from
+	// the package-level currentT/currentLang vars, which
+	// RenderPage sets up; here we set them directly since
+	// we're calling computeFilterGroups (not RenderPage).
+	tr, err := NewTranslator("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tMu.Lock()
+	currentT = tr
+	currentLang = "en"
+	tMu.Unlock()
+	defer func() {
+		tMu.Lock()
+		currentT = nil
+		currentLang = ""
+		tMu.Unlock()
+	}()
+
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 		{Name: "photo2.JPG", ModTime: 2, Size: 200, Kind: KindImage}, // uppercase
