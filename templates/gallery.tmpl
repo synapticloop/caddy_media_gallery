@@ -892,6 +892,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      to match the header text right edge — see
      the comment there for the calculation). */
   text-align: right;
+  /* Per user request 2026-07-04: the column
+     heading ("# Files" / "# Dirs") used to use
+     a non-breaking space entity (#&nbsp;Files)
+     so it never wrapped across lines. Now that
+     the heading is translated via {{t
+     "col_files_hash"}}, the entity is gone, so
+     we use white-space: nowrap on the th to keep
+     "# Files" (or "# Dateien", "# ファイル",
+     etc.) on a single line. */
+  white-space: nowrap;
 }
 /* Per user request 2026-07-01: the .files-table
    tbody td rule has padding: 0.5rem 0.75rem
@@ -2827,8 +2837,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                The default sort for the dirs table is
                "name asc" (matches the server-side order). -->
           <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>{{t "col_name"}}</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Files</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Dirs</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>{{t "col_files_hash"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>{{t "col_dirs_hash"}}</span><span class="sort-indicator"></span></th>
           <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>{{t "col_size"}}</span><span class="sort-indicator"></span></th>
           <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>{{t "col_last_modified"}}</span><span class="sort-indicator"></span></th>
         </tr>
