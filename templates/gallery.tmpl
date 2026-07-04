@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html><html lang="{{.Locale}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,9 +14,9 @@
   <script>
     (function() {
       try {
-        var t = localStorage.getItem('gallery-theme');
-        if (t === 'light' || t === 'dark') {
-          document.documentElement.setAttribute('data-theme', t);
+        var savedTheme = localStorage.getItem('gallery-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', savedTheme);
         }
       } catch (e) { /* localStorage unavailable */ }
     })();
@@ -2322,7 +2322,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      to the same URL with ?page_size=N appended (or removed
      for "all"). The current selection is shown as selected. -->
   <span>·</span>
-  <span>Show</span>
+  <span>{{t "page_show"}}</span>
   <form method="get" action="" class="page-size-form">
     {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
     {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
@@ -2349,7 +2349,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{end}}
     </select>
   </form>
-  <span>Per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
+  <span>{{t "page_per_page"}}</span>{{if gt .TotalPages 1}}<span>·</span><span>{{t "page_of" .Page .TotalPages}}</span>{{end}}
         </div>
       </div>
       <!-- Per user request 2026-06-18: removed the top-right
@@ -2358,14 +2358,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            Name/Type/Modified/Size buttons), so the sort order is
            still visible there. The theme toggle moves to the top-
            right (where the sort indicator was). -->
-      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
-        <button type="button" data-theme="auto" aria-pressed="false" aria-label="Auto (follow system preference)" title="Auto">⚙</button>
-        <button type="button" data-theme="light" aria-pressed="false" aria-label="Light mode" title="Light">☀</button>
-        <button type="button" data-theme="dark" aria-pressed="false" aria-label="Dark mode" title="Dark">🌙</button>
+      <div class="theme-toggle" role="radiogroup" aria-label="{{t "theme"}}">
+        <button type="button" data-theme="auto" aria-pressed="false" aria-label="{{t "theme_auto"}}" title="{{t "theme_short_auto"}}">⚙</button>
+        <button type="button" data-theme="light" aria-pressed="false" aria-label="{{t "theme_light"}}" title="{{t "theme_short_light"}}">☀</button>
+        <button type="button" data-theme="dark" aria-pressed="false" aria-label="{{t "theme_dark"}}" title="{{t "theme_short_dark"}}">🌙</button>
       </div>
     </div>
     {{if gt (len .Breadcrumb) 0}}
-    <nav class="breadcrumb" aria-label="Directory path">
+    <nav class="breadcrumb" aria-label="{{t "breadcrumb_aria"}}">
       {{range $i, $seg := .Breadcrumb}}
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
@@ -2377,11 +2377,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     <div class="sort-bar">
       {{$q := .Query}}
-      <span class="sort-label">Sort Media By</span>
-      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <span class="sort-label">{{t "sort_label"}}</span>
+      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">{{t "sort_name"}}<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">{{t "sort_type"}}<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">{{t "sort_modified"}}<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">{{t "sort_size"}}<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
     {{/* Per user request 2026-06-20 (Phase 3): breadcrumb
        above the sort-bar, above the media section. Each
@@ -2412,7 +2412,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              layout is unchanged (the .type-filter-group is a
              flex row like the original .filter-row contents). */}}
         <div class="type-filter-group">
-        <span class="filter-label">File Type Filter</span>
+        <span class="filter-label">{{t "filter_label"}}</span>
 
         {{if gt .FilterImageOptions.Total 0}}
         <details class="filter-dropdown">
@@ -2471,7 +2471,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         </details>
         {{end}}
 
-        <button type="submit" class="filter-apply">Filter</button>
+        <button type="submit" class="filter-apply">{{t "filter_apply"}}</button>
         {{/* Per user request 2026-06-30: moved here from
              before the filter dropdowns. Renamed from "All"
              to "Reset" (per user clarification: same function
@@ -2483,7 +2483,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              it makes sense to highlight it as the "current"
              state when active). */}}
         <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
-           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">Reset</a>
+           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">{{t "search_reset"}}</a>
         </div>
         {{- /* Search box + button on the right of the filter row.
             Client-side: as the user types, JS hides non-matching
@@ -2493,11 +2493,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <div class="search-controls">
           <input type="search" name="q" class="search-input"
             data-search-match="{{.SearchMatch}}"
-            placeholder="Search filenames…"
+            placeholder="{{t "search_placeholder"}}"
             value="{{.SearchQuery}}"
             autocomplete="off"
-            aria-label="Search filenames in this directory">
-          <button type="submit" class="search-button">Search All</button>
+            aria-label="{{t "search_aria"}}">
+          <button type="submit" class="search-button">{{t "search_button"}}</button>
           {{/* Per user request 2026-06-28: a Reset button next
                to "Search all" that clears the search input
                AND the ?q= URL parameter (if one is present).
@@ -2509,7 +2509,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                handler is in the inline JS at the bottom of
                the page (searchReset IIFE). */}}
           <button type="button" class="search-reset-button"
-            aria-label="Clear search and reset filter">Reset</button>
+            aria-label="{{t "reset_aria"}}">{{t "search_reset"}}</button>
         </div>
       </div>
     </form>
@@ -2542,18 +2542,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     {{end}}
     {{if .HasNext}}
-      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">{{t "page_next"}} →</a>
     {{else}}
-      <span class="page-btn disabled">Next →</span>
+      <span class="page-btn disabled">{{t "page_next"}} →</span>
     {{end}}
     </nav>
 
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
-      <span>Directories ({{len .Subdirs}}{{if .Up}} <em>+ Parent Directory</em>{{end}})</span>
+      <span>{{if .Up}}{{t "dirs_header_with_parent" (len .Subdirs)}}{{else}}{{t "dirs_header" (len .Subdirs)}}{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
+      <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="{{t "section_show_hide_dirs"}}">−</button>
     </h2>
     <div class="section-body" id="dirs-body">
     <!-- Per user request 2026-06-19: directory chips replaced
@@ -2600,11 +2600,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                inside the <th> shows ▲/▼ for the active sort.
                The default sort for the dirs table is
                "name asc" (matches the server-side order). -->
-          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>{{t "col_name"}}</span><span class="sort-indicator"></span></th>
           <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Files</span><span class="sort-indicator"></span></th>
           <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Dirs</span><span class="sort-indicator"></span></th>
-          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
-          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Last Modified</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>{{t "col_size"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>{{t "col_last_modified"}}</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -2627,9 +2627,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{if .OtherFiles}}
   <section class="others-section" data-section="others">
     <h2 class="section-heading">
-      <span>Other files ({{len .OtherFiles}})</span>
+      <span>{{t "others_header" (len .OtherFiles)}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="Show/hide other files">−</button>
+      <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="{{t "section_show_hide_others"}}">−</button>
     </h2>
     <div class="section-body" id="others-body">
     <!-- Per user request 2026-06-20: same full-width table format
@@ -2644,10 +2644,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                the initial direction. The default for the
                others table is "date desc" (matches the
                server-side mtime-desc default). -->
-          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
-          <th class="col-type sortable" data-sort-key="type" data-default-order="asc"><span>Type</span><span class="sort-indicator"></span></th>
-          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
-          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Last Modified</span><span class="sort-indicator"></span></th>
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>{{t "col_name"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-type sortable" data-sort-key="type" data-default-order="asc"><span>{{t "col_type"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>{{t "col_size"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>{{t "col_last_modified"}}</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -2730,7 +2730,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       */ -}}
       <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
+      <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="{{t "section_show_hide_media"}}">−</button>
     </h2>
     <div class="section-body" id="media-body">
     <div class="media-grid">
@@ -2753,14 +2753,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{end}}
       {{end}}
       {{if .HasNext}}
-        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">{{t "page_next"}} →</a>
       {{else}}
-        <span class="page-btn disabled">Next →</span>
+        <span class="page-btn disabled">{{t "page_next"}} →</span>
       {{end}}
     </nav>
     </div>
     {{if eq (len .Images) 0}}
-    <p class="empty">No images match the current filter.</p>
+    <p class="empty">{{t "empty_filter"}}</p>
     {{end}}
   </section>
 </main>
@@ -2785,8 +2785,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        scrolled at least one full screen of content)
      - On click: smooth scroll to the top of the page
        (window.scrollTo with behavior: 'smooth') -->
-<a href="#top" class="back-to-top" id="back-to-top" aria-label="Back to top">
-  <span class="back-to-top-text">Back To Top</span>
+<a href="#top" class="back-to-top" id="back-to-top" aria-label="{{t "back_to_top_aria"}}">
+  <span class="back-to-top-text">{{t "back_to_top"}}</span>
   <span class="back-to-top-pct" aria-hidden="true">0%</span>
 </a>
 <script>
@@ -3371,12 +3371,49 @@ input.addEventListener('input', function() {
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
   overlay.innerHTML =
+  // Per user request 2026-07-04: client-side translation
+  // helper. Looks up a key in the inline TRANSLATIONS map
+  // (rendered server-side by the Go template, see TRANSLATIONS below).
+  // Falls back to the key itself if not found. The function
+  // name is short because the JS strings inline it many times.
+  // Per user request 2026-07-04: client-side translations
+  // (used by t() below). Rendered server-side by the Go
+  // template. Only contains the keys that appear inside
+  // JS strings (lightbox labels, EXIF/META rows, etc.).
+  // Page-level strings use the Go { {t} } function directly
+  // so they don't need to be in this map.
+  var TRANSLATIONS = {
+    lightbox_open_aria: '{{t "lightbox_open_aria"}}',
+    lightbox_open_title: '{{t "lightbox_open_title"}}',
+    lightbox_close_aria: '{{t "lightbox_close_aria"}}',
+    lightbox_close_title: '{{t "lightbox_close_title"}}',
+    page_prev: '{{t "page_prev"}}',
+    page_next: '{{t "page_next"}}',
+    exif_camera: '{{t "exif_camera"}}',
+    exif_lens: '{{t "exif_lens"}}',
+    exif_date: '{{t "exif_date"}}',
+    exif_exposure: '{{t "exif_exposure"}}',
+    meta_duration: '{{t "meta_duration"}}',
+    meta_container: '{{t "meta_container"}}',
+    meta_video: '{{t "meta_video"}}',
+    meta_audio: '{{t "meta_audio"}}',
+    meta_bitrate: '{{t "meta_bitrate"}}',
+    meta_framerate: '{{t "meta_framerate"}}',
+  };
+
+  function t(key) {
+    if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
+      return TRANSLATIONS[key];
+    }
+    return key;
+  }
+
     '<div class="lb-controls">' +
-      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
-      '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
+      '<button class="lb-btn lb-open" aria-label="' + t('lightbox_open_aria') + '" title="' + t('lightbox_open_title') + '">↗</button>' +
+      '<button class="lb-btn lb-close" aria-label="' + t('lightbox_close_aria') + '" title="' + t('lightbox_close_title') + '">✕</button>' +
     '</div>' +
-    '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
-    '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
+    '<button class="lb-btn lb-prev" aria-label="' + t('page_prev') + '">‹</button>' +
+    '<button class="lb-btn lb-next" aria-label="' + t('page_next') + '">›</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>' +
     // Per user request 2026-07-02: the EXIF panel is
@@ -3387,13 +3424,13 @@ input.addEventListener('input', function() {
     // expanded state is stored in localStorage so the
     // user doesn't have to re-pick on every visit.
     '<div class="lb-exif" hidden>' +
-      '<div class="lb-exif-header" data-lb-panel="exif" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">EXIF</div>' +
+      '<div class="lb-exif-header" data-lb-panel="exif" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "exif_label"}}</div>' +
       '<div class="lb-exif-body">' +
         '<table class="lb-exif-table">' +
-          '<tr><td class="lb-exif-label">Camera</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
-          '<tr><td class="lb-exif-label">Lens</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
-          '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
-          '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_camera') + '</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_lens') + '</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_date') + '</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_exposure') + '</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
         '</table>' +
       '</div>' +
     '</div>' +
@@ -3405,15 +3442,15 @@ input.addEventListener('input', function() {
     // to the EXIF panel — collapsible header + body.
     // Same localStorage pattern (gallery-lb-video-meta-collapsed).
     '<div class="lb-video-meta" hidden>' +
-      '<div class="lb-exif-header" data-lb-panel="video-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">META</div>' +
+      '<div class="lb-exif-header" data-lb-panel="video-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "meta_label"}}</div>' +
       '<div class="lb-exif-body">' +
         '<table class="lb-exif-table">' +
-          '<tr><td class="lb-exif-label">Duration</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
-          '<tr><td class="lb-exif-label">Container</td><td class="lb-exif-val" data-video="container"></td></tr>' +
-          '<tr><td class="lb-exif-label">Video</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
-          '<tr><td class="lb-exif-label">Audio</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
-          '<tr><td class="lb-exif-label">Bitrate</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
-          '<tr><td class="lb-exif-label">Framerate</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_duration') + '</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_container') + '</td><td class="lb-exif-val" data-video="container"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_video') + '</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_audio') + '</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_bitrate') + '</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_framerate') + '</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
         '</table>' +
       '</div>' +
     '</div>';

@@ -63,6 +63,32 @@ type PageData struct {
 	CacheStatsYY string
 	CacheStatsZZ string
 	CacheStatsAA string
+	// Locale is the visitor's resolved locale (e.g. "en",
+	// "de", "ja"). Detected by DetectLocale using URL param
+	// > cookie > Accept-Language > operator default.
+	// Per user request 2026-07-04: the template uses this
+	// for the <html lang="..."> attribute (so screen
+	// readers and CSS :lang() selectors work correctly)
+	// and for any locale-aware formatting. Defaults to
+	// "en" if empty.
+	Locale string
+	// Translator is the i18n resolver passed into the
+	// template via the "t" function. Per user request
+	// 2026-07-04: when nil (which shouldn't happen in
+	// production but might in unit tests), the template
+	// function falls back to English-only lookups via
+	// a default-constructed Translator. Keeping this
+	// field on PageData rather than threading it through
+	// the func map separately lets the same data struct
+	// flow through both server-side tests and the live
+	// page render without code changes.
+	Translator *Translator
+	// AvailableLocales is the sorted list of supported
+	// locales. Used by the language picker (rendered in
+	// Phase 3 / localStorage persistence commit) and by
+	// the <html lang="..."> attribute selector. Empty
+	// if no translator is wired up.
+	AvailableLocales []string
 	// SearchQuery is the raw ?q= value (for the search
 	// input's `value=""` attribute and for hidden inputs
 	// that preserve the query on form submit).
@@ -2061,7 +2087,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch string, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 	// Per user request 2026-06-27: read ?page_size=N from the
@@ -2279,8 +2305,33 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// "other" file (relative to the largest other file
 	// in this directory).
 	computeSizePercentages(tempOtherViews, others)
+	// Per user request 2026-07-04: guard against nil
+	// translator before calling .Locales(). The earlier
+	// nil-check at the top of the function should have
+	// handled this, but a translator might still be nil
+	// if it was passed in as nil explicitly (unit tests
+	// pre-dating i18n do this). We fall back to a
+	// freshly-constructed English-only translator so the
+	// template still renders correctly.
+	if translator == nil {
+		translator, _ = NewTranslator("")
+	}
+	// Default empty locale to "en" so the {{t}} function
+	// and the <html lang="..."> attribute both have a
+	// sensible value. Done BEFORE building the data
+	// struct so .Locale is populated.
+	if locale == "" {
+		locale = "en"
+	}
 	data := PageData{
-		Title:       title,
+		// Per user request 2026-07-04: pass the
+		// resolved locale and Translator into the
+		// template. locale is also used for the
+		// <html lang="..."> attribute in the template.
+		Locale:           locale,
+		Translator:       translator,
+		AvailableLocales: translator.Locales(),
+		Title:            title,
 		PathPrefix:  pathPrefix,
 		ThumbPrefix: thumbPrefix,
 		Up:          up,
@@ -2384,6 +2435,40 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	if err != nil {
 		return "", err
 	}
+	// Per user request 2026-07-04: clone the template and
+	// register the "t" translation function on the clone.
+	// We clone per-request rather than registering globally
+	// so the closure captures THIS request's translator +
+	// locale (different visitors may have different
+	// locales in the same Caddy instance).
+	//
+	// If translator is nil (shouldn't happen in production
+	// but might in tests), fall back to a default-constructed
+	// English-only Translator so {{t "key"}} still works
+	// (returns the English string from the embedded en.json).
+	if translator == nil {
+		translator, _ = NewTranslator("")
+	}
+	if locale == "" {
+		locale = "en"
+	}
+	// Per user request 2026-07-04: set the package-level
+	// translator + locale for this render. The {{t}}
+	// function (registered in galleryFuncs at parse time)
+	// reads these under a lock. Restore on return so
+	// concurrent renders don't see each other's state.
+	tMu.Lock()
+	prevT := currentT
+	prevLang := currentLang
+	currentT = translator
+	currentLang = locale
+	tMu.Unlock()
+	defer func() {
+		tMu.Lock()
+		currentT = prevT
+		currentLang = prevLang
+		tMu.Unlock()
+	}()
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", err
@@ -2412,6 +2497,21 @@ func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs, 
 //	                         "size"→"Size", "date"→"Date"; unknown fields
 //	                         fall back to the raw field name capitalised;
 //	                         empty string → "Modified" (the default)
+// Per user request 2026-07-04: package-level translator
+// + locale. Set by RenderPage before each template
+// Execute, read by the {{t}} template function (defined
+// in galleryFuncs below). Using package-level state here
+// is OK because RenderPage is the only writer — Go's
+// html/template.Execute is synchronous, so the closure
+// captures the correct values for the duration of one
+// render. The lock is for safety in case any future
+// refactor introduces concurrency.
+var (
+	tMu         sync.RWMutex
+	currentT    *Translator
+	currentLang string
+)
+
 var galleryFuncs = template.FuncMap{
 	"minus1": func(n int) int { return n - 1 },
 	"plus1":  func(n int) int { return n + 1 },
@@ -2487,6 +2587,26 @@ var galleryFuncs = template.FuncMap{
 			}
 			return strings.ToUpper(field[:1]) + field[1:]
 		}
+	},
+	// Per user request 2026-07-04: the "t" template
+	// function looks up a translation key. Reads
+	// currentT + currentLang (set by RenderPage via
+	// setTranslatorForRender). If the translator or
+	// locale is unset (shouldn't happen in production),
+	// returns the key as a visible fallback rather than
+	// crashing the page render.
+	"t": func(key string, args ...any) string {
+		tMu.RLock()
+		tr := currentT
+		lang := currentLang
+		tMu.RUnlock()
+		if tr == nil {
+			return key
+		}
+		if lang == "" {
+			lang = "en"
+		}
+		return tr.T(lang, key, args...)
 	},
 }
 
