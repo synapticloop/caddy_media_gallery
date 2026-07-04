@@ -108,9 +108,20 @@ type Gallery struct {
 	// file_server, which 404s since no _thumbs/ dir exists).
 	// Tradeoffs: no thumb cache, no CPU cost, but the browser
 	// downloads the full image per tile (bigger page payload, slower
-	// load on dirs of large photos). Useful for small galleries
-	// where the operator doesn't want to maintain a thumb cache.
+	// load on dirs of large photos).
+	//
+	// Per user request 2026-07-02: NoThumbs now defaults to
+	// TRUE so the gallery behaves like caddy's stock
+	// file_server browse by default (no on-the-fly thumb
+	// generation, no thumb cache, no ffmpeg CPU overhead).
+	// Operators who want the rich thumbnail UX opt in
+	// via `no_thumbs false` in the Caddyfile.
 	NoThumbs bool
+	// NoThumbsSet is true when the operator explicitly set
+	// no_thumbs in the Caddyfile. Used by Provision to
+	// distinguish "explicit false" (preserve the false)
+	// from "no directive" (apply the default true).
+	NoThumbsSet bool
 
 	// NoVideoThumbs disables the on-demand WebP thumbnail generation
 	// for VIDEO files (extracted from the first frame via ffmpeg).
@@ -126,26 +137,78 @@ type Gallery struct {
 	//             (re-enable).
 	NoVideoThumbs bool
 
-	// NoExif disables reading EXIF metadata from image files.
-	// When true, the scanner skips the readExif call entirely
-	// (no I/O, no parsing) — FileInfo.Exif is left nil for
-	// all files. The card overlay then shows no "EXIF" pill
-	// (the pill only renders when Exif is non-nil) and the
-	// lightbox shows no EXIF panel. When false (the default),
-	// EXIF is read for every image file at scan time (EAGER
-	// loading — see scanner.go and exif.go).
+	// NoExif controls whether EXIF metadata is read from
+	// image files. Per user request 2026-07-02: defaults
+	// to TRUE so the gallery behaves like caddy's stock
+	// file_server browse (no extra dependencies / I/O
+	// required by default). When true (the default), the
+	// scanner skips the readExif call entirely (no I/O,
+	// no parsing) — FileInfo.Exif is left nil for all
+	// files. The card overlay shows no "EXIF" pill (the pill
+	// only renders when Exif is non-nil) and the lightbox
+	// shows no EXIF panel. When false, EXIF is read for
+	// every image file at scan time (EAGER loading — see
+	// scanner.go and exif.go).
 	//
-	// Per user request 2026-06-29: the Caddyfile operator can
-	// disable EXIF entirely if they don't want the camera
-	// metadata surfaced in the gallery. Useful for:
-	//   - Privacy-sensitive deployments (no camera info exposed)
-	//   - Performance: skip the per-image EXIF read (~1-5ms each)
-	//   - Galleries that only need dimensions / thumbnails
-	// Note that EXIF does NOT include GPS by default (see
-	// exif.go — GPS is never extracted), so this is mainly
-	// for the camera/lens/exposure metadata.
-	// Caddyfile: no_exif (no arg → true) or no_exif false (re-enable).
+	// Operators who want the rich EXIF metadata UX can
+	// opt back in via the Caddyfile:
+	//   no_exif false    # re-enable EXIF reading
+	//
+	// The "no_exif" directive is now a misnomer (since it's
+	// the default), but we keep the name for backward
+	// compatibility — operators who already set "no_exif"
+	// in their Caddyfile see no change. The presence of
+	// the directive with no arg still means "disable" (i.e.
+	// set to true), and the operator can use "no_exif false"
+	// to opt back in to reading EXIF.
+	//
+	// Useful for enabling EXIF:
+	//   - Metadata-rich photo galleries (camera/lens info)
+	//   - Any operator who wants the EXIF pill on cards
+	//   - Note: EXIF does NOT include GPS by default (see
+	//     exif.go — GPS is never extracted).
+	// Caddyfile: no_exif (no arg → true) or no_exif false
+	// (re-enable EXIF reading).
 	NoExif bool
+	// NoExifSet is true when the operator explicitly set
+	// no_exif in the Caddyfile (including with value
+	// "false"). Used by Provision to distinguish
+	// "operator set to true" / "operator set to false" /
+	// "operator didn't set (use the default true)". The
+	// Caddyfile parser sets this flag whenever the
+	// directive appears, even with value "false".
+	NoExifSet bool
+	// Per user request 2026-07-02: NoMeta controls whether
+	// video metadata is read (duration, container, codecs,
+	// bitrate, framerate extracted via ffprobe). Defaults
+	// to TRUE so the gallery behaves like caddy's stock
+	// file_server browse (no extra ffprobe dependency
+	// required by default). This is a separate flag from
+	// NoExif — NoExif affects image EXIF; NoMeta affects
+	// video metadata. When true (the default), the scanner
+	// skips the readVideoMetaCached call entirely (no
+	// ffprobe subprocess, no .vmeta sidecar writes, no
+	// parsing). FileInfo.VideoMeta is left nil for all
+	// files, so the lightbox META panel stays hidden and
+	// the "META" pill on video cards is not rendered.
+	//
+	// Operators who want the rich video metadata UX can
+	// opt back in via the Caddyfile:
+	//   no_meta false    # re-enable video metadata extraction
+	//
+	// As with NoExif, the directive name "no_meta" is a
+	// bit of a misnomer since it now defaults to true, but
+	// we keep the name for backward compatibility.
+	// Caddyfile: no_meta (no arg → true) or no_meta false
+	// (re-enable video metadata extraction).
+	NoMeta bool
+	// NoMetaSet is true when the operator explicitly set
+	// no_meta in the Caddyfile. Used by Provision to
+	// distinguish "operator set to true" / "operator set
+	// to false" / "operator didn't set (use the default
+	// true)". The Caddyfile parser sets this flag whenever
+	// the directive appears, even with value "false".
+	NoMetaSet bool
 
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
@@ -274,9 +337,35 @@ type Gallery struct {
 	// Caddyfile nor JSON sets it) is 1024 MB.
 	MaxCacheSizeSet bool
 
+	// DefaultLanguage is the fallback locale when neither
+	// the URL parameter, cookie, nor Accept-Language header
+	// produces a match. Per user request 2026-07-04:
+	// operators can set this in the Caddyfile via
+	//   default_language = "de"
+	// Empty string falls back to "en". Validated at
+	// Provision time (must match a known locale or be empty).
+	// Per user request 2026-07-04: visitors can ALWAYS
+	// override this with ?lang=<locale> or the cookie,
+	// regardless of what the operator sets here.
+	DefaultLanguage string
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache
+
+	// translator is the per-Gallery i18n resolver. Built
+	// at Provision from the embedded lang/*.json files
+	// (under //go:embed lang/*.json) plus any disk-override
+	// files at $GALLERY_TEMPLATES_DIR/lang/<locale>.json.
+	// Read-only after Provision — no per-request rebuild.
+	// Excluded from JSON config (runtime state only).
+	translator *Translator
+	// translatorDiskDir is the directory scanned for
+	// operator-supplied translation overrides. Set at
+	// Provision (= $GALLERY_TEMPLATES_DIR/lang). The
+	// translator's mtime-based cache means we don't
+	// re-stat on every request.
+	translatorDiskDir string
 	// cacheSweepStop signals the background cache eviction
 	// goroutine to stop. Closed by Cleanup so the goroutine
 	// exits cleanly when Caddy shuts down. nil if no sweep
@@ -361,6 +450,29 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// dropdown if explicitly listed.
 	if len(g.PageSizes) == 0 {
 		g.PageSizes = []string{"60", "30", "120", "all"}
+	}
+	// Per user request 2026-07-02: NoExif and NoMeta now
+	// default to true (so the gallery behaves more like
+	// caddy's stock file_server browse — no metadata
+	// reads by default, no extra dependencies required
+	// to render the gallery). Operators who want the
+	// rich metadata UX can opt back in via:
+	//   no_exif false     # re-enable EXIF reading
+	//   no_meta false     # re-enable video metadata
+	// Track whether the operator explicitly set the
+	// directive (vs leaving it unset to take the default).
+	// The unmarshaler sets g.NoExifSet / g.NoMetaSet=true
+	// whenever the directive appears, so we know to
+	// preserve the explicit value (rather than clobbering
+	// it with the default).
+	if !g.NoExifSet {
+		g.NoExif = true
+	}
+	if !g.NoMetaSet {
+		g.NoMeta = true
+	}
+	if !g.NoThumbsSet {
+		g.NoThumbs = true
 	}
 	// The default PageSize is the first item in the
 	// operator's DECLARED list (NOT the sorted list). So
@@ -519,7 +631,49 @@ func (g *Gallery) Provision(caddy.Context) error {
 	g.cacheStatsRefreshStop = make(chan struct{})
 	go g.cacheStatsRefreshLoop(g.CacheStatsTracker, g.cacheStatsRefreshStop)
 
+	// Per user request 2026-07-04: initialise the i18n
+	// Translator. The disk-override dir is
+	// $GALLERY_TEMPLATES_DIR/lang (default
+	// /etc/caddy/gallery-templates/lang). Operators drop
+	// additional <locale>.json files there for new
+	// languages — no rebuild required.
+	//
+	// We default the operator's DefaultLanguage to "en"
+	// if empty, so DetectLocale's "5. operator default"
+	// branch always has a sane fallback. Validating that
+	// the configured locale exists is done lazily
+	// (DetectLocale falls back to "en" if not), so an
+	// operator typo ("default_language = "frr"") silently
+	// degrades to English rather than failing to start.
+	if g.DefaultLanguage == "" {
+		g.DefaultLanguage = "en"
+	}
+	langDiskDir := filepath.Join(galleryTemplatesDir(), "lang")
+	g.translatorDiskDir = langDiskDir
+	tr, err := NewTranslator(langDiskDir)
+	if err != nil {
+		// Don't fail Caddy startup on a translation
+		// load error — fall back to English-only and
+		// log a warning. Operators can fix and restart.
+		fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n init failed: %v (falling back to English only)\n", err)
+		tr, _ = NewTranslator("")
+	}
+	g.translator = tr
+	fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n ready (locales: %s, default: %s)\n", strings.Join(tr.Locales(), ","), g.DefaultLanguage)
+
 	return nil
+}
+
+// galleryTemplatesDir returns the on-disk templates
+// directory used by the gallery. Mirrors the logic in
+// writeBundledTemplates (render.go) so the i18n override
+// directory lives next to the templates.
+func galleryTemplatesDir() string {
+	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
+	if dir == "" {
+		dir = "/etc/caddy/gallery-templates"
+	}
+	return dir
 }
 
 // cacheSweepLoop runs evictIfOver on a 30-minute ticker.
@@ -684,7 +838,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.thumbCacheDir(), g.ThumbFormat)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.NoMeta, g.thumbCacheDir(), g.ThumbFormat)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
@@ -739,6 +893,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		ImageExts:    g.imageExtsMap,
 		VideoExts:    g.videoExtsMap,
 		NoExif:       g.NoExif,
+		NoMeta:       g.NoMeta,
 		ThumbCacheDir: g.thumbCacheDir(),
 		ThumbFormat:  g.ThumbFormat,
 	}
@@ -788,7 +943,13 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// lock contention with the eviction goroutine).
 	stats := g.CacheStatsTracker.load()
 	cacheXX, cacheYY, cacheZZ, cacheAA := formatCacheStatsFooter(stats)
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, cacheXX, cacheYY, cacheZZ, cacheAA)
+	// Per user request 2026-07-04: detect the visitor's
+	// locale using the priority chain documented in i18n.go.
+	// URL ?lang= > cookie > Accept-Language header >
+	// operator's default_language > "en". This is computed
+	// on every request (cheap — no I/O).
+	locale := DetectLocale(r, g.translator.Locales(), g.DefaultLanguage)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -820,14 +981,21 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if d.NextArg() {
 					return d.ArgErr()
 				}
-			case "no_thumbs":
-				g.NoThumbs = true
-				if d.NextArg() {
+				case "no_thumbs":
+			// Per user request 2026-07-02: NoThumbs now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no thumb generation, no thumb cache, no
+			// CPU overhead). Operators who want the rich
+			// thumbnail UX opt in via `no_thumbs false`.
+			g.NoThumbs = true
+			if d.NextArg() {
 					if d.Val() != "false" {
-						return d.ArgErr()
-					}
-					g.NoThumbs = false
+					return d.ArgErr()
 				}
+					g.NoThumbs = false
+			}
+			g.NoThumbsSet = true
 			case "no_video_thumbs":
 				g.NoVideoThumbs = true
 				if d.NextArg() {
@@ -844,9 +1012,16 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// no parsing). The EXIF pill on cards and the
 			// EXIF panel in the lightbox are skipped
 			// automatically because they only render
-			// when FileInfo.Exif is non-nil. Usage:
-			//   no_exif           # disable
-			//   no_exif false     # re-enable
+			// when FileInfo.Exif is non-nil.
+			//
+			// Per user request 2026-07-02: NoExif now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no metadata reads, no extra dependencies).
+			// Operators who want the rich EXIF UX opt in
+			// via `no_exif false`. Usage:
+			//   no_exif           # disable (default)
+			//   no_exif false     # re-enable EXIF reading
 			g.NoExif = true
 			if d.NextArg() {
 				if d.Val() != "false" {
@@ -854,8 +1029,69 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				g.NoExif = false
 			}
+			// Mark that the operator explicitly set this
+			// directive — used by Provision to distinguish
+			// "explicit false" (preserve the false) from
+			// "no directive" (apply the default true).
+			g.NoExifSet = true
 
-			case "page_size":
+		case "no_meta":
+			// Per user request 2026-07-02: operator can
+			// disable video metadata extraction entirely
+			// (duration, container, codecs, bitrate,
+			// framerate via ffprobe). When true, the
+			// scanner skips the readVideoMetaCached call
+			// entirely (no ffprobe subprocess, no .vmeta
+			// sidecar writes, no parsing). The META pill
+			// on video cards and the META panel in the
+			// lightbox are skipped automatically because
+			// they only render when FileInfo.VideoMeta is
+			// non-nil. This is a SEPARATE flag from
+			// no_exif — no_exif affects image EXIF,
+			// no_meta affects video metadata.
+			//
+			// Per user request 2026-07-02: NoMeta now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no extra ffprobe dependency required).
+			// Operators who want the rich video metadata
+			// UX opt in via `no_meta false`. Usage:
+			//   no_meta           # disable (default)
+			//   no_meta false     # re-enable video metadata
+			g.NoMeta = true
+			if d.NextArg() {
+				if d.Val() != "false" {
+					return d.ArgErr()
+				}
+				g.NoMeta = false
+			}
+			// Mark that the operator explicitly set this
+			// directive — used by Provision to distinguish
+			// "explicit false" (preserve the false) from
+			// "no directive" (apply the default true).
+			g.NoMetaSet = true
+
+		case "default_language":
+			// Per user request 2026-07-04: the operator can
+			// set a fallback locale that the gallery uses
+			// when neither the URL parameter, cookie, nor
+			// Accept-Language header produces a match.
+			// Visitors can ALWAYS override this with
+			// ?lang=<locale> or the gallery-language cookie,
+			// regardless of what the operator sets here.
+			//
+			// Usage:
+			//   default_language = "de"
+			//   default_language fr   # also accepts no quotes
+			//
+			// Empty value ("default_language = """) clears
+			// the override (falls back to "en" in Provision).
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+			locale := strings.ToLower(strings.TrimSpace(d.Val()))
+			g.DefaultLanguage = locale
+		case "page_size":
 				// Per user request 2026-06-27: the operator
 				// configures the per-page dropdown options via
 				// `page_size 60 30 120 all` (space-separated).

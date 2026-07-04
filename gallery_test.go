@@ -165,6 +165,56 @@ func TestUnmarshalCaddyfile_NoExif(t *testing.T) {
 	})
 }
 
+// TestUnmarshalCaddyfile_NoMeta covers the `no_meta` Caddyfile
+// directive. Per user request 2026-07-02: no_meta is a SEPARATE
+// flag from no_exif — it only affects video metadata extraction
+// (via ffprobe), not image EXIF. Accepts:
+//   - `no_meta` (no arg) → true
+//   - `no_meta false`    → false
+//   - anything else → error
+func TestUnmarshalCaddyfile_NoMeta(t *testing.T) {
+	t.Run("no_meta (no arg) → true", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_meta\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoMeta {
+			t.Error("expected NoMeta=true after `no_meta` directive")
+		}
+	})
+	t.Run("no_meta false → false", func(t *testing.T) {
+		g := Gallery{NoMeta: true}
+		d := caddyfile.NewTestDispenser("media_gallery { no_meta false }")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.NoMeta {
+			t.Error("expected NoMeta=false after `no_meta false` directive")
+		}
+	})
+	t.Run("no_meta with bogus arg → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery { no_meta off }")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `no_meta off` (must be `false`, not `off`)")
+		}
+	})
+	t.Run("no_exif + no_meta both set", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_exif\n  no_meta\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoExif {
+			t.Error("expected NoExif=true")
+		}
+		if !g.NoMeta {
+			t.Error("expected NoMeta=true")
+		}
+	})
+}
+
 func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	t.Run("no_video_thumbs (no arg) → true", func(t *testing.T) {
 		g := Gallery{}
@@ -344,8 +394,7 @@ func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", true, false, 0, nil, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", true, false, 0, nil, files, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,8 +414,7 @@ func TestRenderPage_WithThumbs_ThumbURLUsed(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 0, nil, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, files, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -655,8 +703,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 		{Name: "g.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// pageSize=3 → 7 images / 3 per page = 3 pages, "Page 1 of 3"
-	html, err := RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 3, nil, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 3, nil, files, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,8 +715,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	// Per user request 2026-07-01: the pagination nav IS shown
 	// even when all items fit on one page — with the prev/next
 	// buttons greyed out and the single page number visible.
-	html, err = RenderPage(
-		"test", "./", "./_thumbs/", "", "", false, false, 0, nil, files, nil, nil, nil, "", "", "substring", "00", "00", "00", "00")
+	html, err = RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, nil, files, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1025,5 +1071,119 @@ func TestProvision_DefaultsWhenNoCustomExtTypes(t *testing.T) {
 		if !g.videoExtsMap[ext] {
 			t.Errorf("expected default videoExtsMap[%q] = true, got false", ext)
 		}
+	}
+}
+
+// TestProvision_NoExifDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoExif defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no metadata reads by
+// default, no extra dependencies). Operators who want the rich
+// EXIF metadata UX opt back in via `no_exif false` in the Caddyfile.
+func TestProvision_NoExifDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoExif {
+		t.Error("expected NoExif=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoExifFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoExif=true default by setting `no_exif false`.
+func TestProvision_NoExifFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_exif false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoExif {
+		t.Error("expected NoExif=false after `no_exif false` directive")
+	}
+}
+
+// TestProvision_NoMetaDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoMeta defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no extra ffprobe dependency
+// required by default). Operators who want the rich video metadata UX
+// opt back in via `no_meta false` in the Caddyfile.
+func TestProvision_NoMetaDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoMeta {
+		t.Error("expected NoMeta=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoMetaFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoMeta=true default by setting `no_meta false`.
+func TestProvision_NoMetaFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_meta false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoMeta {
+		t.Error("expected NoMeta=false after `no_meta false` directive")
+	}
+}
+
+// TestProvision_NoThumbsDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoThumbs defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no on-the-fly thumb
+// generation, no thumb cache, no ffmpeg CPU overhead). Operators
+// who want the rich thumbnail UX opt back in via `no_thumbs false`.
+func TestProvision_NoThumbsDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoThumbs {
+		t.Error("expected NoThumbs=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoThumbsFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoThumbs=true default by setting `no_thumbs false`.
+func TestProvision_NoThumbsFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_thumbs false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoThumbs {
+		t.Error("expected NoThumbs=false after `no_thumbs false` directive")
 	}
 }

@@ -9,7 +9,91 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 2026-07-04
+
+### ✨ Feature: internationalisation (i18n)
+
+Per user request 2026-07-04: added full internationalisation support. Visitors can now pick from 8 locales (English, German, Spanish, French, Japanese, Korean, Chinese, Portuguese). The selection persists in localStorage + cookie so visitors see their preferred language on every visit after the first reload.
+
+**What's translated:**
+
+- Header (title, status row, page size dropdown, filter labels)
+- Directories table headers (`# Files`, `# Dirs`)
+- Pagination controls (← Prev, Next →)
+- Show-pages dropdown (the "all" option)
+- Filter dropdown labels (Images / Videos / Other)
+- Media section header (Media (N - Showing X-Y) and Media (N - search 'q' - showing N of M))
+- Lightbox panel headers (EXIF / META)
+- Lightbox field labels (Camera, Lens, Date, etc.)
+- Language picker trigger + dropdown options
+
+**New Caddyfile directive:**
+
+- **`default_language <locale>`** — sets the default locale when the visitor hasn't yet specified one (via URL, cookie, or browser Accept-Language). Defaults to `en`.
+
+**Locale resolution priority chain** (per visitor request):
+
+1. `?lang=<locale>` URL parameter (highest)
+2. `gallery-language` cookie
+3. `localStorage["gallery-language"]`
+4. `Accept-Language` HTTP header
+5. `default_language` directive (from Caddyfile)
+6. Hardcoded `en` (lowest)
+
+**Visitor UX:**
+
+- Language picker is a `<details>`/`<summary>` dropdown in the header, left of the dark/light mode toggle. Click an option → navigates to `?lang=<locale>` → page reloads → JS writes to localStorage + cookie. After the first reload, all subsequent visits use the cookie automatically — no further reloads needed.
+
+**Adding a new language (operator):**
+
+Operators can add a new language without rebuilding Caddy:
+
+1. Drop a JSON file at `/etc/caddy/gallery-templates/lang/<locale>.json` with the same keys as `lang/en.json`
+2. Restart Caddy (or rely on the next request to pick it up)
+
+**Bundled locales:** `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt` — 8 files in the `lang/` directory, embedded into the binary via `//go:embed` and overridable on disk.
+
+**Implementation details:**
+
+- New `i18n.go` (~400 LOC): `Translator` struct, `T()`/`NativeName()`/`SelfName()` methods, `NewTranslator()` constructor (loads from embed + disk override), `DetectLocale()` for the priority chain, `ResolveLocale()` with q-factor matching for Accept-Language.
+- New `{{t "key"}}` template function for use in `gallery.tmpl` (registers `currentT` + `currentLang` package-level vars under a `tMu` RWMutex; RenderPage sets these on entry, restores via defer on return).
+- New package-level `tr()` Go helper for non-template code (e.g. `computeFilterGroups` building the filter dropdown labels).
+- JS `t()` helper + `TRANSLATIONS` map (server-rendered) for client-side translation of the lightbox panel headers, search header JS, etc.
+- 15 new unit tests + 3 new RenderPage tests + 3 new helper tests = **18 new tests, 450+ total pass**.
+- 11 visual test groups (Playwright Python) verifying the locale renders correctly in each of the 8 languages.
+
+See `docs/03h-feature-i18n.md` for the full architecture, locale resolution algorithm, and "adding a new language" walkthrough.
+
+---
+
 ## 2026-07-03
+
+### ✨ Feature: defaults aligned with `file_server browse`
+
+Per user request 2026-07-02: three configuration options now default to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no enrichment, no extra dependencies, no I/O beyond the directory scan):
+
+- **`no_exif`** (was `false`) — skip image EXIF reads by default (no exiftool / go-exif calls, no `.exif` sidecars, no EXIF pills on cards, no EXIF panel in lightbox). Operators who want EXIF reading opt in with `no_exif false`.
+- **`no_meta`** (was `false`) — skip video metadata reads by default (no ffprobe subprocess calls, no `.vmeta` sidecars, no META pills on cards, no META panel in lightbox). Operators who want video metadata enrichment opt in with `no_meta false`.
+- **`no_thumbs`** (was `false`) — skip thumbnail generation by default (no thumb cache, no ffmpeg CPU overhead, original file used as `<img src>`). Affects both images and videos. Operators who want rich thumbnails opt in with `no_thumbs false`.
+
+The directive names are now technically misnomers (since theyre the default), but theyre kept for backward compatibility — operators who already had `no_exif` or `no_thumbs` in their Caddyfile see no behavior change.
+
+To get the **full enriched UX** (EXIF pills + video metadata + thumbnails), set all three to `false`:
+
+```
+media_gallery {
+    no_exif false
+    no_meta false
+    no_thumbs false
+}
+```
+
+Implementation details:
+- Added `NoExifSet`, `NoMetaSet`, `NoThumbsSet` companion fields to the `Gallery` struct. The Caddyfile parser sets these flags whenever the corresponding directive appears. `Provision()` defaults the value to `true` if the `Set` flag is `false` (no directive in Caddyfile), but preserves the operators explicit value when they use `no_xxx false`.
+- Fixed a latent bug in `scanner.go` `enrichParallel` where the video metadata block did NOT check `!s.NoMeta` (it always ran). Now the production enrich path correctly skips video metadata when `no_meta=true`.
+- Fixed a latent bug in `scancache.go` `extSetsKey`: the function declared a `noMeta` parameter but never used it in the returned key. Now both `noExif` and `noMeta` are part of the cache key, so changing the `no_meta` flag invalidates the cache (otherwise old cache entries with `VideoMeta` populated would be returned for new requests where `no_meta=true`).
+- Updated `render.go` `buildFileView` for `KindVideo`: the video `ThumbURL` is now only set if BOTH `noThumbs` AND `noVideoThumbs` are `false`. Previously, `no_thumbs` didn't affect videos.
+- 6 new tests added for the new default behavior and the operator opt-in pattern.
 
 ### 🐛 Fix: broken Last Modified sort + Size sort didn't account for KB/MB/GB
 Two sort bugs in the directories and other-files tables:
@@ -27,6 +111,19 @@ Three rounds of refinement on the collapsible EXIF/META panel in the lightbox:
 
 ### 🐛 Fix: META panel positioned immediately on video open
 Previous fix (c52c5ff) waited for `loadedmetadata` before positioning, but until that event fired, the panel sat at the CSS fallback position (left: 0.5rem — the LEFT side of the lightbox). New approach: position IMMEDIATELY using the current bounding rect (poster-sized for videos), then re-position when `loadedmetadata` fires. If loadedmetadata never fires, the panel stays at the poster-sized position (better than the CSS fallback on the left).
+
+### ✏️ UI: rename "Sort By" to "Sort Media By"
+Per user spec: the sort label above the Name/Type/Modified/Size buttons is now "Sort Media By" (was "Sort By"). More descriptive — the sort applies to the media section, not the directories/other-files tables.
+
+### ✨ Feat: add no_meta Caddyfile directive
+Per user request 2026-07-02: a new `no_meta` directive that disables video metadata extraction (duration, container, codecs, bitrate, framerate via ffprobe). This is a SEPARATE flag from the existing `no_exif` directive — `no_exif` affects image EXIF, `no_meta` affects video metadata. Use case: large video directories where the operator doesn't need the per-video metadata enrichment (saves 50-100ms per video on first extraction). Both flags can be enabled independently. Caddyfile syntax mirrors `no_exif`:
+
+```
+media_gallery {
+    no_meta         # disable (default)
+    no_meta false   # re-enable
+}
+```
 
 ---
 

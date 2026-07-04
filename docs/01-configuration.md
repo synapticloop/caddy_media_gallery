@@ -20,26 +20,28 @@ hostname, no `admin` block needed for the bundled Caddyfile).
 
 The `media_gallery` directive accepts one inline option:
 
-| Subdirective        | Value                                       | Default                                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                           |
-|---------------------|---------------------------------------------|------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `template`          | file name, relative to the templates dir    | `gallery.tmpl`                                 | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot.                                                                                                                                                                                                                                                                                                         |
-| `path_prefix`       | URL prefix (e.g. `images`)                  | directory basename                             | URL mount prefix used in breadcrumb links. Defaults to the basename of the root directory if not set.                                                                                                                                                                                                                                                                                                                             |
-| `root_name`         | display name                                | `media root`                                   | Display name for the root breadcrumb segment.                                                                                                                                                                                                                                                                                                                                                                                     |
-| `image_types`       | space-separated extensions (no leading dot) | `jpg jpeg png gif webp`                        | File extensions the gallery treats as images. Case-insensitive. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, not the image grid) and shown with a 📄 icon. Operators who want to handle these formats (e.g. via external tooling) can opt in with `image_types .heic .avif .svg`.                  |
-| `video_types`       | space-separated extensions (no leading dot) | `mp4 webm m4v mov mkv avi ogv ogg`             | File extensions the gallery treats as videos.                                                                                                                                                                                                                                                                                                                                                                                     |
-| `sort`              | `mtime` / `name`                            | `mtime`                                        | Sort field for the image grid. `mtime` = newest first; `name` = case-insensitive alphabetical.                                                                                                                                                                                                                                                                                                                                    |
-| `page_size`         | integer &gt;= 1                             | `60` (or first item in `page_sizes`)           | Default per-page count. Deprecated: use `page_sizes` (list form) for the dropdown, which lets the visitor choose.                                                                                                                                                                                                                                                                                                                 |
-| `page_sizes`        | space-separated list (first = default)      | `60 30 120 all`                                | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown.                                                                                                                                                                                                                                                                                           |
-| `thumb_width`       | integer &gt;= 1                             | `320`                                          | Max width (px) of generated thumbnails.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `thumb_height`      | integer &gt;= 1                             | `320`                                          | Max height (px) of generated thumbnails.                                                                                                                                                                                                                                                                                                                                                                                          |
-| `thumb_format`      | `webp` / `png` / `jpeg` (or `jpg`)          | `webp`                                         | Output format for generated thumbnails.                                                                                                                                                                                                                                                                                                                                                                                           |
-| `thumb_ttl`         | integer (minutes) &gt;= 1                   | `1440` (24h)                                   | HTTP `Cache-Control: max-age` for thumb responses.                                                                                                                                                                                                                                                                                                                                                                                |
-| `cache_scan`        | integer (minutes) &gt;= 1                   | `1440` (24h)                                   | In-memory scan cache TTL. The scan cache's primary invalidation is the **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and invalidates the cache). The TTL is a safety net for edge cases (clock skew, manual mtime changes, stat cache invalidation). The default 24h keeps the cache warm for typical interactive use without forcing periodic re-scans.                         |
-| `no_thumbs`         | `true` / `false` (no-arg = `true`)          | `false` (thumbs on)                            | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler.                                                                                                                                                                                                                                       |
-| `no_video_thumbs`   | `true` / `false` (no-arg = `true`)          | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction.                                                                                                                                                                                                                                                                                                                                                                                        |
-| `no_exif`           | `true` / `false` (no-arg = `true`)          | `false` (EXIF on)                              | Disable EXIF reading entirely. When set, the visible-page sync enrich skips EXIF reads, the per-thumb `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark still appears (unaffected by `no_exif`). Useful for privacy-sensitive deployments. Note that EXIF does NOT include GPS by default — see the EXIF section for details. |
-| `search_match`      | `word` / `substring`                        | `substring`                                    | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule.                                                                                                                                                                                             |
-| `max_cache_size_mb` | integer &gt;= 0                             | `1024` (1 GB)                                  | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). See [Caching & performance](#caching--performance) below for the full story.                                                                                                                |
+| Subdirective | Value | Default | Purpose |
+|---|---|---|---|
+| `template` | file name, relative to the templates dir | `gallery.tmpl` | Pick which template file to render. Path-traversal protected: no `..`, no absolute paths — the templates dir is a chroot. |
+| `path_prefix` | URL prefix (e.g. `images`) | directory basename | URL mount prefix used in breadcrumb links. Defaults to the basename of the root directory if not set. |
+| `root_name` | display name | `media root` | Display name for the root breadcrumb segment. |
+| `image_types` | space-separated extensions (no leading dot) | `jpg jpeg png gif webp` | File extensions the gallery treats as images. Case-insensitive. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, not the image grid) and shown with a 📄 icon. Operators who want to handle these formats (e.g. via external tooling) can opt in with `image_types .heic .avif .svg`. |
+| `video_types` | space-separated extensions (no leading dot) | `mp4 webm m4v mov mkv avi ogv ogg` | File extensions the gallery treats as videos. |
+| `sort` | `mtime` / `name` | `mtime` | Sort field for the image grid. `mtime` = newest first; `name` = case-insensitive alphabetical. |
+| `page_size` | integer &gt;= 1 | `60` (or first item in `page_sizes`) | Default per-page count. Deprecated: use `page_sizes` (list form) for the dropdown, which lets the visitor choose. |
+| `page_sizes` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown. |
+| `thumb_width` | integer &gt;= 1 | `320` | Max width (px) of generated thumbnails. |
+| `thumb_height` | integer &gt;= 1 | `320` | Max height (px) of generated thumbnails. |
+| `thumb_format` | `webp` / `png` / `jpeg` (or `jpg`) | `webp` | Output format for generated thumbnails. |
+| `thumb_ttl` | integer (minutes) &gt;= 1 | `1440` (24h) | HTTP `Cache-Control: max-age` for thumb responses. |
+| `cache_scan` | integer (minutes) &gt;= 1 | `1440` (24h) | In-memory scan cache TTL. The scan cache's primary invalidation is the **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and invalidates the cache). The TTL is a safety net for edge cases (clock skew, manual mtime changes, stat cache invalidation). The default 24h keeps the cache warm for typical interactive use without forcing periodic re-scans. |
+| `no_thumbs` | `true` / `false` (no-arg = `true`) | **`true` (thumbs off, since 2026-07-02)** | Skip on-the-fly WebP thumbnail generation. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no thumb cache, no ffmpeg CPU overhead). Affects **both** images and videos — when `true`, the tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`, and video tiles show the placeholder gradient + play button instead of a video poster. Thumb requests fall through to the next handler (404). Operators who want rich thumbnails opt in with `no_thumbs false`. |
+| `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
+| `no_exif` | `true` / `false` (no-arg = `true`) | **`true` (EXIF off, since 2026-07-02)** | Disable EXIF reading entirely. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no exiftool / go-exif calls, no camera metadata surfaced). When set, the visible-page sync enrich skips EXIF reads, the per-thumb `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark still appears (unaffected by `no_exif`). Note that EXIF does NOT include GPS by default — see the EXIF section for details. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading opt in with `no_exif false`. |
+| `no_meta` | `true` / `false` (no-arg = `true`) | **`true` (video meta off, since 2026-07-02)** | Disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no ffprobe subprocess calls, no extra dependencies required). When set, the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment opt in with `no_meta false`. |
+| `default_language` | locale string | `en` | Default locale for the i18n feature (added 2026-07-04). Used as the fallback when the visitor hasn't yet specified a language via `?lang=` URL parameter, `gallery-language` cookie, `localStorage["gallery-language"]`, or `Accept-Language` HTTP header. Must be one of the supported locales: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt`. Unknown values fall back to `en`. Visitors can override this via the language picker in the header (left of the dark/light mode toggle). See [docs/03h-feature-i18n.md](03h-feature-i18n.md) for the full architecture. |
+| `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule. |
+| `max_cache_size_mb` | integer &gt;= 0 | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). See [Caching & performance](#caching--performance) below for the full story. |
 
 Example with a themed subdir:
 
@@ -179,19 +181,7 @@ handle_path /images/* {
 }
 ```
 
-This shows 100 image entries per page instead of the default 60. Tradeoffs: 
-larger pages mean fewer HTTP requests, but each request returns a bigger 
-HTML payload (and the server uses more memory per render). The pagination 
-nav at the bottom of the page only renders when total pages > 1, so if your 
-gallery has 30 images and you set `page_size 100`, you get all 30 on one 
-page with no nav. (You can also use `page_sizes 100` to expose 100 in the 
-dropdown and let the visitor switch back to 60.) URL query override: append 
-`?page=2` to the gallery URL to jump to a specific page. ``?page_size=N` IS 
-a valid URL query param: the visitor can switch the per-page size via the 
-dropdown in the meta line. The value is validated against the 
-pperator-configured `page_sizes` list (an unknown value falls back to the 
-first item). Changing the page size resets the visitor to page 1 (so they  
-don't end up on a non-existent page).
+This shows 100 image entries per page instead of the default 60. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. (You can also use `page_sizes 100` to expose 100 in the dropdown and let the visitor switch back to 60.) URL query override: append `?page=2` to the gallery URL to jump to a specific page. ``?page_size=N` IS a valid URL query param: the visitor can switch the per-page size via the dropdown in the meta line. The value is validated against the operator-configured `page_sizes` list (an unknown value falls back to the first item). Changing the page size resets the visitor to page 1 (so they don't end up on a non-existent page).
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
@@ -268,30 +258,30 @@ the same default value applies.
 
 ### Caddyfile ↔ JSON field mapping
 
-| Caddyfile directive                         | JSON field            | Type          | Default                      |
-|---------------------------------------------|-----------------------|---------------|------------------------------|
-| `path_prefix <prefix>`                      | `"path_prefix"`       | string        | (directory basename)         |
-| `root_name <name>`                          | `"root_name"`         | string        | `media root`                 |
-| `image_types <ext1 ext2 ...>`               | `"image_types"`       | `[]string`    | built-in list                |
-| `video_types <ext1 ext2 ...>`               | `"video_types"`       | `[]string`    | built-in list                |
-| `sort <mtime\|name>`                        | `"sort"`              | string        | `mtime`                      |
-| `page_size <N>`                             | `"page_size"`         | int           | (first item of `page_sizes`) |
-| `page_sizes <N1 N2 ...>`                    | `"page_sizes"`        | `[]string`    | `["60", "30", "120", "all"]` |
-| `thumb_width <N>`                           | `"thumb_width"`       | int           | `320`                        |
-| `thumb_height <N>`                          | `"thumb_height"`      | int           | `320`                        |
-| `thumb_format <fmt>`                        | `"thumb_format"`      | string        | `webp`                       |
-| `thumb_ttl <N>`                             | `"thumb_ttl"`         | int (minutes) | `1440`                       |
-| `cache_scan <N>`                            | `"cache_scan"`        | int (minutes) | `1440` (24h)                 |
-| `no_thumbs` / `no_thumbs false`             | `"no_thumbs"`         | bool          | `false`                      |
-| `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"`   | bool          | `false`                      |
-| `template <name>`                           | `"template"`          | string        | `gallery.tmpl`               |
-| `search_match <word\|substring>`            | `"search_match"`      | string        | `substring`                  |
-| `max_cache_size_mb <N>`                     | `"max_cache_size_mb"` | int (MB)      | `1024` (1 GB; `0` = no cap)  |
-| `thumb_width <N>`                           | `"thumb_width"`       | int           | `320`                        |
-| `thumb_height <N>`                          | `"thumb_height"`      | int           | `320`                        |
-| `thumb_format <webp\|jpeg\|png>`            | `"thumb_format"`      | string        | `"webp"`                     |
-| `thumb_ttl_minutes <N>`                     | `"thumb_ttl"`         | int           | `1440` (24h)                 |
-| `cache_scan_minutes <N>`                    | `"cache_scan"`        | int           | `1440` (24h)                 |
+| Caddyfile directive | JSON field | Type | Default |
+|---|---|---|---|
+| `path_prefix <prefix>` | `"path_prefix"` | string | (directory basename) |
+| `root_name <name>` | `"root_name"` | string | `media root` |
+| `image_types <ext1 ext2 ...>` | `"image_types"` | `[]string` | built-in list |
+| `video_types <ext1 ext2 ...>` | `"video_types"` | `[]string` | built-in list |
+| `sort <mtime\|name>` | `"sort"` | string | `mtime` |
+| `page_size <N>` | `"page_size"` | int | (first item of `page_sizes`) |
+| `page_sizes <N1 N2 ...>` | `"page_sizes"` | `[]string` | `["60", "30", "120", "all"]` |
+| `thumb_width <N>` | `"thumb_width"` | int | `320` |
+| `thumb_height <N>` | `"thumb_height"` | int | `320` |
+| `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |
+| `thumb_ttl <N>` | `"thumb_ttl"` | int (minutes) | `1440` |
+| `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1440` (24h) |
+| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | `false` |
+| `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
+| `template <name>` | `"template"` | string | `gallery.tmpl` |
+| `search_match <word\|substring>` | `"search_match"` | string | `substring` |
+| `max_cache_size_mb <N>` | `"max_cache_size_mb"` | int (MB) | `1024` (1 GB; `0` = no cap) |
+| `thumb_width <N>` | `"thumb_width"` | int | `320` |
+| `thumb_height <N>` | `"thumb_height"` | int | `320` |
+| `thumb_format <webp\|jpeg\|png>` | `"thumb_format"` | string | `"webp"` |
+| `thumb_ttl_minutes <N>` | `"thumb_ttl"` | int | `1440` (24h) |
+| `cache_scan_minutes <N>` | `"cache_scan"` | int | `1440` (24h) |
 
 **Heads up on the JSON naming:** the JSON field names use the
 `json:"name"` struct tags — for `CacheScanMinutes` the tag is

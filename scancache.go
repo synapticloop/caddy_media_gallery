@@ -89,7 +89,7 @@ func (c *ScanCache) SetFiles(dir string, files []FileInfo) {
 // sets (used by Scanner.Classify to decide KindImage vs KindVideo vs
 // KindOther). They are part of the cache key because a Gallery
 // reconfigured to recognise a new extension should re-scan.
-func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif bool, thumbCacheDir, thumbFormat string) ([]FileInfo, error) {
+func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif, noMeta bool, thumbCacheDir, thumbFormat string) ([]FileInfo, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 	c.mu.RLock()
 	entry, ok := c.items[dir]
 	c.mu.RUnlock()
-	extKey := extSetsKey(imageExts, videoExts, noExif)
+	extKey := extSetsKey(imageExts, videoExts, noExif, noMeta)
 	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
 		// Return a copy so callers can't mutate the cached slice.
 		out := make([]FileInfo, len(entry.files))
@@ -120,7 +120,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 		return out, nil
 	}
 
-	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif, ThumbCacheDir: thumbCacheDir, ThumbFormat: thumbFormat}
+	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif, NoMeta: noMeta, ThumbCacheDir: thumbCacheDir, ThumbFormat: thumbFormat}
 	files, err := scanner.Scan()
 	if err != nil {
 		return nil, err
@@ -162,7 +162,16 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 //
 // Cheap to compute (one sort + one string concat per cache lookup)
 // and cheap to compare (one string compare).
-func extSetsKey(imageExts, videoExts map[string]bool, noExif bool) string {
+func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) string {
+	// Per user request 2026-07-02: include noExif AND noMeta
+	// in the cache key. If either flag changes, the cache
+	// is invalidated (otherwise the Gallery would re-classify
+	// files but the cached FileInfo would still have the OLD
+	// EXIF/VideoMeta values — e.g. switching from no_meta=false
+	// to no_meta=true would return cached entries with
+	// VideoMeta populated, showing META pills that should be
+	// hidden). Both flags affect FileInfo fields (Exif,
+	// VideoMeta), so both must be in the key.
 	imgKeys := make([]string, 0, len(imageExts))
 	for k := range imageExts {
 		imgKeys = append(imgKeys, k)
@@ -177,5 +186,16 @@ func extSetsKey(imageExts, videoExts map[string]bool, noExif bool) string {
 	if noExif {
 		noExifStr = "1"
 	}
-	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",") + "|e:" + noExifStr
+	noMetaStr := "0"
+	if noMeta {
+		noMetaStr = "1"
+	}
+	// Per user request 2026-07-02: include noExif AND
+	// noMeta in the cache key. Per the previous comment
+	// block, if either flag changes, the cache should be
+	// invalidated (otherwise the Gallery would re-classify
+	// files but the cached FileInfo would still have the OLD
+	// EXIF/VideoMeta values). Both flags affect FileInfo
+	// fields (Exif, VideoMeta), so both must be in the key.
+	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",") + "|e:" + noExifStr + "|m:" + noMetaStr
 }

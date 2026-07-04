@@ -30,9 +30,11 @@ Inside an `media_gallery { ... }` block:
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
 | `cache_scan` | integer &gt;= 1 | `1440` (24h) | Scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net for edge cases. |
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
-| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
+| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | **`true` (thumbs off, since 2026-07-02)** | Skip thumbnail generation. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no thumb cache, no ffmpeg CPU overhead). Affects **both** images and videos — tile `<img>` points to the original file (for images) or is empty (for videos, which show the placeholder gradient + play button). The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want rich thumbnails opt in with `no_thumbs false`. |
 | `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | no-arg = `true` / explicit `false` = `false` | `false` (EXIF on) | Disable EXIF reading entirely. When set: the visible-page sync enrich skips EXIF reads, `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark is unaffected. Privacy-friendly — useful when EXIF data is undesirable. |
+| `no_exif` | no-arg = `true` / explicit `false` = `false` | **`true` (EXIF off, since 2026-07-02)** | Disable EXIF reading entirely. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no exiftool / go-exif calls, no camera metadata surfaced). When set: the visible-page sync enrich skips EXIF reads, `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark is unaffected. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading opt in with `no_exif false`. |
+| `no_meta` | no-arg = `true` / explicit `false` = `false` | **`true` (video meta off, since 2026-07-02)** | Disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no ffprobe subprocess calls, no extra dependencies required). When set: the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment opt in with `no_meta false`. |
+| `default_language` | locale string | `en` | Default locale for the i18n feature (added 2026-07-04). Used as the fallback when the visitor hasn't yet specified a language via `?lang=` URL parameter, `gallery-language` cookie, `localStorage["gallery-language"]`, or `Accept-Language` HTTP header. Must be one of the supported locales: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt`. Unknown values fall back to `en`. Visitors can override this via the language picker in the header (left of the dark/light mode toggle). See [Feature: i18n](03h-feature-i18n.md) for the full architecture. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary. `substring` = match anywhere. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 
@@ -83,8 +85,11 @@ producer to set them:
   "thumb_format": "jpeg",
   "cache_scan": 1440,
   "thumb_ttl": 60,
-  "no_thumbs": false,
+  "no_thumbs": true,           // default since 2026-07-02 (was false)
+  "no_exif": true,               // default since 2026-07-02 (was false)
+  "no_meta": true,               // default since 2026-07-02 (was false)
   "no_video_thumbs": false,
+  "default_language": "en",      // i18n default (added 2026-07-04)
   "search_match": "word",
   "template": "themes/dark/gallery.tmpl"
 }
@@ -105,6 +110,7 @@ producer to set them:
 | `q` | free text (URL-encoded) | (none) | Server-side filename search. Combined with the visitor's `search_match` mode. Directories are never filtered. |
 | `type` | comma-separated list of extensions (e.g. `jpg,png`), or the sentinel `.` for files without an extension | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). Use `ext=.` (literal dot) to filter to only files with no extension (e.g. `Makefile`, `welcome`). |
 | `dirs_sort` / `dirs_order` | same as the main sort | `name asc` | Sort the Directories and Other Files tables. Header click is client-side (persists in `data-search-match`-style attributes + localStorage). |
+| `lang` | any supported locale: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt` | (none — uses cookie / localStorage / Accept-Language / `default_language` directive) | Set the visitor's locale. Highest priority in the resolution chain. Used by the language picker in the header (click an option → navigates to `?lang=<locale>` → page reloads → JS writes to localStorage + cookie so subsequent visits don't need a reload). See [Feature: i18n](03h-feature-i18n.md) for the full resolution algorithm. |
 
 **Deliberately NOT query-overridable:**
 - `?thumb_format=N` — would let users force the server to recompute thumbs in any format

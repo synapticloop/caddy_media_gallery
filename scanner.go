@@ -150,6 +150,17 @@ type Scanner struct {
 	// When false (the default), EXIF is read eagerly at
 	// scan time. See gallery.go for the full rationale.
 	NoExif bool
+	// NoMeta, per user request 2026-07-02: a SEPARATE flag
+	// from NoExif. NoExif affects image EXIF; NoMeta
+	// affects video metadata extraction (duration,
+	// container, codecs, bitrate, framerate via ffprobe).
+	// When true, the enrich step skips the
+	// readVideoMetaCached call entirely (no ffprobe
+	// subprocess, no .vmeta sidecar writes, no parsing).
+	// Useful for galleries with many videos where the
+	// operator doesn't need the metadata enrichment.
+	// See gallery.go for the full rationale.
+	NoMeta bool
 	// ThumbCacheDir is the on-disk thumb cache dir. When set
 	// (always set in production, via thumbCacheDir() in
 	// gallery.go), the scanner uses readDimensionsCached to
@@ -431,16 +442,24 @@ func (s *Scanner) Enrich(files []FileInfo) {
 		// dependency for video thumbnails) with a 10s
 		// timeout. The result is cached in a .vmeta sidecar
 		// next to the video's thumb, so the next enrichment
-		// is a ~50µs file read. Always runs for video
-		// files (no NoExif equivalent — video metadata is
-		// a different concept from EXIF).
+		// is a ~50µs file read.
+		//
+		// Per user request 2026-07-02: when the operator
+		// sets `no_meta` in the Caddyfile, this entire
+		// block is skipped — no ffprobe subprocess, no
+		// .vmeta sidecar writes, no parsing. FileInfo
+		// .VideoMeta is left nil, so the META pill on
+		// video cards and the META panel in the lightbox
+		// are hidden. Operators with large video
+		// directories can use this to skip the per-video
+		// ffprobe overhead.
 		if fi.Kind == KindVideo {
 			thumbExt := s.ThumbFormat
 			if thumbExt == "" {
 				thumbExt = "webp"
 			}
 			vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
-			if err == nil {
+			if err == nil && vmeta != nil && vmeta.HasAny() {
 				fi.VideoMeta = vmeta
 			}
 		}
@@ -541,7 +560,7 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 			// is cached in a .vmeta sidecar next to the
 			// video's thumb, so the next enrichment is
 			// a ~50µs file read.
-			if fi.Kind == KindVideo {
+			if fi.Kind == KindVideo && !s.NoMeta {
 				vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
 				if err == nil && vmeta != nil && vmeta.HasAny() {
 					fi.VideoMeta = vmeta
