@@ -2584,7 +2584,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           {{$pageSizeStr := "all"}}
           {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
           {{range .PageSizes}}
-          <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
+          <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}{{t "page_size_all"}}{{else}}{{.}}{{end}}</option>
           {{end}}
         </select>
       </form>
