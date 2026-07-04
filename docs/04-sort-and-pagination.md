@@ -12,7 +12,7 @@ same view on every visit.
 | `?sort=` | `name` / `type` / `size` / `mtime` | `mtime` | What field to sort images by. The URL also accepts `?sort=date` (treated as `?sort=mtime`) for back-compat. See "Aliases" below. |
 | `?order=` | `asc` / `desc` | `desc` | Sort direction. `desc` for `mtime` is newest-first; `desc` for `name`/`type`/`size` is Z-A / largest-first. |
 | `?page=` | integer &gt;= 1 | `1` | Which page of results to show. 1-based. Out-of-range or non-numeric values fall back to 1. |
-| `?page_size=` | any value in the operator-configured `page_sizes` list | first item | Per-page size (driven by the dropdown). Changing this **resets the visitor to page 1** (the current `?page=` is dropped from the form's hidden inputs). Unknown values fall back to the first item. |
+| `?page_size=` | any value in the operator-configured `page_size` list | first item | Per-page size (driven by the dropdown). Changing this **resets the visitor to page 1** (the current `?page=` is dropped from the form's hidden inputs). Unknown values fall back to the first item. |
 | `?q=` | free text (URL-encoded) | (none) | Server-side filename search. The match rule (`word` or `substring`) is operator-configured via `search_match`. |
 | `?type=` | comma-separated extensions (e.g. `jpg,png`) | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). |
 
@@ -92,7 +92,7 @@ visible button.
 
 ## Pagination
 
-The per-page size is configured via the `page_sizes` Caddyfile
+The per-page size is configured via the `page_size` Caddyfile
 directive (default: `60 30 120 all`). The FIRST item in the
 list is the default per-page count (used when `?page_size=`
 isn't in the URL). The dropdown is rendered in the meta line

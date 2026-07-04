@@ -23,8 +23,7 @@ Inside an `media_gallery { ... }` block:
 | `image_types` | space-separated extensions (no leading dot) | built-in list | File extensions the gallery treats as images. |
 | `video_types` | space-separated extensions (no leading dot) | built-in list | File extensions the gallery treats as videos. |
 | `sort` | `mtime` / `name` (also accepts `date` as an alias for `mtime`) | `mtime` (newest first) | Default sort field. Overridable per-request via `?sort=`. |
-| `page_size` | integer &gt;= 1 | (first item of `page_sizes`) | Default per-page count. Deprecated for new configs — use `page_sizes` (list form) instead. |
-| `page_sizes` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown. |
+| `page_size` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default per-page count (used when `?page_size=` isn't in the URL). Use the `all` token to include "show everything on one page" in the dropdown (omit it for the default paginated-only behavior). The list is always sorted by increasing numeric value with `"all"` at the end, so the operator can write the values in any order. A single value (e.g. `page_size 100`) is also valid — a one-element list, just not very useful without a dropdown to switch. |
 | `thumb_width` | integer &gt;= 1 | `320` | Max width in pixels. Source is fit-within-bounds. |
 | `thumb_height` | integer &gt;= 1 | `320` | Max height in pixels. Source is fit-within-bounds. |
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
@@ -49,7 +48,7 @@ handle_path /images/* {
         image_types jpg jpeg png webp
         video_types mp4 webm
         sort name
-        page_sizes 30 60 120 all
+        page_size 30 60 120 all
         thumb_width 480
         thumb_height 320
         thumb_format jpeg
@@ -78,7 +77,6 @@ producer to set them:
   "image_types": ["jpg", "jpeg", "png", "webp"],
   "video_types": ["mp4", "webm"],
   "sort": "name",
-  "page_size": 60,
   "page_sizes": ["30", "60", "120", "all"],
   "thumb_width": 480,
   "thumb_height": 320,
@@ -106,7 +104,7 @@ producer to set them:
 | `sort` | `mtime` / `name` / `type` / `size` (also accepts `date` as an alias for `mtime`) | inherits from Caddyfile | Sort field |
 | `order` | `asc` / `desc` | depends on `sort` | Sort direction |
 | `page` | integer &gt;= 1 | `1` | Which page (only meaningful when there are > 1 pages) |
-| `page_size` | any value in the operator-configured `page_sizes` list | first item | Visitor's per-page selection (driven by the dropdown). Changing this resets the visitor to page 1. Unknown values fall back to the first item. |
+| `page_size` | any value in the operator-configured `page_size` list (same directive) | first item | Visitor's per-page selection (driven by the dropdown). Changing this resets the visitor to page 1. Unknown values fall back to the first item. |
 | `q` | free text (URL-encoded) | (none) | Server-side filename search. Combined with the visitor's `search_match` mode. Directories are never filtered. |
 | `type` | comma-separated list of extensions (e.g. `jpg,png`), or the sentinel `.` for files without an extension | (none) | Server-side type filter. The form-submission version uses repeated `?ext=jpg&ext=png` (both work). Use `ext=.` (literal dot) to filter to only files with no extension (e.g. `Makefile`, `welcome`). |
 | `dirs_sort` / `dirs_order` | same as the main sort | `name asc` | Sort the Directories and Other Files tables. Header click is client-side (persists in `data-search-match`-style attributes + localStorage). |
@@ -116,7 +114,7 @@ producer to set them:
 - `?thumb_format=N` — would let users force the server to recompute thumbs in any format
 - `?thumb_width=N` / `?thumb_height=N` — same
 
-The thumb format and dimensions are set in the Caddyfile only. The page size IS now a query-overridable URL param (via the visitor's dropdown), but the operator can only set it to values in their pre-configured `page_sizes` list.
+The thumb format and dimensions are set in the Caddyfile only. The page size IS now a query-overridable URL param (via the visitor's dropdown), but the operator can only set it to values in their pre-configured `page_size` list.
 
 ---
 
@@ -196,8 +194,8 @@ If you're wondering "where is this knob?":
 |---|---|
 | Sort field (default + per-request) | `sort` directive + `?sort=` query |
 | Sort direction | `?order=` query (`asc` / `desc`) |
-| Pagination | `page_size` (default) + `page_sizes` (dropdown list) + `?page=` query |
-| Per-page dropdown selection | `?page_size=` query (validated against `page_sizes` list; resets to page 1 on change) |
+| Pagination | `page_size` (default + dropdown list) + `?page=` query |
+| Per-page dropdown selection | `?page_size=` query (validated against `page_size` list; resets to page 1 on change) |
 | Type filter (server-side) | `?type=jpg,png` or repeated `?ext=jpg&ext=png` |
 | Filename search (server-side) | `?q=foo` (combined with the visitor's `search_match` mode) |
 | Search match mode | `search_match` directive (`word` or `substring`, default `substring`) |
