@@ -1960,7 +1960,10 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 		// anything out).
 		displayExt := filepath.Ext(f.Name)
 		if displayExt == "" {
-			displayExt = "(none)"
+			// Per user request 2026-07-04: "(none)" label is
+			// now translated. Read from the package-level
+			// translator at render time.
+			displayExt = tr("filter_none")
 		}
 		switch {
 		case ext != "" && imageExts[ext]:
@@ -1992,9 +1995,17 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 
 	// Convert maps to sorted slices. Sort alphabetically by
 	// displayExt so the dropdown is predictable.
-	images = filterGroupFromMap("Images", imgCounts, activeFilter)
-	videos = filterGroupFromMap("Videos", vidCounts, activeFilter)
-	other = filterGroupFromMap("Other", otherCounts, activeFilter)
+	// Per user request 2026-07-04: filter labels are now
+	// translation keys, looked up via the package-level
+	// translator. The label values themselves are
+	// translated at render time (per-locale), not at
+	// filter-build time. The translator is set up at
+	// Provision (so it's always available here) and the
+	// current locale is set by RenderPage before this
+	// function runs.
+	images = filterGroupFromMap(tr("filter_image"), imgCounts, activeFilter)
+	videos = filterGroupFromMap(tr("filter_video"), vidCounts, activeFilter)
+	other = filterGroupFromMap(tr("filter_other"), otherCounts, activeFilter)
 	return
 }
 
@@ -2088,6 +2099,31 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
 func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
+	// Per user request 2026-07-04: set the package-level
+	// translator + locale at the TOP of RenderPage so the
+	// filter labels (computed by computeFilterGroups, which
+	// is called soon below) can use the current locale
+	// via tr(). The {{t}} template function also reads
+	// these under the same lock. Restore on return so
+	// concurrent renders don't see each other's state.
+	if translator == nil {
+		translator, _ = NewTranslator("")
+	}
+	if locale == "" {
+		locale = "en"
+	}
+	tMu.Lock()
+	prevT := currentT
+	prevLang := currentLang
+	currentT = translator
+	currentLang = locale
+	tMu.Unlock()
+	defer func() {
+		tMu.Lock()
+		currentT = prevT
+		currentLang = prevLang
+		tMu.Unlock()
+	}()
 	sortSpec := parseSort(query)
 	page := pageFromQuery(query)
 	// Per user request 2026-06-27: read ?page_size=N from the
@@ -2323,6 +2359,10 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	if locale == "" {
 		locale = "en"
 	}
+	// (the package-level translator + locale for tr() and
+	// the {{t}} template function are set at the TOP of
+	// RenderPage, so the filter labels above already saw
+	// the correct locale).
 	data := PageData{
 		// Per user request 2026-07-04: pass the
 		// resolved locale and Translator into the
@@ -2452,23 +2492,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	if locale == "" {
 		locale = "en"
 	}
-	// Per user request 2026-07-04: set the package-level
-	// translator + locale for this render. The {{t}}
-	// function (registered in galleryFuncs at parse time)
-	// reads these under a lock. Restore on return so
-	// concurrent renders don't see each other's state.
-	tMu.Lock()
-	prevT := currentT
-	prevLang := currentLang
-	currentT = translator
-	currentLang = locale
-	tMu.Unlock()
-	defer func() {
-		tMu.Lock()
-		currentT = prevT
-		currentLang = prevLang
-		tMu.Unlock()
-	}()
+
+
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", err
