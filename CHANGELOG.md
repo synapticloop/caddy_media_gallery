@@ -28,6 +28,19 @@ Three rounds of refinement on the collapsible EXIF/META panel in the lightbox:
 ### 🐛 Fix: META panel positioned immediately on video open
 Previous fix (c52c5ff) waited for `loadedmetadata` before positioning, but until that event fired, the panel sat at the CSS fallback position (left: 0.5rem — the LEFT side of the lightbox). New approach: position IMMEDIATELY using the current bounding rect (poster-sized for videos), then re-position when `loadedmetadata` fires. If loadedmetadata never fires, the panel stays at the poster-sized position (better than the CSS fallback on the left).
 
+### ✏️ UI: rename "Sort By" to "Sort Media By"
+Per user spec: the sort label above the Name/Type/Modified/Size buttons is now "Sort Media By" (was "Sort By"). More descriptive — the sort applies to the media section, not the directories/other-files tables.
+
+### ✨ Feat: add no_meta Caddyfile directive
+Per user request 2026-07-02: a new `no_meta` directive that disables video metadata extraction (duration, container, codecs, bitrate, framerate via ffprobe). This is a SEPARATE flag from the existing `no_exif` directive — `no_exif` affects image EXIF, `no_meta` affects video metadata. Use case: large video directories where the operator doesn't need the per-video metadata enrichment (saves 50-100ms per video on first extraction). Both flags can be enabled independently. Caddyfile syntax mirrors `no_exif`:
+
+```
+media_gallery {
+    no_meta         # disable (default)
+    no_meta false   # re-enable
+}
+```
+
 ---
 
 ## 2026-07-02
