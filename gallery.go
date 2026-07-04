@@ -337,9 +337,35 @@ type Gallery struct {
 	// Caddyfile nor JSON sets it) is 1024 MB.
 	MaxCacheSizeSet bool
 
+	// DefaultLanguage is the fallback locale when neither
+	// the URL parameter, cookie, nor Accept-Language header
+	// produces a match. Per user request 2026-07-04:
+	// operators can set this in the Caddyfile via
+	//   default_language = "de"
+	// Empty string falls back to "en". Validated at
+	// Provision time (must match a known locale or be empty).
+	// Per user request 2026-07-04: visitors can ALWAYS
+	// override this with ?lang=<locale> or the cookie,
+	// regardless of what the operator sets here.
+	DefaultLanguage string
+
 	// Cache holds the in-memory scan cache. Initialised in Provision
 	// if nil. Excluded from JSON config (runtime state only).
 	Cache *ScanCache
+
+	// translator is the per-Gallery i18n resolver. Built
+	// at Provision from the embedded lang/*.json files
+	// (under //go:embed lang/*.json) plus any disk-override
+	// files at $GALLERY_TEMPLATES_DIR/lang/<locale>.json.
+	// Read-only after Provision — no per-request rebuild.
+	// Excluded from JSON config (runtime state only).
+	translator *Translator
+	// translatorDiskDir is the directory scanned for
+	// operator-supplied translation overrides. Set at
+	// Provision (= $GALLERY_TEMPLATES_DIR/lang). The
+	// translator's mtime-based cache means we don't
+	// re-stat on every request.
+	translatorDiskDir string
 	// cacheSweepStop signals the background cache eviction
 	// goroutine to stop. Closed by Cleanup so the goroutine
 	// exits cleanly when Caddy shuts down. nil if no sweep
@@ -605,7 +631,49 @@ func (g *Gallery) Provision(caddy.Context) error {
 	g.cacheStatsRefreshStop = make(chan struct{})
 	go g.cacheStatsRefreshLoop(g.CacheStatsTracker, g.cacheStatsRefreshStop)
 
+	// Per user request 2026-07-04: initialise the i18n
+	// Translator. The disk-override dir is
+	// $GALLERY_TEMPLATES_DIR/lang (default
+	// /etc/caddy/gallery-templates/lang). Operators drop
+	// additional <locale>.json files there for new
+	// languages — no rebuild required.
+	//
+	// We default the operator's DefaultLanguage to "en"
+	// if empty, so DetectLocale's "5. operator default"
+	// branch always has a sane fallback. Validating that
+	// the configured locale exists is done lazily
+	// (DetectLocale falls back to "en" if not), so an
+	// operator typo ("default_language = "frr"") silently
+	// degrades to English rather than failing to start.
+	if g.DefaultLanguage == "" {
+		g.DefaultLanguage = "en"
+	}
+	langDiskDir := filepath.Join(galleryTemplatesDir(), "lang")
+	g.translatorDiskDir = langDiskDir
+	tr, err := NewTranslator(langDiskDir)
+	if err != nil {
+		// Don't fail Caddy startup on a translation
+		// load error — fall back to English-only and
+		// log a warning. Operators can fix and restart.
+		fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n init failed: %v (falling back to English only)\n", err)
+		tr, _ = NewTranslator("")
+	}
+	g.translator = tr
+	fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n ready (locales: %s, default: %s)\n", strings.Join(tr.Locales(), ","), g.DefaultLanguage)
+
 	return nil
+}
+
+// galleryTemplatesDir returns the on-disk templates
+// directory used by the gallery. Mirrors the logic in
+// writeBundledTemplates (render.go) so the i18n override
+// directory lives next to the templates.
+func galleryTemplatesDir() string {
+	dir := os.Getenv("GALLERY_TEMPLATES_DIR")
+	if dir == "" {
+		dir = "/etc/caddy/gallery-templates"
+	}
+	return dir
 }
 
 // cacheSweepLoop runs evictIfOver on a 30-minute ticker.
@@ -875,7 +943,13 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// lock contention with the eviction goroutine).
 	stats := g.CacheStatsTracker.load()
 	cacheXX, cacheYY, cacheZZ, cacheAA := formatCacheStatsFooter(stats)
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, cacheXX, cacheYY, cacheZZ, cacheAA)
+	// Per user request 2026-07-04: detect the visitor's
+	// locale using the priority chain documented in i18n.go.
+	// URL ?lang= > cookie > Accept-Language header >
+	// operator's default_language > "en". This is computed
+	// on every request (cheap — no I/O).
+	locale := DetectLocale(r, g.translator.Locales(), g.DefaultLanguage)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -997,6 +1071,26 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// "no directive" (apply the default true).
 			g.NoMetaSet = true
 
+		case "default_language":
+			// Per user request 2026-07-04: the operator can
+			// set a fallback locale that the gallery uses
+			// when neither the URL parameter, cookie, nor
+			// Accept-Language header produces a match.
+			// Visitors can ALWAYS override this with
+			// ?lang=<locale> or the gallery-language cookie,
+			// regardless of what the operator sets here.
+			//
+			// Usage:
+			//   default_language = "de"
+			//   default_language fr   # also accepts no quotes
+			//
+			// Empty value ("default_language = """) clears
+			// the override (falls back to "en" in Provision).
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+			locale := strings.ToLower(strings.TrimSpace(d.Val()))
+			g.DefaultLanguage = locale
 		case "page_size":
 				// Per user request 2026-06-27: the operator
 				// configures the per-page dropdown options via

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html><html lang="{{.Locale}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,11 +14,118 @@
   <script>
     (function() {
       try {
-        var t = localStorage.getItem('gallery-theme');
-        if (t === 'light' || t === 'dark') {
-          document.documentElement.setAttribute('data-theme', t);
+        var savedTheme = localStorage.getItem('gallery-theme');
+        if (savedTheme === 'light' || savedTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', savedTheme);
         }
       } catch (e) { /* localStorage unavailable */ }
+    })();
+
+    // Per user request 2026-07-04: language picker persistence.
+    //
+    // Flow:
+    //   1. On page load, read `gallery-language` from
+    //      localStorage. If present, also set the
+    //      `gallery-language` cookie (so the server sees
+    //      it on the next request even if the visitor's
+    //      URL doesn't include ?lang=).
+    //
+    //   2. When the visitor picks a language from the
+    //      dropdown, the page navigates to ?lang=<locale>
+    //      (a full page reload). After the reload, this
+    //      script runs and sees the new locale — but we
+    //      also need to write to localStorage. We do that
+    //      by checking if the URL has ?lang=; if so, write
+    //      that value to localStorage + cookie.
+    //
+    //   3. Per user feedback 2026-07-04: "full page reload
+    //      — this should only ever happen once". After
+    //      the first dropdown selection, the cookie is
+    //      set, so the server's locale detection (in
+    //      DetectLocale) picks up the cookie on every
+    //      subsequent request. The visitor never sees
+    //      another full reload from the language picker.
+    //
+    // The cookie is set with SameSite=Lax, no Domain
+    // (so the browser uses the current host), no Secure
+    // (works on http:// for local dev). Path=/ so it's
+    // sent on every request to this site.
+    (function() {
+      try {
+        var currentPath = window.location.pathname;
+        var params = new URLSearchParams(window.location.search);
+        var urlLang = params.get('lang');
+
+        if (urlLang) {
+          // The visitor came in via a ?lang= URL (e.g. by
+          // clicking the dropdown). Persist the choice.
+          try {
+            localStorage.setItem('gallery-language', urlLang);
+          } catch (e) { /* localStorage write blocked */ }
+          // Set the cookie too (server-readable).
+          // Expiry: 1 year from now.
+          var expires = new Date();
+          expires.setFullYear(expires.getFullYear() + 1);
+          document.cookie = 'gallery-language=' + encodeURIComponent(urlLang)
+            + '; expires=' + expires.toUTCString()
+            + '; path=/; SameSite=Lax';
+        } else {
+          // No ?lang= in the URL. If we have a value in
+          // localStorage, make sure the cookie is in sync
+          // (so the server doesn't need to read localStorage
+          // to determine the locale — the cookie is the
+          // server-side source of truth, localStorage is
+          // just a client-side mirror for the picker).
+          var saved = localStorage.getItem('gallery-language');
+          if (saved && saved.length > 0 && saved.length < 20) {
+            // Only set the cookie if the localStorage value
+            // is a plausible locale code (2-3 chars).
+            // This guards against a stale/garbage value
+            // accidentally re-setting the cookie on every
+            // visit.
+            var hasCookie = document.cookie.indexOf('gallery-language=' + encodeURIComponent(saved)) >= 0;
+            if (!hasCookie) {
+              var expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              document.cookie = 'gallery-language=' + encodeURIComponent(saved)
+                + '; expires=' + expires.toUTCString()
+                + '; path=/; SameSite=Lax';
+              // Reload so the server picks up the cookie
+              // and renders in the saved locale. This is
+              // a one-time "first visit after enabling
+              // localStorage" reload.
+              window.location.reload();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        /* localStorage or cookie write failed — silently
+           fall back to the server's locale detection. */
+      }
+    })();
+
+    // Per user request 2026-07-04: after a dropdown click,
+    // close the <details> element so the menu collapses.
+    // (We don't need to do anything else — the <a href>
+    // navigation handles the rest.)
+    (function() {
+      var langToggle = document.getElementById('lang-toggle');
+      if (langToggle) {
+        langToggle.addEventListener('click', function(e) {
+          // If the click was on a .lang-option link, close
+          // the dropdown so when the user comes back, they
+          // see the closed state.
+          var target = e.target;
+          while (target && target !== langToggle) {
+            if (target.classList && target.classList.contains('lang-option')) {
+              langToggle.removeAttribute('open');
+              break;
+            }
+            target = target.parentNode;
+          }
+        });
+      }
     })();
   </script>
 <style>
@@ -179,6 +286,99 @@
 }
 
 /* === THEME TOGGLE BUTTON GROUP (header) ====================== */
+/* Per user request 2026-07-04: language picker dropdown.
+   Visually matches .theme-toggle (same chip-style background,
+   same border-radius) so the two controls feel like siblings.
+   The trigger is a <summary> inside <details> (same pattern
+   as .filter-dropdown) so we get native keyboard navigation
+   and aria semantics for free. The menu shows when <details>
+   is open; we close it after a click via inline JS. */
+.lang-toggle {
+  position: relative;
+  display: inline-block;
+  margin-right: 0.5rem;
+  /* Per user request 2026-07-04: the language picker is
+     now wider. The trigger and the menu both get a
+     min-width of 8rem (instead of auto-fitting the
+     longest option name). This makes the picker visually
+     consistent with the other top-right controls and
+     gives the menu enough horizontal space to read the
+     full locale name (e.g. "Português") without
+     truncating or wrapping. */
+  min-width: 8rem;
+}
+.lang-toggle .lang-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 3px 10px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+  /* Per user request 2026-07-04: trigger is also wider
+     (matches the parent .lang-toggle min-width). */
+  min-width: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
+}
+.lang-toggle .lang-trigger::-webkit-details-marker {
+  display: none; /* hide the default <summary> arrow */
+}
+.lang-toggle .lang-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.lang-toggle .lang-trigger:focus-visible {
+  outline: 2px solid #006ed3;
+  outline-offset: 1px;
+}
+.lang-toggle .lang-caret {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  transition: transform 0.15s;
+}
+.lang-toggle[open] .lang-caret {
+  transform: rotate(180deg);
+}
+.lang-toggle .lang-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  padding: 4px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.lang-toggle .lang-option {
+  display: block;
+  padding: 0.4rem 0.9rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.lang-toggle .lang-option:hover {
+  background: var(--bg-hover);
+}
+.lang-toggle .lang-option-active {
+  color: var(--accent);
+  font-weight: 600;
+}
 .theme-toggle {
   display: inline-flex;
   gap: 2px;
@@ -246,16 +446,23 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  /* Per user request 2026-07-01: removed border-bottom.
-     The line between the status area and the breadcrumb
-     is now removed — the breadcrumb sits directly below
-     the status with no separator. Per user request
-     2026-07-01: reduced padding-bottom from 0.75rem to
-     0.25rem so the breadcrumb sits closer to the status
-     area. */
+  /* Per user request 2026-07-04: the h1 (title) and the
+     header-controls (language picker + light/dark selector)
+     are now in the same flex row. The status row (.meta)
+     was moved into its own div below this row. */
   padding-bottom: 0.25rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
+/* Per user request 2026-07-04: wrapper for the language
+   picker + light/dark selector that sits to the right of
+   the title. The wrapper groups them visually so they
+   sit next to each other. */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
 h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -268,6 +475,12 @@ h1 {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  /* Per user request 2026-07-04: the .meta div moved out
+     of the header-top row and into its own row below the
+     title/controls. Add a small top margin to separate it
+     visually. */
+  margin-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 .meta span { color: var(--fg-faint); }
 .sort-indicator {
@@ -679,6 +892,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      to match the header text right edge — see
      the comment there for the calculation). */
   text-align: right;
+  /* Per user request 2026-07-04: the column
+     heading ("# Files" / "# Dirs") used to use
+     a non-breaking space entity (#&nbsp;Files)
+     so it never wrapped across lines. Now that
+     the heading is translated via {{t
+     "col_files_hash"}}, the entity is gone, so
+     we use white-space: nowrap on the th to keep
+     "# Files" (or "# Dateien", "# ファイル",
+     etc.) on a single line. */
+  white-space: nowrap;
 }
 /* Per user request 2026-07-01: the .files-table
    tbody td rule has padding: 0.5rem 0.75rem
@@ -2294,78 +2517,91 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 <main>
   <header>
     <div class="header-top">
-      <div class="header-main">
-        <h1>{{.Title}}</h1>
-        <div class="meta">
-          {{/* Per user request 2026-06-19: show the total
-             number of files at the start of the meta line, then
-             the breakdown (images / videos / other files). The
-             total is a quick "how many files are in this dir"
-             answer; the breakdown gives the detail.
-
-             Pluralization: "1 file" vs "N files" (English
-             singular/plural). The split is via a small
-             {{if eq}} check on the .TotalFiles value. */}}
-          <span>{{.TotalFiles}} {{if eq .TotalFiles 1}}file{{else}}files{{end}}</span>
-          <span>//</span>
-          <span>{{.ImageCount}} images</span>
-          {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
-          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-          <span>//</span>
-          <span>({{.TotalAllFilesSize}} total)</span>
-          <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} directories{{if .Up}} (+1 parent){{end}}</span>{{end}}
-          <!-- Per user request 2026-06-20: a dropdown for page size.
-     Shows the operator-configured list (defaults to
-     30, 60, 120, "all"). "all" is a special token meaning
-     "show all items in one page" - only included if the
-     operator explicitly listed it. Each option is a link
-     to the same URL with ?page_size=N appended (or removed
-     for "all"). The current selection is shown as selected. -->
-  <span>·</span>
-  <span>Show</span>
-  <form method="get" action="" class="page-size-form">
-    {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
-    {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
-    {{- /* so changing page size always resets to page 1 (the */ -}}
-    {{- /* current page number might not exist in the new size). */ -}}
-    {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
-    {{- /* it, otherwise the form would have a duplicate "page_size" -}}
-    {{- /* field (hidden input + select), which builds a messy URL -}}
-    {{- /* with both values when the form submits. */ -}}
-    {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
-    <select name="page_size" class="page-size-select" onchange="this.form.submit()">
-      {{/* Per user request 2026-06-28: when PageSize is 0 (the
-           "all" token from pageSizeFromQuery), compare
-           against "all" instead of the string "0" so the
-           dropdown shows "all" as selected (previously it
-           fell back to the first item, which was the
-           document default 30). pageSizeStr is set to "all"
-           when PageSize is 0, otherwise to the decimal
-           string of PageSize. */}}
-      {{$pageSizeStr := "all"}}
-      {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
-      {{range .PageSizes}}
-      <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
-      {{end}}
-    </select>
-  </form>
-  <span>Per page</span>{{if gt .TotalPages 1}}<span>·</span><span>Page {{.Page}} of {{.TotalPages}}</span>{{end}}
+      <h1>{{.Title}}</h1>
+      <div class="header-controls">
+        {{if gt (len .AvailableLocales) 1}}
+        <details class="lang-toggle" id="lang-toggle">
+          <summary class="lang-trigger"
+                   aria-label="{{t "lang_picker_aria"}}">
+            <span class="lang-current">{{tr.NativeName .Locale}}</span>
+            <span class="lang-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="lang-menu" role="menu">
+            {{range .AvailableLocales}}
+            {{$locale := .}}
+            <a class="lang-option{{if eq $locale $.Locale}} lang-option-active{{end}}"
+               role="menuitem"
+               href="?{{queryString (queryWith $.Query "lang" $locale)}}">
+              {{tr.NativeName $locale}}
+            </a>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+        <div class="theme-toggle" role="radiogroup" aria-label="{{t "theme"}}">
+          <button type="button" data-theme="auto" aria-pressed="false" aria-label="{{t "theme_auto"}}" title="{{t "theme_short_auto"}}">⚙</button>
+          <button type="button" data-theme="light" aria-pressed="false" aria-label="{{t "theme_light"}}" title="{{t "theme_short_light"}}">☀</button>
+          <button type="button" data-theme="dark" aria-pressed="false" aria-label="{{t "theme_dark"}}" title="{{t "theme_short_dark"}}">🌙</button>
         </div>
       </div>
-      <!-- Per user request 2026-06-18: removed the top-right
-           sort order indicator (the "Sort: Name ↓" link). The sort
-           UI still exists as the sort-bar below the header (with
-           Name/Type/Modified/Size buttons), so the sort order is
-           still visible there. The theme toggle moves to the top-
-           right (where the sort indicator was). -->
-      <div class="theme-toggle" role="radiogroup" aria-label="Theme">
-        <button type="button" data-theme="auto" aria-pressed="false" aria-label="Auto (follow system preference)" title="Auto">⚙</button>
-        <button type="button" data-theme="light" aria-pressed="false" aria-label="Light mode" title="Light">☀</button>
-        <button type="button" data-theme="dark" aria-pressed="false" aria-label="Dark mode" title="Dark">🌙</button>
-      </div>
+    </div>
+    <div class="meta">
+      {{/* Per user request 2026-06-19: show the total
+         number of files at the start of the meta line, then
+         the breakdown (images / videos / other files). The
+         total is a quick "how many files are in this dir"
+         answer; the breakdown gives the detail.
+
+         Pluralization: "1 file" vs "N files" (English
+         singular/plural). The split is via a small
+         {{if eq}} check on the .TotalFiles value. */}}
+      <span>{{.TotalFiles}} {{if eq .TotalFiles 1}}{{t "files_singular"}}{{else}}{{t "files_plural"}}{{end}}</span>
+      <span>//</span>
+      <span>{{.ImageCount}} {{if eq .ImageCount 1}}{{t "image_count"}}{{else}}{{t "images_count"}}{{end}}</span>
+      {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} {{if eq .TotalVideos 1}}{{t "video_count"}}{{else}}{{t "videos_count"}}{{end}}</span>{{end}}
+      {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} {{if eq (len .OtherFiles) 1}}{{t "other_file"}}{{else}}{{t "other_files"}}{{end}}</span>{{end}}
+      <span>//</span>
+      <span>({{.TotalAllFilesSize}} {{t "total_size_label"}})</span>
+      <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} {{if eq (len .Subdirs) 1}}{{t "directory_count"}}{{else}}{{t "directories_count"}}{{end}}{{if .Up}} (+{{t "parent_directory"}}){{end}}</span>{{end}}
+      <!-- Per user request 2026-06-20: a dropdown for page size.
+   Shows the operator-configured list (defaults to
+   30, 60, 120, "all"). "all" is a special token meaning
+   "show all items on one page" - only included if the
+   operator explicitly listed it. Each option is a link
+   to the same URL with ?page_size=N appended (or removed
+   for "all"). The current selection is shown as selected. -->
+      <span>·</span>
+      <span>{{t "page_show"}}</span>
+      <form method="get" action="" class="page-size-form">
+        {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
+        {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
+        {{- /* so changing page size always resets to page 1 (the */ -}}
+        {{- /* current page number might not exist in the new size). */ -}}
+        {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
+        {{- /* it, otherwise the form would have a duplicate "page_size" -}}
+        {{- /* field (hidden input + select), which builds a messy URL -}}
+        {{- /* with both values when the form submits. */ -}}
+        {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
+        <select name="page_size" class="page-size-select" onchange="this.form.submit()">
+          {{/* Per user request 2026-06-28: when PageSize is 0 (the
+               "all" token from pageSizeFromQuery), compare
+               against "all" instead of the string "0" so the
+               dropdown shows "all" as selected (previously it
+               fell back to the first item, which was the
+               document default 30). pageSizeStr is set to "all"
+               when PageSize is 0, otherwise to the decimal
+               string of PageSize. */}}
+          {{$pageSizeStr := "all"}}
+          {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
+          {{range .PageSizes}}
+          <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}{{t "page_size_all"}}{{else}}{{.}}{{end}}</option>
+          {{end}}
+        </select>
+      </form>
+      <span>{{t "page_per_page"}}</span>{{if gt .TotalPages 1}}<span>·</span><span>{{t "page_of" .Page .TotalPages}}</span>{{end}}
     </div>
     {{if gt (len .Breadcrumb) 0}}
-    <nav class="breadcrumb" aria-label="Directory path">
+    <nav class="breadcrumb" aria-label="{{t "breadcrumb_aria"}}">
       {{range $i, $seg := .Breadcrumb}}
         {{if eq $i (lastIndex $.Breadcrumb)}}
           <span class="breadcrumb-current">{{$seg.Name}}</span>
@@ -2377,11 +2613,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     <div class="sort-bar">
       {{$q := .Query}}
-      <span class="sort-label">Sort Media By</span>
-      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">Name<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">Type<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">Modified<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
-      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">Size<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <span class="sort-label">{{t "sort_label"}}</span>
+      <a class="sort-btn{{if eq .Sort.Field "name"}} active{{end}}" href="?{{queryString (sortURL $q "name" (sortOrder .Sort.Field "name" .Sort.Order))}}">{{t "sort_name"}}<span class="arrow">{{if eq .Sort.Field "name"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "type"}} active{{end}}" href="?{{queryString (sortURL $q "type" (sortOrder .Sort.Field "type" .Sort.Order))}}">{{t "sort_type"}}<span class="arrow">{{if eq .Sort.Field "type"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">{{t "sort_modified"}}<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
+      <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">{{t "sort_size"}}<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
     {{/* Per user request 2026-06-20 (Phase 3): breadcrumb
        above the sort-bar, above the media section. Each
@@ -2412,7 +2648,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              layout is unchanged (the .type-filter-group is a
              flex row like the original .filter-row contents). */}}
         <div class="type-filter-group">
-        <span class="filter-label">File Type Filter</span>
+        <span class="filter-label">{{t "filter_label"}}</span>
 
         {{if gt .FilterImageOptions.Total 0}}
         <details class="filter-dropdown">
@@ -2471,7 +2707,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         </details>
         {{end}}
 
-        <button type="submit" class="filter-apply">Filter</button>
+        <button type="submit" class="filter-apply">{{t "filter_apply"}}</button>
         {{/* Per user request 2026-06-30: moved here from
              before the filter dropdowns. Renamed from "All"
              to "Reset" (per user clarification: same function
@@ -2483,7 +2719,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
              it makes sense to highlight it as the "current"
              state when active). */}}
         <a class="filter-pill filter-all{{if not .IsTypeFilterActive}} filter-pill-active{{end}}"
-           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">Reset</a>
+           href="{{if .Breadcrumb}}{{(index .Breadcrumb (lastIndex .Breadcrumb)).Href}}{{else}}./{{end}}">{{t "search_reset"}}</a>
         </div>
         {{- /* Search box + button on the right of the filter row.
             Client-side: as the user types, JS hides non-matching
@@ -2493,11 +2729,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         <div class="search-controls">
           <input type="search" name="q" class="search-input"
             data-search-match="{{.SearchMatch}}"
-            placeholder="Search filenames…"
+            placeholder="{{t "search_placeholder"}}"
             value="{{.SearchQuery}}"
             autocomplete="off"
-            aria-label="Search filenames in this directory">
-          <button type="submit" class="search-button">Search All</button>
+            aria-label="{{t "search_aria"}}">
+          <button type="submit" class="search-button">{{t "search_button"}}</button>
           {{/* Per user request 2026-06-28: a Reset button next
                to "Search all" that clears the search input
                AND the ?q= URL parameter (if one is present).
@@ -2509,7 +2745,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                handler is in the inline JS at the bottom of
                the page (searchReset IIFE). */}}
           <button type="button" class="search-reset-button"
-            aria-label="Clear search and reset filter">Reset</button>
+            aria-label="{{t "reset_aria"}}">{{t "search_reset"}}</button>
         </div>
       </div>
     </form>
@@ -2528,9 +2764,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        a valid relative URL. -->
     <nav class="pagination">
     {{if .HasPrev}}
-      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">{{t "page_prev_arrow"}}</a>
     {{else}}
-      <span class="page-btn disabled">← Prev</span>
+      <span class="page-btn disabled">{{t "page_prev_arrow"}}</span>
     {{end}}
     {{range .PageNumbers}}
     {{if eq . 0}}
@@ -2542,18 +2778,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     {{end}}
     {{if .HasNext}}
-      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">{{t "page_next"}} →</a>
     {{else}}
-      <span class="page-btn disabled">Next →</span>
+      <span class="page-btn disabled">{{t "page_next"}} →</span>
     {{end}}
     </nav>
 
     {{if or .Up (gt (len .Subdirs) 0)}}
     <section class="dirs-section" data-section="dirs">
     <h2 class="section-heading">
-      <span>Directories ({{len .Subdirs}}{{if .Up}} <em>+ Parent Directory</em>{{end}})</span>
+      <span>{{if .Up}}{{t "dirs_header_with_parent" (len .Subdirs)}}{{else}}{{t "dirs_header" (len .Subdirs)}}{{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="Show/hide directories">−</button>
+      <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="{{t "section_show_hide_dirs"}}">−</button>
     </h2>
     <div class="section-body" id="dirs-body">
     <!-- Per user request 2026-06-19: directory chips replaced
@@ -2600,11 +2836,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                inside the <th> shows ▲/▼ for the active sort.
                The default sort for the dirs table is
                "name asc" (matches the server-side order). -->
-          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>#&nbsp;Files</span><span class="sort-indicator"></span></th>
-          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>#&nbsp;Dirs</span><span class="sort-indicator"></span></th>
-          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
-          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Last Modified</span><span class="sort-indicator"></span></th>
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>{{t "col_name"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="items" data-default-order="desc"><span>{{t "col_files_hash"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-count sortable" data-sort-key="dirs" data-default-order="desc"><span>{{t "col_dirs_hash"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>{{t "col_size"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>{{t "col_last_modified"}}</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -2627,9 +2863,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   {{if .OtherFiles}}
   <section class="others-section" data-section="others">
     <h2 class="section-heading">
-      <span>Other files ({{len .OtherFiles}})</span>
+      <span>{{t "others_header" (len .OtherFiles)}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="Show/hide other files">−</button>
+      <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="{{t "section_show_hide_others"}}">−</button>
     </h2>
     <div class="section-body" id="others-body">
     <!-- Per user request 2026-06-20: same full-width table format
@@ -2644,10 +2880,10 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                the initial direction. The default for the
                others table is "date desc" (matches the
                server-side mtime-desc default). -->
-          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>Name</span><span class="sort-indicator"></span></th>
-          <th class="col-type sortable" data-sort-key="type" data-default-order="asc"><span>Type</span><span class="sort-indicator"></span></th>
-          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>Size</span><span class="sort-indicator"></span></th>
-          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>Last Modified</span><span class="sort-indicator"></span></th>
+          <th class="col-name sortable" data-sort-key="name" data-default-order="asc"><span>{{t "col_name"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-type sortable" data-sort-key="type" data-default-order="asc"><span>{{t "col_type"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-size sortable" data-sort-key="size" data-default-order="desc"><span>{{t "col_size"}}</span><span class="sort-indicator"></span></th>
+          <th class="col-date sortable" data-sort-key="date" data-default-order="desc"><span>{{t "col_last_modified"}}</span><span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -2728,9 +2964,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            in its server-rendered state; if they differ (visitor typed more
            chars), the JS has taken over and the JS format applies.
       */ -}}
-      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
+      <span data-search-header data-search-header-default="{{t "media_label"}} ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - {{t "search_showing"}} {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}{{t "media_label"}} ({{.DirectoryTotal}} - {{t "search_label"}} '{{.SearchQuery}}' - {{t "showing_keyword"}} {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} {{t "of_keyword"}} {{.FilteredTotal}}){{else}}{{t "media_label"}} ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - {{t "search_showing"}} {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}{{t "media_label"}} ({{.DirectoryTotal}} - {{t "search_label"}} '{{.SearchQuery}}' - {{t "showing_keyword"}} {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} {{t "of_keyword"}} {{.FilteredTotal}}){{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
-      <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="Show/hide media">−</button>
+      <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="{{t "section_show_hide_media"}}">−</button>
     </h2>
     <div class="section-body" id="media-body">
     <div class="media-grid">
@@ -2739,9 +2975,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
     <nav class="pagination">
       {{if .HasPrev}}
-        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">{{t "page_prev_arrow"}}</a>
       {{else}}
-        <span class="page-btn disabled">← Prev</span>
+        <span class="page-btn disabled">{{t "page_prev_arrow"}}</span>
       {{end}}
       {{range .PageNumbers}}
       {{if eq . 0}}
@@ -2753,14 +2989,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{end}}
       {{end}}
       {{if .HasNext}}
-        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">Next →</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | plus1))}}">{{t "page_next"}} →</a>
       {{else}}
-        <span class="page-btn disabled">Next →</span>
+        <span class="page-btn disabled">{{t "page_next"}} →</span>
       {{end}}
     </nav>
     </div>
     {{if eq (len .Images) 0}}
-    <p class="empty">No images match the current filter.</p>
+    <p class="empty">{{t "empty_filter"}}</p>
     {{end}}
   </section>
 </main>
@@ -2785,8 +3021,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        scrolled at least one full screen of content)
      - On click: smooth scroll to the top of the page
        (window.scrollTo with behavior: 'smooth') -->
-<a href="#top" class="back-to-top" id="back-to-top" aria-label="Back to top">
-  <span class="back-to-top-text">Back To Top</span>
+<a href="#top" class="back-to-top" id="back-to-top" aria-label="{{t "back_to_top_aria"}}">
+  <span class="back-to-top-text">{{t "back_to_top"}}</span>
   <span class="back-to-top-pct" aria-hidden="true">0%</span>
 </a>
 <script>
@@ -2865,6 +3101,28 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
    Empty query = no filter (everything visible). */
 (function() {
+  // Per user request 2026-07-04: local t() helper + a
+  // search-header-specific TRANSLATIONS map. The lightbox
+  // IIFE defines its own t() but it's in a different scope
+  // — we need our own here so the JS search-header can
+  // use the same translated strings (e.g. "Media",
+  // "search", "showing", "of", "This page") in any locale.
+  // Server-rendered keys populate the map so the strings
+  // are localised based on the page's resolved locale.
+  var TRANSLATIONS = {
+    media_label: '{{t "media_label"}}',
+    search_label: '{{t "search_label"}}',
+    search_showing: '{{t "search_showing"}}',
+    showing_keyword: '{{t "showing_keyword"}}',
+    of_keyword: '{{t "of_keyword"}}',
+    this_page: '{{t "this_page"}}',
+  };
+  function t(key) {
+    if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
+      return TRANSLATIONS[key];
+    }
+    return key;
+  }
   var input = document.querySelector('.search-input');
   if (input) {
     // Read the operator-configured match mode. Default to
@@ -3077,11 +3335,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       //   Result: "9 of 30 <em>This page</em>".
       var ofPart = '';
       if (filteredTotal > 0 && pageSizeTotal >= filteredTotal) {
-        ofPart = ' of ' + filteredTotal;
+        ofPart = ' ' + t('of_keyword') + ' ' + filteredTotal;
       } else {
-        ofPart = ' of ' + pageSizeTotal + ' <em>This page</em>';
+        ofPart = ' ' + t('of_keyword') + ' ' + pageSizeTotal + ' <em>' + t('this_page') + '</em>';
       }
-      headerEl.innerHTML = 'Media (' + totalFiles + ' - search \'' + currentQuery + '\' - showing ' + visibleCount + ofPart + ')';
+      headerEl.innerHTML = t('media_label') + ' (' + totalFiles + ' - ' + t('search_label') + ' \'' + currentQuery + '\' - ' + t('showing_keyword') + ' ' + visibleCount + ofPart + ')';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
@@ -3370,13 +3628,60 @@ input.addEventListener('input', function() {
 (function() {
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
+  // Per user request 2026-07-04: client-side translation
+  // helper. Looks up a key in the inline TRANSLATIONS map
+  // (rendered server-side by the Go template, see TRANSLATIONS
+  // below). Falls back to the key itself if not found. The
+  // function name is short because the JS strings inline it
+  // many times.
+  //
+  // Per user request 2026-07-04: client-side translations
+  // (used by t() below). Rendered server-side by the Go
+  // template. Only contains the keys that appear inside JS
+  // strings (lightbox labels, EXIF/META rows, etc.).
+  // Page-level strings use the Go template's t function directly,
+  // so they don't need to be in this map. Note: we escape
+  // the open and close braces below (escaped) so the Go template engine doesn't
+  // try to evaluate them as template actions (the
+  // translation LOOKUP happens server-side when the page
+  // is rendered, not at template-parse time).
+  var TRANSLATIONS = {
+    lightbox_open_aria: '{{t "lightbox_open_aria"}}',
+    lightbox_open_title: '{{t "lightbox_open_title"}}',
+    lightbox_close_aria: '{{t "lightbox_close_aria"}}',
+    lightbox_close_title: '{{t "lightbox_close_title"}}',
+    page_prev: '{{t "page_prev"}}',
+    page_next: '{{t "page_next"}}',
+    exif_camera: '{{t "exif_camera"}}',
+    exif_lens: '{{t "exif_lens"}}',
+    exif_date: '{{t "exif_date"}}',
+    exif_exposure: '{{t "exif_exposure"}}',
+    meta_duration: '{{t "meta_duration"}}',
+    meta_container: '{{t "meta_container"}}',
+    meta_video: '{{t "meta_video"}}',
+    meta_audio: '{{t "meta_audio"}}',
+    meta_bitrate: '{{t "meta_bitrate"}}',
+    meta_framerate: '{{t "meta_framerate"}}',
+    media_label: '{{t "media_label"}}',
+    search_label: '{{t "search_label"}}',
+    search_showing: '{{t "search_showing"}}',
+    showing_keyword: '{{t "showing_keyword"}}',
+    of_keyword: '{{t "of_keyword"}}',
+    this_page: '{{t "this_page"}}',
+  };
+  function t(key) {
+    if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
+      return TRANSLATIONS[key];
+    }
+    return key;
+  }
   overlay.innerHTML =
     '<div class="lb-controls">' +
-      '<button class="lb-btn lb-open" aria-label="Open in new tab" title="Open in new tab">↗</button>' +
-      '<button class="lb-btn lb-close" aria-label="Close" title="Close">✕</button>' +
+      '<button class="lb-btn lb-open" aria-label="' + t('lightbox_open_aria') + '" title="' + t('lightbox_open_title') + '">↗</button>' +
+      '<button class="lb-btn lb-close" aria-label="' + t('lightbox_close_aria') + '" title="' + t('lightbox_close_title') + '">✕</button>' +
     '</div>' +
-    '<button class="lb-btn lb-prev" aria-label="Previous">‹</button>' +
-    '<button class="lb-btn lb-next" aria-label="Next">›</button>' +
+    '<button class="lb-btn lb-prev" aria-label="' + t('page_prev') + '">‹</button>' +
+    '<button class="lb-btn lb-next" aria-label="' + t('page_next') + '">›</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>' +
     // Per user request 2026-07-02: the EXIF panel is
@@ -3387,13 +3692,13 @@ input.addEventListener('input', function() {
     // expanded state is stored in localStorage so the
     // user doesn't have to re-pick on every visit.
     '<div class="lb-exif" hidden>' +
-      '<div class="lb-exif-header" data-lb-panel="exif" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">EXIF</div>' +
+      '<div class="lb-exif-header" data-lb-panel="exif" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "exif_label"}}</div>' +
       '<div class="lb-exif-body">' +
         '<table class="lb-exif-table">' +
-          '<tr><td class="lb-exif-label">Camera</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
-          '<tr><td class="lb-exif-label">Lens</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
-          '<tr><td class="lb-exif-label">Date</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
-          '<tr><td class="lb-exif-label">Exposure</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_camera') + '</td><td class="lb-exif-val" data-exif="camera"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_lens') + '</td><td class="lb-exif-val" data-exif="lens"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_date') + '</td><td class="lb-exif-val" data-exif="date"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('exif_exposure') + '</td><td class="lb-exif-val" data-exif="exposure"></td></tr>' +
         '</table>' +
       '</div>' +
     '</div>' +
@@ -3405,15 +3710,15 @@ input.addEventListener('input', function() {
     // to the EXIF panel — collapsible header + body.
     // Same localStorage pattern (gallery-lb-video-meta-collapsed).
     '<div class="lb-video-meta" hidden>' +
-      '<div class="lb-exif-header" data-lb-panel="video-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">META</div>' +
+      '<div class="lb-exif-header" data-lb-panel="video-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "meta_label"}}</div>' +
       '<div class="lb-exif-body">' +
         '<table class="lb-exif-table">' +
-          '<tr><td class="lb-exif-label">Duration</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
-          '<tr><td class="lb-exif-label">Container</td><td class="lb-exif-val" data-video="container"></td></tr>' +
-          '<tr><td class="lb-exif-label">Video</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
-          '<tr><td class="lb-exif-label">Audio</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
-          '<tr><td class="lb-exif-label">Bitrate</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
-          '<tr><td class="lb-exif-label">Framerate</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_duration') + '</td><td class="lb-exif-val" data-video="duration"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_container') + '</td><td class="lb-exif-val" data-video="container"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_video') + '</td><td class="lb-exif-val" data-video="video-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_audio') + '</td><td class="lb-exif-val" data-video="audio-codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_bitrate') + '</td><td class="lb-exif-val" data-video="bitrate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_framerate') + '</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
         '</table>' +
       '</div>' +
     '</div>';
