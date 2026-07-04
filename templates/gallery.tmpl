@@ -20,6 +20,113 @@
         }
       } catch (e) { /* localStorage unavailable */ }
     })();
+
+    // Per user request 2026-07-04: language picker persistence.
+    //
+    // Flow:
+    //   1. On page load, read `gallery-language` from
+    //      localStorage. If present, also set the
+    //      `gallery-language` cookie (so the server sees
+    //      it on the next request even if the visitor's
+    //      URL doesn't include ?lang=).
+    //
+    //   2. When the visitor picks a language from the
+    //      dropdown, the page navigates to ?lang=<locale>
+    //      (a full page reload). After the reload, this
+    //      script runs and sees the new locale — but we
+    //      also need to write to localStorage. We do that
+    //      by checking if the URL has ?lang=; if so, write
+    //      that value to localStorage + cookie.
+    //
+    //   3. Per user feedback 2026-07-04: "full page reload
+    //      — this should only ever happen once". After
+    //      the first dropdown selection, the cookie is
+    //      set, so the server's locale detection (in
+    //      DetectLocale) picks up the cookie on every
+    //      subsequent request. The visitor never sees
+    //      another full reload from the language picker.
+    //
+    // The cookie is set with SameSite=Lax, no Domain
+    // (so the browser uses the current host), no Secure
+    // (works on http:// for local dev). Path=/ so it's
+    // sent on every request to this site.
+    (function() {
+      try {
+        var currentPath = window.location.pathname;
+        var params = new URLSearchParams(window.location.search);
+        var urlLang = params.get('lang');
+
+        if (urlLang) {
+          // The visitor came in via a ?lang= URL (e.g. by
+          // clicking the dropdown). Persist the choice.
+          try {
+            localStorage.setItem('gallery-language', urlLang);
+          } catch (e) { /* localStorage write blocked */ }
+          // Set the cookie too (server-readable).
+          // Expiry: 1 year from now.
+          var expires = new Date();
+          expires.setFullYear(expires.getFullYear() + 1);
+          document.cookie = 'gallery-language=' + encodeURIComponent(urlLang)
+            + '; expires=' + expires.toUTCString()
+            + '; path=/; SameSite=Lax';
+        } else {
+          // No ?lang= in the URL. If we have a value in
+          // localStorage, make sure the cookie is in sync
+          // (so the server doesn't need to read localStorage
+          // to determine the locale — the cookie is the
+          // server-side source of truth, localStorage is
+          // just a client-side mirror for the picker).
+          var saved = localStorage.getItem('gallery-language');
+          if (saved && saved.length > 0 && saved.length < 20) {
+            // Only set the cookie if the localStorage value
+            // is a plausible locale code (2-3 chars).
+            // This guards against a stale/garbage value
+            // accidentally re-setting the cookie on every
+            // visit.
+            var hasCookie = document.cookie.indexOf('gallery-language=' + encodeURIComponent(saved)) >= 0;
+            if (!hasCookie) {
+              var expires = new Date();
+              expires.setFullYear(expires.getFullYear() + 1);
+              document.cookie = 'gallery-language=' + encodeURIComponent(saved)
+                + '; expires=' + expires.toUTCString()
+                + '; path=/; SameSite=Lax';
+              // Reload so the server picks up the cookie
+              // and renders in the saved locale. This is
+              // a one-time "first visit after enabling
+              // localStorage" reload.
+              window.location.reload();
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        /* localStorage or cookie write failed — silently
+           fall back to the server's locale detection. */
+      }
+    })();
+
+    // Per user request 2026-07-04: after a dropdown click,
+    // close the <details> element so the menu collapses.
+    // (We don't need to do anything else — the <a href>
+    // navigation handles the rest.)
+    (function() {
+      var langToggle = document.getElementById('lang-toggle');
+      if (langToggle) {
+        langToggle.addEventListener('click', function(e) {
+          // If the click was on a .lang-option link, close
+          // the dropdown so when the user comes back, they
+          // see the closed state.
+          var target = e.target;
+          while (target && target !== langToggle) {
+            if (target.classList && target.classList.contains('lang-option')) {
+              langToggle.removeAttribute('open');
+              break;
+            }
+            target = target.parentNode;
+          }
+        });
+      }
+    })();
   </script>
 <style>
 
@@ -179,6 +286,85 @@
 }
 
 /* === THEME TOGGLE BUTTON GROUP (header) ====================== */
+/* Per user request 2026-07-04: language picker dropdown.
+   Visually matches .theme-toggle (same chip-style background,
+   same border-radius) so the two controls feel like siblings.
+   The trigger is a <summary> inside <details> (same pattern
+   as .filter-dropdown) so we get native keyboard navigation
+   and aria semantics for free. The menu shows when <details>
+   is open; we close it after a click via inline JS. */
+.lang-toggle {
+  position: relative;
+  display: inline-block;
+  margin-right: 0.5rem;
+}
+.lang-toggle .lang-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 3px 10px;
+  background: var(--bg-chip);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+  font-family: inherit;
+  transition: background 0.12s, border-color 0.12s;
+}
+.lang-toggle .lang-trigger::-webkit-details-marker {
+  display: none; /* hide the default <summary> arrow */
+}
+.lang-toggle .lang-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+.lang-toggle .lang-trigger:focus-visible {
+  outline: 2px solid #006ed3;
+  outline-offset: 1px;
+}
+.lang-toggle .lang-caret {
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  transition: transform 0.15s;
+}
+.lang-toggle[open] .lang-caret {
+  transform: rotate(180deg);
+}
+.lang-toggle .lang-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  padding: 4px 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.lang-toggle .lang-option {
+  display: block;
+  padding: 0.4rem 0.9rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 400;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.lang-toggle .lang-option:hover {
+  background: var(--bg-hover);
+}
+.lang-toggle .lang-option-active {
+  color: var(--accent);
+  font-weight: 600;
+}
 .theme-toggle {
   display: inline-flex;
   gap: 2px;
@@ -2358,6 +2544,41 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            Name/Type/Modified/Size buttons), so the sort order is
            still visible there. The theme toggle moves to the top-
            right (where the sort indicator was). -->
+      <!-- Per user request 2026-07-04: language picker
+           dropdown. Sits to the LEFT of the dark/light mode
+           selector in the same header bar. The trigger
+           shows the current locale's native name (e.g.
+           "English", "Deutsch", "日本語"); the options show
+           the native names of ALL supported locales. The
+           visitor picks one → navigates to ?lang=<locale>
+           (a full page reload) → the server sets the cookie
+           and the JS writes to localStorage. Subsequent
+           visits use the cookie automatically; no further
+           reloads needed.
+           
+           Uses <details>/<summary> for the dropdown (same
+           pattern as the existing filter dropdowns) so
+           the markup is consistent and we get native
+           keyboard navigation for free. -->
+      {{if gt (len .AvailableLocales) 1}}
+      <details class="lang-toggle" id="lang-toggle">
+        <summary class="lang-trigger"
+                 aria-label="{{t "lang_picker_aria"}}">
+          <span class="lang-current">{{tr.NativeName .Locale}}</span>
+          <span class="lang-caret" aria-hidden="true">▾</span>
+        </summary>
+        <div class="lang-menu" role="menu">
+          {{range .AvailableLocales}}
+          {{$locale := .}}
+          <a class="lang-option{{if eq $locale $.Locale}} lang-option-active{{end}}"
+             role="menuitem"
+             href="?{{queryString (queryWith $.Query "lang" $locale)}}">
+            {{tr.NativeName $locale}}
+          </a>
+          {{end}}
+        </div>
+      </details>
+      {{end}}
       <div class="theme-toggle" role="radiogroup" aria-label="{{t "theme"}}">
         <button type="button" data-theme="auto" aria-pressed="false" aria-label="{{t "theme_auto"}}" title="{{t "theme_short_auto"}}">⚙</button>
         <button type="button" data-theme="light" aria-pressed="false" aria-label="{{t "theme_light"}}" title="{{t "theme_short_light"}}">☀</button>

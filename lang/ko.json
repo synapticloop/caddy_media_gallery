@@ -1,4 +1,14 @@
 {
+    "lang_name_self": "한국어",
+  "lang_name_en": "영어",
+  "lang_name_de": "독일어",
+  "lang_name_es": "스페인어",
+  "lang_name_fr": "프랑스어",
+  "lang_name_ja": "일본어",
+  "lang_name_ko": "한국어",
+  "lang_name_zh": "중국어",
+  "lang_name_pt": "포르투갈어",
+  "lang_picker_aria": "언어 변경",
   "_meta": {
     "locale": "ko",
     "language": "한국어",

@@ -2608,6 +2608,16 @@ var galleryFuncs = template.FuncMap{
 		}
 		return tr.T(lang, key, args...)
 	},
+	// "tr" returns the current Translator so the
+	// template can call methods on it (e.g. .NativeName
+	// for the language picker dropdown). The translator
+	// is safe to read concurrently from a template
+	// function (it's read-only after construction).
+	"tr": func() *Translator {
+		tMu.RLock()
+		defer tMu.RUnlock()
+		return currentT
+	},
 }
 
 // writeBundledTemplates ensures the bundled template exists on disk

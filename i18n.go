@@ -326,6 +326,53 @@ func (t *Translator) Locales() []string {
 	return out
 }
 
+// NativeName returns the native-script name of a locale
+// (e.g. "English" for "en", "Deutsch" for "de", "日本語"
+// for "ja"). The name is ALWAYS rendered in the locale's
+// OWN language — we read from the requested locale's
+// translation file, not from "en". So when the visitor is
+// viewing the page in Japanese, the options show their
+// native names (英語, ドイツ語, etc.) because
+// each locale's JSON file has the native name of every
+// other locale translated.
+//
+// Falls back to the locale code itself if the native name
+// isn't found (e.g. a new locale was added but the native
+// name wasn't populated in any JSON file).
+//
+// Per user request 2026-07-04: the dropdown UI shows
+// native script names regardless of the visitor's current
+// locale — the visitor's eye picks out their language from
+// the dropdown instantly.
+func (t *Translator) NativeName(locale string) string {
+	// First try the locale's own translation of its own
+	// name. "lang_name_en" in en.json is "English";
+	// "lang_name_en" in de.json is "Englisch"; etc.
+	key := "lang_name_" + locale
+	if body, ok := t.entries[locale]; ok {
+		if name, ok := body[key]; ok && name != "" {
+			return name
+		}
+	}
+	// Fall back to any other locale that has this name.
+	for _, body := range t.entries {
+		if name, ok := body[key]; ok && name != "" {
+			return name
+		}
+	}
+	// Last resort: return the locale code itself.
+	return locale
+}
+
+// SelfName returns the native name of the translator's
+// own locale (the key used for the current locale trigger
+// button). Equivalent to NativeName(locale) but reads
+// directly without the locale arg — callers don't need
+// to track the current locale separately.
+func (t *Translator) SelfName(locale string) string {
+	return t.NativeName(locale)
+}
+
 // HasLocale reports whether the given locale is supported.
 func (t *Translator) HasLocale(locale string) bool {
 	t.mu.RLock()

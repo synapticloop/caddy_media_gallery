@@ -1,4 +1,14 @@
 {
+    "lang_name_self": "日本語",
+  "lang_name_en": "英語",
+  "lang_name_de": "ドイツ語",
+  "lang_name_es": "スペイン語",
+  "lang_name_fr": "フランス語",
+  "lang_name_ja": "日本語",
+  "lang_name_ko": "韓国語",
+  "lang_name_zh": "中国語",
+  "lang_name_pt": "ポルトガル語",
+  "lang_picker_aria": "言語を変更",
   "_meta": {
     "locale": "ja",
     "language": "日本語",

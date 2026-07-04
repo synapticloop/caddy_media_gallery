@@ -1,4 +1,14 @@
 {
+    "lang_name_self": "中文",
+  "lang_name_en": "英语",
+  "lang_name_de": "德语",
+  "lang_name_es": "西班牙语",
+  "lang_name_fr": "法语",
+  "lang_name_ja": "日语",
+  "lang_name_ko": "韩语",
+  "lang_name_zh": "中文",
+  "lang_name_pt": "葡萄牙语",
+  "lang_picker_aria": "更改语言",
   "_meta": {
     "locale": "zh",
     "language": "中文",

@@ -1,4 +1,14 @@
 {
+    "lang_name_self": "Deutsch",
+  "lang_name_en": "Englisch",
+  "lang_name_de": "Deutsch",
+  "lang_name_es": "Spanisch",
+  "lang_name_fr": "Französisch",
+  "lang_name_ja": "Japanisch",
+  "lang_name_ko": "Koreanisch",
+  "lang_name_zh": "Chinesisch",
+  "lang_name_pt": "Portugiesisch",
+  "lang_picker_aria": "Sprache ändern",
   "_meta": {
     "locale": "de",
     "language": "Deutsch",
