@@ -231,22 +231,26 @@ type Gallery struct {
 	// shape as imageExtsMap.
 	videoExtsMap map[string]bool
 
-	// PageSize is the number of image entries per page. Default
-	// is 50 (set in Provision if zero). The user can override
-	// per-route via the Caddyfile: .
-	// Validation: must be > 0. A zero or negative value is rejected
-	// by UnmarshalCaddyfile (the Caddyfile parser).
+	// PageSize is the number of image entries per page, set per
+	// request. Default is 60 (or the first numeric item of
+	// PageSizes, if set; or the visitor's ?page_size=N URL
+	// parameter, if valid). The CURRENT page size is derived
+	// from the URL or the operator's default — it's not a
+	// operator-configurable setting itself.
 	PageSize int
 	// PageSizes is the list of page sizes the visitor can
 	// choose from in the per-page dropdown (e.g. [30, 60, 120,
 	// "all"]). Set in the Caddyfile via
-	// (space-separated; "all" as a token means "show all items
-	// in one page" - only included if explicitly listed).
-	// If empty (default), the resolved PageSizes (set in
-	// Provision) is [30, 60, 120, "all"]. The CURRENT page size
-	// is set via the URL ?page_size=N parameter, which is
-	// validated against this list (unknown values fall back to
-	// the first item).
+	// `page_size 30 60 120 all` (space-separated; "all" is a
+	// special token meaning "show all items in one page" — only
+	// included if explicitly listed). The list is always
+	// sorted by increasing numeric value with "all" at the end,
+	// so the operator can write the values in any order. If
+	// empty (default), the resolved PageSizes is
+	// [30, 60, 120, "all"] (per user request 2026-06-20). The
+	// current page size (PageSize, see above) is validated
+	// against this list (unknown values fall back to the first
+	// item).
 	PageSizes []string
 
 	// SearchMatch controls how filenames are matched against
