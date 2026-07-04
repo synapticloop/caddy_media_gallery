@@ -35,10 +35,10 @@ The `media_gallery` directive accepts one inline option:
 | `thumb_format` | `webp` / `png` / `jpeg` (or `jpg`) | `webp` | Output format for generated thumbnails. |
 | `thumb_ttl` | integer (minutes) &gt;= 1 | `1440` (24h) | HTTP `Cache-Control: max-age` for thumb responses. |
 | `cache_scan` | integer (minutes) &gt;= 1 | `1440` (24h) | In-memory scan cache TTL. The scan cache's primary invalidation is the **directory mtime** (checked on every access — adding or removing a file changes the dir mtime and invalidates the cache). The TTL is a safety net for edge cases (clock skew, manual mtime changes, stat cache invalidation). The default 24h keeps the cache warm for typical interactive use without forcing periodic re-scans. |
-| `no_thumbs` | `true` / `false` (no-arg = `true`) | `false` (thumbs on) | Skip on-the-fly WebP thumbnail generation for **images**. Tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`. Thumb requests fall through to the next handler. |
+| `no_thumbs` | `true` / `false` (no-arg = `true`) | **`true` (thumbs off, since 2026-07-02)** | Skip on-the-fly WebP thumbnail generation. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no thumb cache, no ffmpeg CPU overhead). Affects **both** images and videos — when `true`, the tile `<img src>` points to the original file instead of `~/_thumbs/<name>.webp`, and video tiles show the placeholder gradient + play button instead of a video poster. Thumb requests fall through to the next handler (404). Operators who want rich thumbnails opt in with `no_thumbs false`. |
 | `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | `true` / `false` (no-arg = `true`) | `false` (EXIF on) | Disable EXIF reading entirely. When set, the visible-page sync enrich skips EXIF reads, the per-thumb `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark still appears (unaffected by `no_exif`). Useful for privacy-sensitive deployments. Note that EXIF does NOT include GPS by default — see the EXIF section for details. |
-| `no_meta` | `true` / `false` (no-arg = `true`) | `false` (video meta on) | Per user request 2026-07-02: disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). When set, the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. Useful for galleries with many videos where the operator does not need the metadata enrichment (saves 50-100ms per video on first extraction). |
+| `no_exif` | `true` / `false` (no-arg = `true`) | **`true` (EXIF off, since 2026-07-02)** | Disable EXIF reading entirely. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no exiftool / go-exif calls, no camera metadata surfaced). When set, the visible-page sync enrich skips EXIF reads, the per-thumb `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark still appears (unaffected by `no_exif`). Note that EXIF does NOT include GPS by default — see the EXIF section for details. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading opt in with `no_exif false`. |
+| `no_meta` | `true` / `false` (no-arg = `true`) | **`true` (video meta off, since 2026-07-02)** | Disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no ffprobe subprocess calls, no extra dependencies required). When set, the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment opt in with `no_meta false`. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule. |
 | `max_cache_size_mb` | integer &gt;= 0 | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). See [Caching & performance](#caching--performance) below for the full story. |
 
@@ -103,24 +103,27 @@ existing `Caddyfile.user` alone on subsequent builds.
 
 The full argument matrix is in `./build.sh --help`.
 
-### Example: skip thumbnail generation
+### Example: thumbnail generation (off by default since 2026-07-02)
+
+Since 2026-07-02, `no_thumbs` defaults to `true` — the gallery behaves like caddys stock `file_server browse` out of the box (no thumb generation, no thumb cache, no ffmpeg CPU overhead). The directive name is now a misnomer (since its the default) but kept for backward compatibility.
+
+The default behaviour (no_thumbs=true):
+- Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
+- No thumb generation, no cache, no CPU cost on first request
+- The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
+- Video tiles show the placeholder gradient + play button instead of a video poster
+
+To enable the full thumbnail UX, set `no_thumbs false`:
 
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
     media_gallery {
-        no_thumbs
+        no_thumbs false    # opt back in to thumbnail generation
     }
     file_server
 }
 ```
-
-With `no_thumbs`:
-- Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
-- No thumb generation, no cache, no CPU cost on first request
-- The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
-
-Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in).
 
 ### Example: disable video thumbnails
 
@@ -243,8 +246,10 @@ of the `media_gallery` handler, with realistic values:
   "thumb_format": "webp",
   "thumb_ttl": 1440,
   "cache_scan": 1440,  // 24h (mtime check is the primary invalidation)
-  "no_thumbs": false,
+  "no_thumbs": true,           // default since 2026-07-02 (was false)
   "no_video_thumbs": false,
+  "no_exif": true,               // default since 2026-07-02 (was false)
+  "no_meta": true,               // default since 2026-07-02 (was false)
   "template": "gallery.tmpl",
   "search_match": "substring",
   "max_cache_size_mb": 1024
@@ -271,8 +276,10 @@ the same default value applies.
 | `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |
 | `thumb_ttl <N>` | `"thumb_ttl"` | int (minutes) | `1440` |
 | `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1440` (24h) |
-| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | `false` |
+| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | **`true`** (since 2026-07-02, was `false`) |
 | `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
+| `no_exif` / `no_exif false` | `"no_exif"` | bool | **`true`** (since 2026-07-02, was `false`) |
+| `no_meta` / `no_meta false` | `"no_meta"` | bool | **`true`** (since 2026-07-02, was `false`) |
 | `template <name>` | `"template"` | string | `gallery.tmpl` |
 | `search_match <word\|substring>` | `"search_match"` | string | `substring` |
 | `max_cache_size_mb <N>` | `"max_cache_size_mb"` | int (MB) | `1024` (1 GB; `0` = no cap) |

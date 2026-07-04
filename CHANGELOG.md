@@ -11,6 +11,33 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ## 2026-07-03
 
+### ✨ Feature: defaults aligned with `file_server browse`
+
+Per user request 2026-07-02: three configuration options now default to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no enrichment, no extra dependencies, no I/O beyond the directory scan):
+
+- **`no_exif`** (was `false`) — skip image EXIF reads by default (no exiftool / go-exif calls, no `.exif` sidecars, no EXIF pills on cards, no EXIF panel in lightbox). Operators who want EXIF reading opt in with `no_exif false`.
+- **`no_meta`** (was `false`) — skip video metadata reads by default (no ffprobe subprocess calls, no `.vmeta` sidecars, no META pills on cards, no META panel in lightbox). Operators who want video metadata enrichment opt in with `no_meta false`.
+- **`no_thumbs`** (was `false`) — skip thumbnail generation by default (no thumb cache, no ffmpeg CPU overhead, original file used as `<img src>`). Affects both images and videos. Operators who want rich thumbnails opt in with `no_thumbs false`.
+
+The directive names are now technically misnomers (since theyre the default), but theyre kept for backward compatibility — operators who already had `no_exif` or `no_thumbs` in their Caddyfile see no behavior change.
+
+To get the **full enriched UX** (EXIF pills + video metadata + thumbnails), set all three to `false`:
+
+```
+media_gallery {
+    no_exif false
+    no_meta false
+    no_thumbs false
+}
+```
+
+Implementation details:
+- Added `NoExifSet`, `NoMetaSet`, `NoThumbsSet` companion fields to the `Gallery` struct. The Caddyfile parser sets these flags whenever the corresponding directive appears. `Provision()` defaults the value to `true` if the `Set` flag is `false` (no directive in Caddyfile), but preserves the operators explicit value when they use `no_xxx false`.
+- Fixed a latent bug in `scanner.go` `enrichParallel` where the video metadata block did NOT check `!s.NoMeta` (it always ran). Now the production enrich path correctly skips video metadata when `no_meta=true`.
+- Fixed a latent bug in `scancache.go` `extSetsKey`: the function declared a `noMeta` parameter but never used it in the returned key. Now both `noExif` and `noMeta` are part of the cache key, so changing the `no_meta` flag invalidates the cache (otherwise old cache entries with `VideoMeta` populated would be returned for new requests where `no_meta=true`).
+- Updated `render.go` `buildFileView` for `KindVideo`: the video `ThumbURL` is now only set if BOTH `noThumbs` AND `noVideoThumbs` are `false`. Previously, `no_thumbs` didn't affect videos.
+- 6 new tests added for the new default behavior and the operator opt-in pattern.
+
 ### 🐛 Fix: broken Last Modified sort + Size sort didn't account for KB/MB/GB
 Two sort bugs in the directories and other-files tables:
 - **Last Modified sort** was a no-op for directories because `v.ModTime = f.ModTime` was only set in the `default:` branch of `buildFileView()` (for "other" files). All directory rows had `data-date="0"`. Fixed by moving the assignment to BEFORE the switch in `buildFileView()` so it's set for ALL file kinds (KindDir, KindImage, KindVideo, default).

@@ -20,9 +20,9 @@ defined mode pickup - with the in-page toggle (shown in the animated preview bel
 - **Recursive** — every subdirectory under the matched route is rendered as a gallery.
 - **WebP thumbnails** generated on the fly, cached on disk, invalidated by source mtime. The thumb's mtime matches the source's mtime, and an LRU eviction runs when the cache exceeds `max_cache_size_mb`.
 - **Source dimensions** (W × H) shown at the bottom-left of each thumbnail as a watermark. Sourced from `image.DecodeConfig` for images (fast — reads only the header) and from `ffprobe` for videos. Both are cached in `.meta` sidecar files alongside the thumbnails so the second page load hits the sidecar fast path (<100µs per file).
-- **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF + dimensions are computed **synchronously during the page request** (the 60 visible-page files take ~75ms with 8 parallel workers, hidden behind the HTML render), then cached in `.meta` and `.exif` sidecar files alongside the thumb. The next page load hits the sidecar fast path (<100µs per file). The `no_exif` directive disables EXIF reading entirely (no sidecar is created, no EXIF pill on cards, no EXIF panel in lightbox).
+- **EXIF metadata** displayed in the lightbox for images that have it. CAMERA fields only (Make, Model, Lens, Date taken, Shutter, Aperture, ISO, Focal length) — **GPS data is never read** for privacy. An "EXIF" pill on the card lets the visitor know which images have metadata. EXIF + dimensions are computed **synchronously during the page request** (the 60 visible-page files take ~75ms with 8 parallel workers, hidden behind the HTML render), then cached in `.meta` and `.exif` sidecar files alongside the thumb. The next page load hits the sidecar fast path (<100µs per file). **EXIF is OPT-IN** as of 2026-07-02 — `no_exif` defaults to `true` (per user request, so the gallery behaves like caddys stock `file_server browse` out of the box). Operators who want EXIF reading set `no_exif false` in the Caddyfile. When `no_exif=true` (the default), no `.exif` sidecar is created, no EXIF pill on cards, no EXIF panel in lightbox.
 - **Collapsible EXIF/META panel** in the lightbox. Click the panel header ("EXIF" or "META") to collapse to a slim vertical bar on the right side of the image; click again to expand. State persists in localStorage (`gallery-lb-exif-collapsed` / `gallery-lb-video-meta-collapsed`) so the choice is remembered across visits. The bar's text is rotated 90° anticlockwise (top-to-bottom) via `writing-mode: vertical-lr`. Position is JS-computed to sit at `img.right - panel.width + 8`, slightly overlapping the image's right edge.
-- **Video metadata (META panel)** — parallel to EXIF for videos. Shows duration (e.g. "0:05"), container (e.g. "mov,mp4,m4a"), video codec (e.g. "h264"), audio codec, bitrate (e.g. "2.3 Mbps"), and framerate (e.g. "24 fps"). Extracted from `ffprobe -v error -show_format -show_streams -of json`, cached in `.vmeta` sidecars (parallel to `.exif`). A "META" pill on the card lets the visitor know which videos have metadata. The META panel **hides when the video is playing** and reappears when paused (play/pause handler on the `<video>` element). The `no_meta` directive disables video metadata extraction entirely (no `.vmeta` sidecar, no META pill, no lightbox panel).
+- **Video metadata (META panel)** — parallel to EXIF for videos. Shows duration (e.g. "0:05"), container (e.g. "mov,mp4,m4a"), video codec (e.g. "h264"), audio codec, bitrate (e.g. "2.3 Mbps"), and framerate (e.g. "24 fps"). Extracted from `ffprobe -v error -show_format -show_streams -of json`, cached in `.vmeta` sidecars (parallel to `.exif`). A "META" pill on the card lets the visitor know which videos have metadata. The META panel **hides when the video is playing** and reappears when paused (play/pause handler on the `<video>` element). **Video metadata is OPT-IN** as of 2026-07-02 — `no_meta` defaults to `true` (per user request). Operators who want video metadata extraction set `no_meta false` in the Caddyfile. When `no_meta=true` (the default), no `.vmeta` sidecar is created, no META pill on cards, no META panel in lightbox.
 - **"Back To Top" button** with scroll percentage. Fixed at the bottom-center of the viewport, appears after scrolling past one full viewport height. The button shows the current scroll percentage as a small badge (e.g. "Back To Top [50%]"). The percentage is computed as `scrollY / (scrollHeight - clientHeight) * 100` and updated via `requestAnimationFrame` on every scroll event (no jitter, no scroll-event spam).
 - **Filename search** with two operator-configurable match modes (`search_match word|substring`, default `substring`). Live (client-side) as the visitor types, plus a "Search All" button for server-side full-directory search. Non-matching cards stay visible but are dimmed (not hidden) so the visitor keeps spatial context.
 - **Hover tooltip on each thumbnail** showing the filename with the extension stripped and underscores / hyphens replaced by spaces — e.g. `misty_bamboo_forest_path.jpg` shows as `misty bamboo forest path`. Two layers: a native browser tooltip (via the HTML `title` attribute) for accessibility, plus a custom CSS tooltip (via `:before`) for instant visual feedback.
@@ -144,10 +144,10 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `thumb_format` | `webp` | Output format: `webp`, `png`, `jpeg` (or `jpg`). |
 | `thumb_ttl` | `1440` | HTTP `Cache-Control: max-age` in minutes for thumb responses. |
 | `cache_scan` | `1440` (24h) | In-memory scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net. |
-| `no_thumbs` | `false` | Skip thumbnail generation (use original file in `<img src>`). |
+| `no_thumbs` | `true` | Skip thumbnail generation (use original file in `<img src>`). Operators who want rich thumbnails set `no_thumbs false`. **Default flipped to `true` 2026-07-02** so the gallery behaves like caddys stock `file_server browse` by default — no on-the-fly thumb generation, no thumb cache, no ffmpeg CPU overhead. The directive name is now a misnomer (since its the default) but kept for backward compatibility. |
 | `no_video_thumbs` | `false` | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | `false` | Skip EXIF reading entirely. Disables both the per-thumb sidecar creation in `serveThumb` and the sync visible-page enrich in `ServeHTTP`. Cards no longer show the "EXIF" pill; lightbox hides the EXIF panel. Useful for privacy-sensitive deployments. |
-| `no_meta` | `false` | Skip video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Separate flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. When set, the sync visible-page enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). Useful for galleries with many videos where the operator does not need the metadata enrichment (saves 50-100ms per video on first extraction). |
+| `no_exif` | `true` | Skip EXIF reading entirely. Disables both the per-thumb sidecar creation in `serveThumb` and the sync visible-page enrich in `ServeHTTP`. Cards no longer show the "EXIF" pill; lightbox hides the EXIF panel. **Default flipped to `true` 2026-07-02** so the gallery behaves like caddys stock `file_server browse` by default — no exiftool / go-exif calls, no GPS or camera metadata surfaced. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading set `no_exif false`. |
+| `no_meta` | `true` | Skip video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Separate flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. When set, the sync visible-page enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). **Default flipped to `true` 2026-07-02** so the gallery behaves like caddys stock `file_server browse` by default — no ffprobe subprocess calls, no extra dependencies required. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment set `no_meta false`. |
 | `template` | `gallery.tmpl` | Template file name (relative to `$GALLERY_TEMPLATES_DIR`, no `..` allowed). |
 | `search_match` | `substring` | Filename match rule for search: `substring` (default) or `word` (word-boundary). |
 | `max_cache_size_mb` | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). Enforced via an on-write check (cheap, runs in a goroutine after each cache write) and a background sweep every 30 min. |
@@ -159,6 +159,30 @@ media_gallery {
     page_sizes 30 60 120 all
     search_match word
     template themes/dark/gallery.tmpl
+}
+```
+
+### Defaults: file_server browse compatible (since 2026-07-02)
+
+As of 2026-07-02, three directives default to `true` so the gallery behaves like caddy's stock `file_server browse` out of the box (no enrichment, no extra dependencies, no I/O beyond the directory scan):
+
+| Directive | Default | Effect when `true` | Opt back in with |
+|---|---|---|---|
+| `no_exif` | **`true`** | Skip EXIF reads (no exiftool / go-exif calls) | `no_exif false` |
+| `no_meta` | **`true`** | Skip video metadata reads (no ffprobe subprocess) | `no_meta false` |
+| `no_thumbs` | **`true`** | Skip thumbnail generation (use original file in `<img src>`) | `no_thumbs false` |
+
+These three flags are **independent** — operators can enable any combination. All other defaults (`page_size`, `thumb_width`, `cache_scan`, etc.) are unchanged.
+
+The directive names are now technically misnomers (since they're the default), but the names are kept for backward compatibility — operators who already had `no_exif` or `no_thumbs` in their Caddyfile see no behavior change.
+
+To get the **full enriched UX** (EXIF pills + video metadata + thumbnails), set all three to `false`:
+
+```caddyfile
+media_gallery {
+    no_exif false
+    no_meta false
+    no_thumbs false
 }
 ```
 

@@ -30,10 +30,10 @@ Inside an `media_gallery { ... }` block:
 | `thumb_format` | `jpeg` / `jpg` / `png` / `webp` | `webp` (lossless) | Output format. jpeg quality 75, png lossless, webp lossless. |
 | `cache_scan` | integer &gt;= 1 | `1440` (24h) | Scan cache TTL in minutes. The primary invalidation is the directory mtime check on every access; the TTL is a safety net for edge cases. |
 | `thumb_ttl` | integer &gt;= 1 | `1440` | HTTP `Cache-Control: max-age` for thumbs, in minutes (= 24h default). |
-| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (thumbs on) | Skip thumbnail generation. Tile `<img>` points to the original file. |
+| `no_thumbs` | no-arg = `true` / explicit `false` = `false` | **`true` (thumbs off, since 2026-07-02)** | Skip thumbnail generation. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no thumb cache, no ffmpeg CPU overhead). Affects **both** images and videos — tile `<img>` points to the original file (for images) or is empty (for videos, which show the placeholder gradient + play button). The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want rich thumbnails opt in with `no_thumbs false`. |
 | `no_video_thumbs` | no-arg = `true` / explicit `false` = `false` | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
-| `no_exif` | no-arg = `true` / explicit `false` = `false` | `false` (EXIF on) | Disable EXIF reading entirely. When set: the visible-page sync enrich skips EXIF reads, `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark is unaffected. Privacy-friendly — useful when EXIF data is undesirable. |
-| `no_meta` | no-arg = `true` / explicit `false` = `false` | `false` (video meta on) | Per user request 2026-07-02: disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). When set: the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. Useful for galleries with many videos where the operator does not need the metadata enrichment (saves 50-100ms per video on first extraction). |
+| `no_exif` | no-arg = `true` / explicit `false` = `false` | **`true` (EXIF off, since 2026-07-02)** | Disable EXIF reading entirely. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no exiftool / go-exif calls, no camera metadata surfaced). When set: the visible-page sync enrich skips EXIF reads, `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark is unaffected. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading opt in with `no_exif false`. |
+| `no_meta` | no-arg = `true` / explicit `false` = `false` | **`true` (video meta off, since 2026-07-02)** | Disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no ffprobe subprocess calls, no extra dependencies required). When set: the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment opt in with `no_meta false`. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary. `substring` = match anywhere. |
 | `template` | file name, relative to the templates dir | `gallery.tmpl` | Which template file to render. Path-traversal protected. |
 
@@ -84,7 +84,9 @@ producer to set them:
   "thumb_format": "jpeg",
   "cache_scan": 1440,
   "thumb_ttl": 60,
-  "no_thumbs": false,
+  "no_thumbs": true,           // default since 2026-07-02 (was false)
+  "no_exif": true,               // default since 2026-07-02 (was false)
+  "no_meta": true,               // default since 2026-07-02 (was false)
   "no_video_thumbs": false,
   "search_match": "word",
   "template": "themes/dark/gallery.tmpl"
