@@ -297,6 +297,15 @@
   position: relative;
   display: inline-block;
   margin-right: 0.5rem;
+  /* Per user request 2026-07-04: the language picker is
+     now wider. The trigger and the menu both get a
+     min-width of 8rem (instead of auto-fitting the
+     longest option name). This makes the picker visually
+     consistent with the other top-right controls and
+     gives the menu enough horizontal space to read the
+     full locale name (e.g. "Português") without
+     truncating or wrapping. */
+  min-width: 8rem;
 }
 .lang-toggle .lang-trigger {
   display: inline-flex;
@@ -313,6 +322,11 @@
   list-style: none;
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s;
+  /* Per user request 2026-07-04: trigger is also wider
+     (matches the parent .lang-toggle min-width). */
+  min-width: 100%;
+  box-sizing: border-box;
+  justify-content: space-between;
 }
 .lang-toggle .lang-trigger::-webkit-details-marker {
   display: none; /* hide the default <summary> arrow */
@@ -432,16 +446,23 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  /* Per user request 2026-07-01: removed border-bottom.
-     The line between the status area and the breadcrumb
-     is now removed — the breadcrumb sits directly below
-     the status with no separator. Per user request
-     2026-07-01: reduced padding-bottom from 0.75rem to
-     0.25rem so the breadcrumb sits closer to the status
-     area. */
+  /* Per user request 2026-07-04: the h1 (title) and the
+     header-controls (language picker + light/dark selector)
+     are now in the same flex row. The status row (.meta)
+     was moved into its own div below this row. */
   padding-bottom: 0.25rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
+/* Per user request 2026-07-04: wrapper for the language
+   picker + light/dark selector that sits to the right of
+   the title. The wrapper groups them visually so they
+   sit next to each other. */
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
 h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -454,6 +475,12 @@ h1 {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  /* Per user request 2026-07-04: the .meta div moved out
+     of the header-top row and into its own row below the
+     title/controls. Add a small top margin to separate it
+     visually. */
+  margin-top: 0.25rem;
+  padding-bottom: 0.25rem;
 }
 .meta span { color: var(--fg-faint); }
 .sort-indicator {
@@ -2480,110 +2507,88 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 <main>
   <header>
     <div class="header-top">
-      <div class="header-main">
-        <h1>{{.Title}}</h1>
-        <div class="meta">
-          {{/* Per user request 2026-06-19: show the total
-             number of files at the start of the meta line, then
-             the breakdown (images / videos / other files). The
-             total is a quick "how many files are in this dir"
-             answer; the breakdown gives the detail.
+      <h1>{{.Title}}</h1>
+      <div class="header-controls">
+        {{if gt (len .AvailableLocales) 1}}
+        <details class="lang-toggle" id="lang-toggle">
+          <summary class="lang-trigger"
+                   aria-label="{{t "lang_picker_aria"}}">
+            <span class="lang-current">{{tr.NativeName .Locale}}</span>
+            <span class="lang-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="lang-menu" role="menu">
+            {{range .AvailableLocales}}
+            {{$locale := .}}
+            <a class="lang-option{{if eq $locale $.Locale}} lang-option-active{{end}}"
+               role="menuitem"
+               href="?{{queryString (queryWith $.Query "lang" $locale)}}">
+              {{tr.NativeName $locale}}
+            </a>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+        <div class="theme-toggle" role="radiogroup" aria-label="{{t "theme"}}">
+          <button type="button" data-theme="auto" aria-pressed="false" aria-label="{{t "theme_auto"}}" title="{{t "theme_short_auto"}}">⚙</button>
+          <button type="button" data-theme="light" aria-pressed="false" aria-label="{{t "theme_light"}}" title="{{t "theme_short_light"}}">☀</button>
+          <button type="button" data-theme="dark" aria-pressed="false" aria-label="{{t "theme_dark"}}" title="{{t "theme_short_dark"}}">🌙</button>
+        </div>
+      </div>
+    </div>
+    <div class="meta">
+      {{/* Per user request 2026-06-19: show the total
+         number of files at the start of the meta line, then
+         the breakdown (images / videos / other files). The
+         total is a quick "how many files are in this dir"
+         answer; the breakdown gives the detail.
 
-             Pluralization: "1 file" vs "N files" (English
-             singular/plural). The split is via a small
-             {{if eq}} check on the .TotalFiles value. */}}
-          <span>{{.TotalFiles}} {{if eq .TotalFiles 1}}file{{else}}files{{end}}</span>
-          <span>//</span>
-          <span>{{.ImageCount}} images</span>
-          {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} videos</span>{{end}}
-          {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} other files</span>{{end}}
-          <span>//</span>
-          <span>({{.TotalAllFilesSize}} total)</span>
-          <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} directories{{if .Up}} (+1 parent){{end}}</span>{{end}}
-          <!-- Per user request 2026-06-20: a dropdown for page size.
-     Shows the operator-configured list (defaults to
-     30, 60, 120, "all"). "all" is a special token meaning
-     "show all items in one page" - only included if the
-     operator explicitly listed it. Each option is a link
-     to the same URL with ?page_size=N appended (or removed
-     for "all"). The current selection is shown as selected. -->
-  <span>·</span>
-  <span>{{t "page_show"}}</span>
-  <form method="get" action="" class="page-size-form">
-    {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
-    {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
-    {{- /* so changing page size always resets to page 1 (the */ -}}
-    {{- /* current page number might not exist in the new size). */ -}}
-    {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
-    {{- /* it, otherwise the form would have a duplicate "page_size" -}}
-    {{- /* field (hidden input + select), which builds a messy URL -}}
-    {{- /* with both values when the form submits. */ -}}
-    {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
-    <select name="page_size" class="page-size-select" onchange="this.form.submit()">
-      {{/* Per user request 2026-06-28: when PageSize is 0 (the
-           "all" token from pageSizeFromQuery), compare
-           against "all" instead of the string "0" so the
-           dropdown shows "all" as selected (previously it
-           fell back to the first item, which was the
-           document default 30). pageSizeStr is set to "all"
-           when PageSize is 0, otherwise to the decimal
-           string of PageSize. */}}
-      {{$pageSizeStr := "all"}}
-      {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
-      {{range .PageSizes}}
-      <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
-      {{end}}
-    </select>
-  </form>
-  <span>{{t "page_per_page"}}</span>{{if gt .TotalPages 1}}<span>·</span><span>{{t "page_of" .Page .TotalPages}}</span>{{end}}
-        </div>
-      </div>
-      <!-- Per user request 2026-06-18: removed the top-right
-           sort order indicator (the "Sort: Name ↓" link). The sort
-           UI still exists as the sort-bar below the header (with
-           Name/Type/Modified/Size buttons), so the sort order is
-           still visible there. The theme toggle moves to the top-
-           right (where the sort indicator was). -->
-      <!-- Per user request 2026-07-04: language picker
-           dropdown. Sits to the LEFT of the dark/light mode
-           selector in the same header bar. The trigger
-           shows the current locale's native name (e.g.
-           "English", "Deutsch", "日本語"); the options show
-           the native names of ALL supported locales. The
-           visitor picks one → navigates to ?lang=<locale>
-           (a full page reload) → the server sets the cookie
-           and the JS writes to localStorage. Subsequent
-           visits use the cookie automatically; no further
-           reloads needed.
-           
-           Uses <details>/<summary> for the dropdown (same
-           pattern as the existing filter dropdowns) so
-           the markup is consistent and we get native
-           keyboard navigation for free. -->
-      {{if gt (len .AvailableLocales) 1}}
-      <details class="lang-toggle" id="lang-toggle">
-        <summary class="lang-trigger"
-                 aria-label="{{t "lang_picker_aria"}}">
-          <span class="lang-current">{{tr.NativeName .Locale}}</span>
-          <span class="lang-caret" aria-hidden="true">▾</span>
-        </summary>
-        <div class="lang-menu" role="menu">
-          {{range .AvailableLocales}}
-          {{$locale := .}}
-          <a class="lang-option{{if eq $locale $.Locale}} lang-option-active{{end}}"
-             role="menuitem"
-             href="?{{queryString (queryWith $.Query "lang" $locale)}}">
-            {{tr.NativeName $locale}}
-          </a>
+         Pluralization: "1 file" vs "N files" (English
+         singular/plural). The split is via a small
+         {{if eq}} check on the .TotalFiles value. */}}
+      <span>{{.TotalFiles}} {{if eq .TotalFiles 1}}{{t "files_singular"}}{{else}}{{t "files_plural"}}{{end}}</span>
+      <span>//</span>
+      <span>{{.ImageCount}} {{if eq .ImageCount 1}}{{t "image_count"}}{{else}}{{t "images_count"}}{{end}}</span>
+      {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} {{if eq .TotalVideos 1}}{{t "video_count"}}{{else}}{{t "videos_count"}}{{end}}</span>{{end}}
+      {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} {{if eq (len .OtherFiles) 1}}{{t "other_file"}}{{else}}{{t "other_files"}}{{end}}</span>{{end}}
+      <span>//</span>
+      <span>({{.TotalAllFilesSize}} {{t "total_size_label"}})</span>
+      <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} {{if eq (len .Subdirs) 1}}{{t "directory_count"}}{{else}}{{t "directories_count"}}{{end}}{{if .Up}} (+{{t "parent_directory"}}){{end}}</span>{{end}}
+      <!-- Per user request 2026-06-20: a dropdown for page size.
+   Shows the operator-configured list (defaults to
+   30, 60, 120, "all"). "all" is a special token meaning
+   "show all items on one page" - only included if the
+   operator explicitly listed it. Each option is a link
+   to the same URL with ?page_size=N appended (or removed
+   for "all"). The current selection is shown as selected. -->
+      <span>·</span>
+      <span>{{t "page_show"}}</span>
+      <form method="get" action="" class="page-size-form">
+        {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
+        {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
+        {{- /* so changing page size always resets to page 1 (the */ -}}
+        {{- /* current page number might not exist in the new size). */ -}}
+        {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
+        {{- /* it, otherwise the form would have a duplicate "page_size" -}}
+        {{- /* field (hidden input + select), which builds a messy URL -}}
+        {{- /* with both values when the form submits. */ -}}
+        {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
+        <select name="page_size" class="page-size-select" onchange="this.form.submit()">
+          {{/* Per user request 2026-06-28: when PageSize is 0 (the
+               "all" token from pageSizeFromQuery), compare
+               against "all" instead of the string "0" so the
+               dropdown shows "all" as selected (previously it
+               fell back to the first item, which was the
+               document default 30). pageSizeStr is set to "all"
+               when PageSize is 0, otherwise to the decimal
+               string of PageSize. */}}
+          {{$pageSizeStr := "all"}}
+          {{if ne .PageSize 0}}{{$pageSizeStr = printf "%d" .PageSize}}{{end}}
+          {{range .PageSizes}}
+          <option value="{{.}}"{{if eq $pageSizeStr .}} selected{{end}}>{{if eq . "all"}}all{{else}}{{.}}{{end}}</option>
           {{end}}
-        </div>
-      </details>
-      {{end}}
-      <div class="theme-toggle" role="radiogroup" aria-label="{{t "theme"}}">
-        <button type="button" data-theme="auto" aria-pressed="false" aria-label="{{t "theme_auto"}}" title="{{t "theme_short_auto"}}">⚙</button>
-        <button type="button" data-theme="light" aria-pressed="false" aria-label="{{t "theme_light"}}" title="{{t "theme_short_light"}}">☀</button>
-        <button type="button" data-theme="dark" aria-pressed="false" aria-label="{{t "theme_dark"}}" title="{{t "theme_short_dark"}}">🌙</button>
-      </div>
+        </select>
+      </form>
+      <span>{{t "page_per_page"}}</span>{{if gt .TotalPages 1}}<span>·</span><span>{{t "page_of" .Page .TotalPages}}</span>{{end}}
     </div>
     {{if gt (len .Breadcrumb) 0}}
     <nav class="breadcrumb" aria-label="{{t "breadcrumb_aria"}}">
