@@ -165,6 +165,56 @@ func TestUnmarshalCaddyfile_NoExif(t *testing.T) {
 	})
 }
 
+// TestUnmarshalCaddyfile_NoMeta covers the `no_meta` Caddyfile
+// directive. Per user request 2026-07-02: no_meta is a SEPARATE
+// flag from no_exif — it only affects video metadata extraction
+// (via ffprobe), not image EXIF. Accepts:
+//   - `no_meta` (no arg) → true
+//   - `no_meta false`    → false
+//   - anything else → error
+func TestUnmarshalCaddyfile_NoMeta(t *testing.T) {
+	t.Run("no_meta (no arg) → true", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_meta\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoMeta {
+			t.Error("expected NoMeta=true after `no_meta` directive")
+		}
+	})
+	t.Run("no_meta false → false", func(t *testing.T) {
+		g := Gallery{NoMeta: true}
+		d := caddyfile.NewTestDispenser("media_gallery { no_meta false }")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if g.NoMeta {
+			t.Error("expected NoMeta=false after `no_meta false` directive")
+		}
+	})
+	t.Run("no_meta with bogus arg → error", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery { no_meta off }")
+		if err := g.UnmarshalCaddyfile(d); err == nil {
+			t.Error("expected error for `no_meta off` (must be `false`, not `off`)")
+		}
+	})
+	t.Run("no_exif + no_meta both set", func(t *testing.T) {
+		g := Gallery{}
+		d := caddyfile.NewTestDispenser("media_gallery {\n  no_exif\n  no_meta\n}")
+		if err := g.UnmarshalCaddyfile(d); err != nil {
+			t.Fatal(err)
+		}
+		if !g.NoExif {
+			t.Error("expected NoExif=true")
+		}
+		if !g.NoMeta {
+			t.Error("expected NoMeta=true")
+		}
+	})
+}
+
 func TestUnmarshalCaddyfile_NoVideoThumbs(t *testing.T) {
 	t.Run("no_video_thumbs (no arg) → true", func(t *testing.T) {
 		g := Gallery{}

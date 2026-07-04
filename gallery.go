@@ -146,6 +146,18 @@ type Gallery struct {
 	// for the camera/lens/exposure metadata.
 	// Caddyfile: no_exif (no arg → true) or no_exif false (re-enable).
 	NoExif bool
+	// Per user request 2026-07-02: NoMeta disables reading
+	// metadata from video files (duration, container,
+	// codecs, bitrate, framerate extracted via ffprobe).
+	// This is a separate flag from NoExif — NoExif only
+	// affects image EXIF; NoMeta only affects video
+	// metadata. Operators who want to skip the ffprobe
+	// subprocess overhead on large video directories
+	// (no I/O, no parsing) can set this. FileInfo.VideoMeta
+	// is left nil for all files, so the lightbox META
+	// panel stays hidden.
+	// Caddyfile: no_meta (no arg → true) or no_meta false (re-enable).
+	NoMeta bool
 
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
@@ -684,7 +696,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.thumbCacheDir(), g.ThumbFormat)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.NoMeta, g.thumbCacheDir(), g.ThumbFormat)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
@@ -739,6 +751,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		ImageExts:    g.imageExtsMap,
 		VideoExts:    g.videoExtsMap,
 		NoExif:       g.NoExif,
+		NoMeta:       g.NoMeta,
 		ThumbCacheDir: g.thumbCacheDir(),
 		ThumbFormat:  g.ThumbFormat,
 	}
@@ -855,7 +868,35 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				g.NoExif = false
 			}
 
-			case "page_size":
+		case "no_meta":
+			// Per user request 2026-07-02: operator can
+			// disable video metadata extraction entirely
+			// (duration, container, codecs, bitrate,
+			// framerate via ffprobe). When true, the
+			// scanner skips the readVideoMetaCached call
+			// entirely (no ffprobe subprocess, no .vmeta
+			// sidecar writes, no parsing). The META pill
+			// on video cards and the META panel in the
+			// lightbox are skipped automatically because
+			// they only render when FileInfo.VideoMeta is
+			// non-nil. This is a SEPARATE flag from
+			// no_exif — no_exif affects image EXIF,
+			// no_meta affects video metadata. Operators
+			// who want to skip the per-video ffprobe
+			// overhead (50-100ms per video on first
+			// extraction) on large video directories can
+			// set this. Usage:
+			//   no_meta           # disable
+			//   no_meta false     # re-enable
+			g.NoMeta = true
+			if d.NextArg() {
+				if d.Val() != "false" {
+					return d.ArgErr()
+				}
+				g.NoMeta = false
+			}
+
+		case "page_size":
 				// Per user request 2026-06-27: the operator
 				// configures the per-page dropdown options via
 				// `page_size 60 30 120 all` (space-separated).
