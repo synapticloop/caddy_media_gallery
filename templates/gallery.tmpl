@@ -2754,9 +2754,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
        a valid relative URL. -->
     <nav class="pagination">
     {{if .HasPrev}}
-      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
+      <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">{{t "page_prev_arrow"}}</a>
     {{else}}
-      <span class="page-btn disabled">← Prev</span>
+      <span class="page-btn disabled">{{t "page_prev_arrow"}}</span>
     {{end}}
     {{range .PageNumbers}}
     {{if eq . 0}}
@@ -2965,9 +2965,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
     <nav class="pagination">
       {{if .HasPrev}}
-        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">← Prev</a>
+        <a class="page-btn" href="?{{queryString (queryForPage .Query .Sort (.Page | minus1))}}">{{t "page_prev_arrow"}}</a>
       {{else}}
-        <span class="page-btn disabled">← Prev</span>
+        <span class="page-btn disabled">{{t "page_prev_arrow"}}</span>
       {{end}}
       {{range .PageNumbers}}
       {{if eq . 0}}
