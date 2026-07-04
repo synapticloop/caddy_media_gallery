@@ -108,9 +108,20 @@ type Gallery struct {
 	// file_server, which 404s since no _thumbs/ dir exists).
 	// Tradeoffs: no thumb cache, no CPU cost, but the browser
 	// downloads the full image per tile (bigger page payload, slower
-	// load on dirs of large photos). Useful for small galleries
-	// where the operator doesn't want to maintain a thumb cache.
+	// load on dirs of large photos).
+	//
+	// Per user request 2026-07-02: NoThumbs now defaults to
+	// TRUE so the gallery behaves like caddy's stock
+	// file_server browse by default (no on-the-fly thumb
+	// generation, no thumb cache, no ffmpeg CPU overhead).
+	// Operators who want the rich thumbnail UX opt in
+	// via `no_thumbs false` in the Caddyfile.
 	NoThumbs bool
+	// NoThumbsSet is true when the operator explicitly set
+	// no_thumbs in the Caddyfile. Used by Provision to
+	// distinguish "explicit false" (preserve the false)
+	// from "no directive" (apply the default true).
+	NoThumbsSet bool
 
 	// NoVideoThumbs disables the on-demand WebP thumbnail generation
 	// for VIDEO files (extracted from the first frame via ffmpeg).
@@ -126,38 +137,78 @@ type Gallery struct {
 	//             (re-enable).
 	NoVideoThumbs bool
 
-	// NoExif disables reading EXIF metadata from image files.
-	// When true, the scanner skips the readExif call entirely
-	// (no I/O, no parsing) — FileInfo.Exif is left nil for
-	// all files. The card overlay then shows no "EXIF" pill
-	// (the pill only renders when Exif is non-nil) and the
-	// lightbox shows no EXIF panel. When false (the default),
-	// EXIF is read for every image file at scan time (EAGER
-	// loading — see scanner.go and exif.go).
+	// NoExif controls whether EXIF metadata is read from
+	// image files. Per user request 2026-07-02: defaults
+	// to TRUE so the gallery behaves like caddy's stock
+	// file_server browse (no extra dependencies / I/O
+	// required by default). When true (the default), the
+	// scanner skips the readExif call entirely (no I/O,
+	// no parsing) — FileInfo.Exif is left nil for all
+	// files. The card overlay shows no "EXIF" pill (the pill
+	// only renders when Exif is non-nil) and the lightbox
+	// shows no EXIF panel. When false, EXIF is read for
+	// every image file at scan time (EAGER loading — see
+	// scanner.go and exif.go).
 	//
-	// Per user request 2026-06-29: the Caddyfile operator can
-	// disable EXIF entirely if they don't want the camera
-	// metadata surfaced in the gallery. Useful for:
-	//   - Privacy-sensitive deployments (no camera info exposed)
-	//   - Performance: skip the per-image EXIF read (~1-5ms each)
-	//   - Galleries that only need dimensions / thumbnails
-	// Note that EXIF does NOT include GPS by default (see
-	// exif.go — GPS is never extracted), so this is mainly
-	// for the camera/lens/exposure metadata.
-	// Caddyfile: no_exif (no arg → true) or no_exif false (re-enable).
+	// Operators who want the rich EXIF metadata UX can
+	// opt back in via the Caddyfile:
+	//   no_exif false    # re-enable EXIF reading
+	//
+	// The "no_exif" directive is now a misnomer (since it's
+	// the default), but we keep the name for backward
+	// compatibility — operators who already set "no_exif"
+	// in their Caddyfile see no change. The presence of
+	// the directive with no arg still means "disable" (i.e.
+	// set to true), and the operator can use "no_exif false"
+	// to opt back in to reading EXIF.
+	//
+	// Useful for enabling EXIF:
+	//   - Metadata-rich photo galleries (camera/lens info)
+	//   - Any operator who wants the EXIF pill on cards
+	//   - Note: EXIF does NOT include GPS by default (see
+	//     exif.go — GPS is never extracted).
+	// Caddyfile: no_exif (no arg → true) or no_exif false
+	// (re-enable EXIF reading).
 	NoExif bool
-	// Per user request 2026-07-02: NoMeta disables reading
-	// metadata from video files (duration, container,
-	// codecs, bitrate, framerate extracted via ffprobe).
-	// This is a separate flag from NoExif — NoExif only
-	// affects image EXIF; NoMeta only affects video
-	// metadata. Operators who want to skip the ffprobe
-	// subprocess overhead on large video directories
-	// (no I/O, no parsing) can set this. FileInfo.VideoMeta
-	// is left nil for all files, so the lightbox META
-	// panel stays hidden.
-	// Caddyfile: no_meta (no arg → true) or no_meta false (re-enable).
+	// NoExifSet is true when the operator explicitly set
+	// no_exif in the Caddyfile (including with value
+	// "false"). Used by Provision to distinguish
+	// "operator set to true" / "operator set to false" /
+	// "operator didn't set (use the default true)". The
+	// Caddyfile parser sets this flag whenever the
+	// directive appears, even with value "false".
+	NoExifSet bool
+	// Per user request 2026-07-02: NoMeta controls whether
+	// video metadata is read (duration, container, codecs,
+	// bitrate, framerate extracted via ffprobe). Defaults
+	// to TRUE so the gallery behaves like caddy's stock
+	// file_server browse (no extra ffprobe dependency
+	// required by default). This is a separate flag from
+	// NoExif — NoExif affects image EXIF; NoMeta affects
+	// video metadata. When true (the default), the scanner
+	// skips the readVideoMetaCached call entirely (no
+	// ffprobe subprocess, no .vmeta sidecar writes, no
+	// parsing). FileInfo.VideoMeta is left nil for all
+	// files, so the lightbox META panel stays hidden and
+	// the "META" pill on video cards is not rendered.
+	//
+	// Operators who want the rich video metadata UX can
+	// opt back in via the Caddyfile:
+	//   no_meta false    # re-enable video metadata extraction
+	//
+	// As with NoExif, the directive name "no_meta" is a
+	// bit of a misnomer since it now defaults to true, but
+	// we keep the name for backward compatibility.
+	// Caddyfile: no_meta (no arg → true) or no_meta false
+	// (re-enable video metadata extraction).
 	NoMeta bool
+	// NoMetaSet is true when the operator explicitly set
+	// no_meta in the Caddyfile. Used by Provision to
+	// distinguish "operator set to true" / "operator set
+	// to false" / "operator didn't set (use the default
+	// true)". The Caddyfile parser sets this flag whenever
+	// the directive appears, even with value "false".
+	NoMetaSet bool
 
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
@@ -373,6 +424,29 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// dropdown if explicitly listed.
 	if len(g.PageSizes) == 0 {
 		g.PageSizes = []string{"60", "30", "120", "all"}
+	}
+	// Per user request 2026-07-02: NoExif and NoMeta now
+	// default to true (so the gallery behaves more like
+	// caddy's stock file_server browse — no metadata
+	// reads by default, no extra dependencies required
+	// to render the gallery). Operators who want the
+	// rich metadata UX can opt back in via:
+	//   no_exif false     # re-enable EXIF reading
+	//   no_meta false     # re-enable video metadata
+	// Track whether the operator explicitly set the
+	// directive (vs leaving it unset to take the default).
+	// The unmarshaler sets g.NoExifSet / g.NoMetaSet=true
+	// whenever the directive appears, so we know to
+	// preserve the explicit value (rather than clobbering
+	// it with the default).
+	if !g.NoExifSet {
+		g.NoExif = true
+	}
+	if !g.NoMetaSet {
+		g.NoMeta = true
+	}
+	if !g.NoThumbsSet {
+		g.NoThumbs = true
 	}
 	// The default PageSize is the first item in the
 	// operator's DECLARED list (NOT the sorted list). So
@@ -833,14 +907,21 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if d.NextArg() {
 					return d.ArgErr()
 				}
-			case "no_thumbs":
-				g.NoThumbs = true
-				if d.NextArg() {
+				case "no_thumbs":
+			// Per user request 2026-07-02: NoThumbs now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no thumb generation, no thumb cache, no
+			// CPU overhead). Operators who want the rich
+			// thumbnail UX opt in via `no_thumbs false`.
+			g.NoThumbs = true
+			if d.NextArg() {
 					if d.Val() != "false" {
-						return d.ArgErr()
-					}
-					g.NoThumbs = false
+					return d.ArgErr()
 				}
+					g.NoThumbs = false
+			}
+			g.NoThumbsSet = true
 			case "no_video_thumbs":
 				g.NoVideoThumbs = true
 				if d.NextArg() {
@@ -857,9 +938,16 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// no parsing). The EXIF pill on cards and the
 			// EXIF panel in the lightbox are skipped
 			// automatically because they only render
-			// when FileInfo.Exif is non-nil. Usage:
-			//   no_exif           # disable
-			//   no_exif false     # re-enable
+			// when FileInfo.Exif is non-nil.
+			//
+			// Per user request 2026-07-02: NoExif now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no metadata reads, no extra dependencies).
+			// Operators who want the rich EXIF UX opt in
+			// via `no_exif false`. Usage:
+			//   no_exif           # disable (default)
+			//   no_exif false     # re-enable EXIF reading
 			g.NoExif = true
 			if d.NextArg() {
 				if d.Val() != "false" {
@@ -867,6 +955,11 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				g.NoExif = false
 			}
+			// Mark that the operator explicitly set this
+			// directive — used by Provision to distinguish
+			// "explicit false" (preserve the false) from
+			// "no directive" (apply the default true).
+			g.NoExifSet = true
 
 		case "no_meta":
 			// Per user request 2026-07-02: operator can
@@ -881,13 +974,16 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// they only render when FileInfo.VideoMeta is
 			// non-nil. This is a SEPARATE flag from
 			// no_exif — no_exif affects image EXIF,
-			// no_meta affects video metadata. Operators
-			// who want to skip the per-video ffprobe
-			// overhead (50-100ms per video on first
-			// extraction) on large video directories can
-			// set this. Usage:
-			//   no_meta           # disable
-			//   no_meta false     # re-enable
+			// no_meta affects video metadata.
+			//
+			// Per user request 2026-07-02: NoMeta now
+			// defaults to true (gallery behaves like
+			// caddy's stock file_server browse by default
+			// — no extra ffprobe dependency required).
+			// Operators who want the rich video metadata
+			// UX opt in via `no_meta false`. Usage:
+			//   no_meta           # disable (default)
+			//   no_meta false     # re-enable video metadata
 			g.NoMeta = true
 			if d.NextArg() {
 				if d.Val() != "false" {
@@ -895,6 +991,11 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				g.NoMeta = false
 			}
+			// Mark that the operator explicitly set this
+			// directive — used by Provision to distinguish
+			// "explicit false" (preserve the false) from
+			// "no directive" (apply the default true).
+			g.NoMetaSet = true
 
 		case "page_size":
 				// Per user request 2026-06-27: the operator

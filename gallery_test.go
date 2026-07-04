@@ -1077,3 +1077,117 @@ func TestProvision_DefaultsWhenNoCustomExtTypes(t *testing.T) {
 		}
 	}
 }
+
+// TestProvision_NoExifDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoExif defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no metadata reads by
+// default, no extra dependencies). Operators who want the rich
+// EXIF metadata UX opt back in via `no_exif false` in the Caddyfile.
+func TestProvision_NoExifDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoExif {
+		t.Error("expected NoExif=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoExifFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoExif=true default by setting `no_exif false`.
+func TestProvision_NoExifFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_exif false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoExif {
+		t.Error("expected NoExif=false after `no_exif false` directive")
+	}
+}
+
+// TestProvision_NoMetaDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoMeta defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no extra ffprobe dependency
+// required by default). Operators who want the rich video metadata UX
+// opt back in via `no_meta false` in the Caddyfile.
+func TestProvision_NoMetaDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoMeta {
+		t.Error("expected NoMeta=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoMetaFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoMeta=true default by setting `no_meta false`.
+func TestProvision_NoMetaFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_meta false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoMeta {
+		t.Error("expected NoMeta=false after `no_meta false` directive")
+	}
+}
+
+// TestProvision_NoThumbsDefaultsTrue covers the per-user-request-2026-07-02
+// behavior where NoThumbs defaults to true (so the gallery behaves
+// like caddy's stock file_server browse — no on-the-fly thumb
+// generation, no thumb cache, no ffmpeg CPU overhead). Operators
+// who want the rich thumbnail UX opt back in via `no_thumbs false`.
+func TestProvision_NoThumbsDefaultsTrue(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if !g.NoThumbs {
+		t.Error("expected NoThumbs=true after Provision (no directive in Caddyfile)")
+	}
+}
+
+// TestProvision_NoThumbsFalseInCaddyfileDisables verifies the operator
+// can opt out of the NoThumbs=true default by setting `no_thumbs false`.
+func TestProvision_NoThumbsFalseInCaddyfileDisables(t *testing.T) {
+	d := caddyfile.NewTestDispenser(`media_gallery {
+		no_thumbs false
+	}`)
+	g := Gallery{}
+	if err := g.UnmarshalCaddyfile(d); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if g.NoThumbs {
+		t.Error("expected NoThumbs=false after `no_thumbs false` directive")
+	}
+}

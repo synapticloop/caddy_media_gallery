@@ -453,7 +453,7 @@ func (s *Scanner) Enrich(files []FileInfo) {
 		// are hidden. Operators with large video
 		// directories can use this to skip the per-video
 		// ffprobe overhead.
-		if fi.Kind == KindVideo && !s.NoMeta {
+		if fi.Kind == KindVideo {
 			thumbExt := s.ThumbFormat
 			if thumbExt == "" {
 				thumbExt = "webp"
@@ -560,7 +560,7 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 			// is cached in a .vmeta sidecar next to the
 			// video's thumb, so the next enrichment is
 			// a ~50µs file read.
-			if fi.Kind == KindVideo {
+			if fi.Kind == KindVideo && !s.NoMeta {
 				vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
 				if err == nil && vmeta != nil && vmeta.HasAny() {
 					fi.VideoMeta = vmeta

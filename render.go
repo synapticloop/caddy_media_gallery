@@ -890,7 +890,17 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		// the host, the handler returns 404. This is the same
 		// behavior as image thumbs — the URL is set, but the
 		// generator may fail at request time.)
-		if !noVideoThumbs {
+		// Per user request 2026-07-02: no_thumbs (which
+		// defaults to true) also disables video thumbs. If
+		// EITHER no_thumbs OR no_video_thumbs is true, the
+		// video thumb URL is NOT set. The video tile shows
+		// the placeholder gradient + play button instead of
+		// a video poster. (no_thumbs is the general "no
+		// thumbnails" flag; no_video_thumbs is a more
+		// specific "videos only" flag that operators can
+		// use if they want image thumbs but not video
+		// thumbs.)
+		if !noThumbs && !noVideoThumbs {
 			v.ThumbURL = thumbPrefix + thumbStripExt(f.Name) + ".webp"
 		}
 		v.Size = humanSize(f.Size)
