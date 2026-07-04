@@ -3591,18 +3591,23 @@ input.addEventListener('input', function() {
 (function() {
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
-  overlay.innerHTML =
   // Per user request 2026-07-04: client-side translation
   // helper. Looks up a key in the inline TRANSLATIONS map
-  // (rendered server-side by the Go template, see TRANSLATIONS below).
-  // Falls back to the key itself if not found. The function
-  // name is short because the JS strings inline it many times.
+  // (rendered server-side by the Go template, see TRANSLATIONS
+  // below). Falls back to the key itself if not found. The
+  // function name is short because the JS strings inline it
+  // many times.
+  //
   // Per user request 2026-07-04: client-side translations
   // (used by t() below). Rendered server-side by the Go
-  // template. Only contains the keys that appear inside
-  // JS strings (lightbox labels, EXIF/META rows, etc.).
-  // Page-level strings use the Go { {t} } function directly
-  // so they don't need to be in this map.
+  // template. Only contains the keys that appear inside JS
+  // strings (lightbox labels, EXIF/META rows, etc.).
+  // Page-level strings use the Go template's t function directly,
+  // so they don't need to be in this map. Note: we escape
+  // the open and close braces below (escaped) so the Go template engine doesn't
+  // try to evaluate them as template actions (the
+  // translation LOOKUP happens server-side when the page
+  // is rendered, not at template-parse time).
   var TRANSLATIONS = {
     lightbox_open_aria: '{{t "lightbox_open_aria"}}',
     lightbox_open_title: '{{t "lightbox_open_title"}}',
@@ -3621,14 +3626,13 @@ input.addEventListener('input', function() {
     meta_bitrate: '{{t "meta_bitrate"}}',
     meta_framerate: '{{t "meta_framerate"}}',
   };
-
   function t(key) {
     if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
       return TRANSLATIONS[key];
     }
     return key;
   }
-
+  overlay.innerHTML =
     '<div class="lb-controls">' +
       '<button class="lb-btn lb-open" aria-label="' + t('lightbox_open_aria') + '" title="' + t('lightbox_open_title') + '">↗</button>' +
       '<button class="lb-btn lb-close" aria-label="' + t('lightbox_close_aria') + '" title="' + t('lightbox_close_title') + '">✕</button>' +
