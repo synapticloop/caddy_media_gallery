@@ -28,6 +28,7 @@ aware gallery - built for ease of visualisation:
 | [Configuration reference](02-configuration-reference.md) | One-page index of every config knob (directives, JSON, env vars, query params, in-code constants) |
 | [Configuration](01-configuration.md) | The `media_gallery` Caddyfile directive, JSON config, env vars |
 | [Templates](03-templates.md) | Index page — links to the per-topic pages below: [03a-structure](03a-structure.md), [03b-customization](03b-customization.md), [03c-feature-dark-mode](03c-feature-dark-mode.md), [03d-feature-localstorage](03d-feature-localstorage.md), [03e-feature-lightbox](03e-feature-lightbox.md), [03f-feature-layout](03f-feature-layout.md), [03g-building-pdf](03g-building-pdf.md) | How the templates work, what variables you can use, how to customize |
+| [Feature: i18n](03h-feature-i18n.md) | Internationalisation — 8 bundled locales, language picker, locale resolution priority chain, adding new locales without rebuilding Caddy |
 | [Sort & Pagination](04-sort-and-pagination.md) | The `?sort=`, `?order=`, `?page=` URL API |
 
 ## Quick start

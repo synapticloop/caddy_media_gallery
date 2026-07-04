@@ -39,6 +39,7 @@ The `media_gallery` directive accepts one inline option:
 | `no_video_thumbs` | `true` / `false` (no-arg = `true`) | `false` (video thumbs on, if ffmpeg available) | Skip ffmpeg-based video poster extraction. |
 | `no_exif` | `true` / `false` (no-arg = `true`) | **`true` (EXIF off, since 2026-07-02)** | Disable EXIF reading entirely. Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no exiftool / go-exif calls, no camera metadata surfaced). When set, the visible-page sync enrich skips EXIF reads, the per-thumb `serveThumb` does not create `.exif` sidecars, and the lightbox EXIF panel is hidden (cards no longer show the "EXIF" pill). The dimensions watermark still appears (unaffected by `no_exif`). Note that EXIF does NOT include GPS by default — see the EXIF section for details. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want EXIF reading opt in with `no_exif false`. |
 | `no_meta` | `true` / `false` (no-arg = `true`) | **`true` (video meta off, since 2026-07-02)** | Disable video metadata extraction entirely (duration, container, codecs, bitrate, framerate via ffprobe). Per user request 2026-07-02: defaults to `true` so the gallery behaves like caddys stock `file_server browse` out of the box (no ffprobe subprocess calls, no extra dependencies required). When set, the visible-page sync enrich skips `readVideoMetaCached`, no `.vmeta` sidecars are written, and the lightbox META panel is hidden for videos (cards no longer show the "META" pill). This is a SEPARATE flag from `no_exif` — `no_exif` affects image EXIF, `no_meta` affects video metadata. The directive name is now a misnomer (since its the default) but kept for backward compatibility. Operators who want video metadata enrichment opt in with `no_meta false`. |
+| `default_language` | locale string | `en` | Default locale for the i18n feature (added 2026-07-04). Used as the fallback when the visitor hasn't yet specified a language via `?lang=` URL parameter, `gallery-language` cookie, `localStorage["gallery-language"]`, or `Accept-Language` HTTP header. Must be one of the supported locales: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt`. Unknown values fall back to `en`. Visitors can override this via the language picker in the header (left of the dark/light mode toggle). See [docs/03h-feature-i18n.md](03h-feature-i18n.md) for the full architecture. |
 | `search_match` | `word` / `substring` | `substring` | Filename match rule for the search feature. `word` = match the start of a word boundary (the original Phase 118 behaviour). `substring` = match anywhere in the filename. Both server-side and client-side filters use the same rule. |
 | `max_cache_size_mb` | integer &gt;= 0 | `1024` (1 GB) | Cap on the on-disk thumb cache in MB. When the cache exceeds this, the oldest thumbs (by file mtime) are evicted until the cache is at 80% of the cap. Set to `0` to disable the cap entirely (unbounded — the pre-feature behavior). See [Caching & performance](#caching--performance) below for the full story. |
 
@@ -250,6 +251,7 @@ of the `media_gallery` handler, with realistic values:
   "no_video_thumbs": false,
   "no_exif": true,               // default since 2026-07-02 (was false)
   "no_meta": true,               // default since 2026-07-02 (was false)
+  "default_language": "en",      // i18n default (added 2026-07-04)
   "template": "gallery.tmpl",
   "search_match": "substring",
   "max_cache_size_mb": 1024
@@ -280,6 +282,7 @@ the same default value applies.
 | `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
 | `no_exif` / `no_exif false` | `"no_exif"` | bool | **`true`** (since 2026-07-02, was `false`) |
 | `no_meta` / `no_meta false` | `"no_meta"` | bool | **`true`** (since 2026-07-02, was `false`) |
+| `default_language <locale>` | `"default_language"` | string | `"en"` (or whatever the operator sets) |
 | `template <name>` | `"template"` | string | `gallery.tmpl` |
 | `search_match <word\|substring>` | `"search_match"` | string | `substring` |
 | `max_cache_size_mb <N>` | `"max_cache_size_mb"` | int (MB) | `1024` (1 GB; `0` = no cap) |
