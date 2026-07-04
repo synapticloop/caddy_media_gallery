@@ -2622,11 +2622,18 @@ func TestRenderPage_Phase77DirsTableNoTypeColumn(t *testing.T) {
 	if !strings.Contains(dirsTable, `<th class="col-count sortable"`) {
 		t.Error("expected sortable col-count th in dirs-table")
 	}
-	if !strings.Contains(dirsTable, `<span>#&nbsp;Files</span>`) {
-		t.Error("expected <span>#&nbsp;Files</span> in dirs-table (per user request 2026-07-01: renamed from # Items)")
+	// Per user request 2026-07-04 (Bug 5): the # Files and
+	// # Dirs headings are now translated via the
+	// {{t "col_files_hash"}} and {{t "col_dirs_hash"}}
+	// translation keys. TestMain sets up a real translator
+	// so the rendered text is the English values
+	// ("# Files", "# Dirs"). The translation key set the
+	// TestMain helper uses is the English values directly.
+	if !strings.Contains(dirsTable, `<span># Files</span>`) {
+		t.Error(`expected <span># Files</span> in dirs-table (per user request 2026-07-01: renamed from # Items)`)
 	}
-	if !strings.Contains(dirsTable, `<span>#&nbsp;Dirs</span>`) {
-		t.Error("expected <span>#&nbsp;Dirs</span> in dirs-table (per user request 2026-07-01: renamed from # Sub-Dirs)")
+	if !strings.Contains(dirsTable, `<span># Dirs</span>`) {
+		t.Error(`expected <span># Dirs</span> in dirs-table (per user request 2026-07-01: renamed from # Sub-Dirs)`)
 	}
 	// Per user request 2026-06-27: now wrapped in a
 	// sortable <th> with a <span> around the text.
