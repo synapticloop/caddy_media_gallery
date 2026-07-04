@@ -2954,7 +2954,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            in its server-rendered state; if they differ (visitor typed more
            chars), the JS has taken over and the JS format applies.
       */ -}}
-      <span data-search-header data-search-header-default="Media ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{else}}Media ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - Showing {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}Media ({{.DirectoryTotal}} - search '{{.SearchQuery}}' - showing {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} of {{.FilteredTotal}}){{end}}</span>
+      <span data-search-header data-search-header-default="{{t "media_label"}} ({{.DirectoryTotal}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - {{t "search_showing"}} {{.ImageStart}}-{{.ImageEnd}}{{end}})">{{if .SearchQuery}}{{t "media_label"}} ({{.DirectoryTotal}} - {{t "search_label"}} '{{.SearchQuery}}' - {{t "showing_keyword"}} {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} {{t "of_keyword"}} {{.FilteredTotal}}){{else}}{{t "media_label"}} ({{.TotalImages}}{{if and (gt .ImageStart 0) (gt .ImageEnd 0)}} - {{t "search_showing"}} {{.ImageStart}}-{{.ImageEnd}}{{end}}){{end}}</span><span data-search-header-n hidden>{{.OnPageTotalCount}}</span><span data-search-header-total hidden>{{.DirectoryTotal}}</span><span data-search-header-filtered hidden>{{.FilteredTotal}}</span><span data-search-header-current hidden>{{if .SearchQuery}}{{t "media_label"}} ({{.DirectoryTotal}} - {{t "search_label"}} '{{.SearchQuery}}' - {{t "showing_keyword"}} {{if eq .OnPageMatchedCount 0}}0{{else}}{{.OnPageMatchedCount}}{{end}} {{t "of_keyword"}} {{.FilteredTotal}}){{end}}</span>
       <span class="heading-divider" aria-hidden="true"></span>
       <button type="button" class="section-toggle" data-toggle="media" aria-expanded="true" aria-controls="media-body" title="{{t "section_show_hide_media"}}">−</button>
     </h2>
@@ -3091,6 +3091,28 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
    Empty query = no filter (everything visible). */
 (function() {
+  // Per user request 2026-07-04: local t() helper + a
+  // search-header-specific TRANSLATIONS map. The lightbox
+  // IIFE defines its own t() but it's in a different scope
+  // — we need our own here so the JS search-header can
+  // use the same translated strings (e.g. "Media",
+  // "search", "showing", "of", "This page") in any locale.
+  // Server-rendered keys populate the map so the strings
+  // are localised based on the page's resolved locale.
+  var TRANSLATIONS = {
+    media_label: '{{t "media_label"}}',
+    search_label: '{{t "search_label"}}',
+    search_showing: '{{t "search_showing"}}',
+    showing_keyword: '{{t "showing_keyword"}}',
+    of_keyword: '{{t "of_keyword"}}',
+    this_page: '{{t "this_page"}}',
+  };
+  function t(key) {
+    if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
+      return TRANSLATIONS[key];
+    }
+    return key;
+  }
   var input = document.querySelector('.search-input');
   if (input) {
     // Read the operator-configured match mode. Default to
@@ -3303,11 +3325,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       //   Result: "9 of 30 <em>This page</em>".
       var ofPart = '';
       if (filteredTotal > 0 && pageSizeTotal >= filteredTotal) {
-        ofPart = ' of ' + filteredTotal;
+        ofPart = ' ' + t('of_keyword') + ' ' + filteredTotal;
       } else {
-        ofPart = ' of ' + pageSizeTotal + ' <em>This page</em>';
+        ofPart = ' ' + t('of_keyword') + ' ' + pageSizeTotal + ' <em>' + t('this_page') + '</em>';
       }
-      headerEl.innerHTML = 'Media (' + totalFiles + ' - search \'' + currentQuery + '\' - showing ' + visibleCount + ofPart + ')';
+      headerEl.innerHTML = t('media_label') + ' (' + totalFiles + ' - ' + t('search_label') + ' \'' + currentQuery + '\' - ' + t('showing_keyword') + ' ' + visibleCount + ofPart + ')';
     }
     function applyFilter() {
       var raw = (input.value || '').toLowerCase().trim();
@@ -3630,6 +3652,12 @@ input.addEventListener('input', function() {
     meta_audio: '{{t "meta_audio"}}',
     meta_bitrate: '{{t "meta_bitrate"}}',
     meta_framerate: '{{t "meta_framerate"}}',
+    media_label: '{{t "media_label"}}',
+    search_label: '{{t "search_label"}}',
+    search_showing: '{{t "search_showing"}}',
+    showing_keyword: '{{t "showing_keyword"}}',
+    of_keyword: '{{t "of_keyword"}}',
+    this_page: '{{t "this_page"}}',
   };
   function t(key) {
     if (typeof TRANSLATIONS === 'object' && TRANSLATIONS[key]) {
