@@ -9,6 +9,63 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 2026-07-04
+
+### ✨ Feature: internationalisation (i18n)
+
+Per user request 2026-07-04: added full internationalisation support. Visitors can now pick from 8 locales (English, German, Spanish, French, Japanese, Korean, Chinese, Portuguese). The selection persists in localStorage + cookie so visitors see their preferred language on every visit after the first reload.
+
+**What's translated:**
+
+- Header (title, status row, page size dropdown, filter labels)
+- Directories table headers (`# Files`, `# Dirs`)
+- Pagination controls (← Prev, Next →)
+- Show-pages dropdown (the "all" option)
+- Filter dropdown labels (Images / Videos / Other)
+- Media section header (Media (N - Showing X-Y) and Media (N - search 'q' - showing N of M))
+- Lightbox panel headers (EXIF / META)
+- Lightbox field labels (Camera, Lens, Date, etc.)
+- Language picker trigger + dropdown options
+
+**New Caddyfile directive:**
+
+- **`default_language <locale>`** — sets the default locale when the visitor hasn't yet specified one (via URL, cookie, or browser Accept-Language). Defaults to `en`.
+
+**Locale resolution priority chain** (per visitor request):
+
+1. `?lang=<locale>` URL parameter (highest)
+2. `gallery-language` cookie
+3. `localStorage["gallery-language"]`
+4. `Accept-Language` HTTP header
+5. `default_language` directive (from Caddyfile)
+6. Hardcoded `en` (lowest)
+
+**Visitor UX:**
+
+- Language picker is a `<details>`/`<summary>` dropdown in the header, left of the dark/light mode toggle. Click an option → navigates to `?lang=<locale>` → page reloads → JS writes to localStorage + cookie. After the first reload, all subsequent visits use the cookie automatically — no further reloads needed.
+
+**Adding a new language (operator):**
+
+Operators can add a new language without rebuilding Caddy:
+
+1. Drop a JSON file at `/etc/caddy/gallery-templates/lang/<locale>.json` with the same keys as `lang/en.json`
+2. Restart Caddy (or rely on the next request to pick it up)
+
+**Bundled locales:** `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh`, `pt` — 8 files in the `lang/` directory, embedded into the binary via `//go:embed` and overridable on disk.
+
+**Implementation details:**
+
+- New `i18n.go` (~400 LOC): `Translator` struct, `T()`/`NativeName()`/`SelfName()` methods, `NewTranslator()` constructor (loads from embed + disk override), `DetectLocale()` for the priority chain, `ResolveLocale()` with q-factor matching for Accept-Language.
+- New `{{t "key"}}` template function for use in `gallery.tmpl` (registers `currentT` + `currentLang` package-level vars under a `tMu` RWMutex; RenderPage sets these on entry, restores via defer on return).
+- New package-level `tr()` Go helper for non-template code (e.g. `computeFilterGroups` building the filter dropdown labels).
+- JS `t()` helper + `TRANSLATIONS` map (server-rendered) for client-side translation of the lightbox panel headers, search header JS, etc.
+- 15 new unit tests + 3 new RenderPage tests + 3 new helper tests = **18 new tests, 450+ total pass**.
+- 11 visual test groups (Playwright Python) verifying the locale renders correctly in each of the 8 languages.
+
+See `docs/03h-feature-i18n.md` for the full architecture, locale resolution algorithm, and "adding a new language" walkthrough.
+
+---
+
 ## 2026-07-03
 
 ### ✨ Feature: defaults aligned with `file_server browse`
