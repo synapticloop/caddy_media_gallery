@@ -28,8 +28,7 @@ The `media_gallery` directive accepts one inline option:
 | `image_types` | space-separated extensions (no leading dot) | `jpg jpeg png gif webp` | File extensions the gallery treats as images. Case-insensitive. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, not the image grid) and shown with a 📄 icon. Operators who want to handle these formats (e.g. via external tooling) can opt in with `image_types .heic .avif .svg`. |
 | `video_types` | space-separated extensions (no leading dot) | `mp4 webm m4v mov mkv avi ogv ogg` | File extensions the gallery treats as videos. |
 | `sort` | `mtime` / `name` | `mtime` | Sort field for the image grid. `mtime` = newest first; `name` = case-insensitive alphabetical. |
-| `page_size` | integer &gt;= 1 | `60` (or first item in `page_sizes`) | Default per-page count. Deprecated: use `page_sizes` (list form) for the dropdown, which lets the visitor choose. |
-| `page_sizes` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default. Use the `all` token to include "show everything on one page" in the dropdown. |
+| `page_size` | space-separated list (first = default) | `60 30 120 all` | Per-page dropdown options. The first item is the default per-page count (used when `?page_size=` isn't in the URL). Use the `all` token to include "show everything on one page" in the dropdown (omit it for the default paginated-only behavior). The list is always sorted by increasing numeric value with `"all"` at the end, so the operator can write the values in any order. The same single directive accepts a single value (e.g. `page_size 100`) — a one-element list is valid, just not very useful without a dropdown to switch. |
 | `thumb_width` | integer &gt;= 1 | `320` | Max width (px) of generated thumbnails. |
 | `thumb_height` | integer &gt;= 1 | `320` | Max height (px) of generated thumbnails. |
 | `thumb_format` | `webp` / `png` / `jpeg` (or `jpg`) | `webp` | Output format for generated thumbnails. |
@@ -181,7 +180,7 @@ handle_path /images/* {
 }
 ```
 
-This shows 100 image entries per page instead of the default 60. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. (You can also use `page_sizes 100` to expose 100 in the dropdown and let the visitor switch back to 60.) URL query override: append `?page=2` to the gallery URL to jump to a specific page. ``?page_size=N` IS a valid URL query param: the visitor can switch the per-page size via the dropdown in the meta line. The value is validated against the operator-configured `page_sizes` list (an unknown value falls back to the first item). Changing the page size resets the visitor to page 1 (so they don't end up on a non-existent page).
+This shows 100 image entries per page instead of the default 60. Tradeoffs: larger pages mean fewer HTTP requests, but each request returns a bigger HTML payload (and the server uses more memory per render). The pagination nav at the bottom of the page only renders when total pages > 1, so if your gallery has 30 images and you set `page_size 100`, you get all 30 on one page with no nav. (You can also use `page_size 30 60 100 120 all` to expose 100 in the dropdown alongside 30 / 60 / 120 / all, so the visitor can switch back to a smaller page.) URL query override: append `?page=2` to the gallery URL to jump to a specific page. `?page_size=N` IS a valid URL query param: the visitor can switch the per-page size via the dropdown in the meta line. The value is validated against the operator-configured `page_size` list (an unknown value falls back to the first item). Changing the page size resets the visitor to page 1 (so they don't end up on a non-existent page).
 
 All other configuration (the `root *` for the image directory,
 the `handle` / `handle_path` for the route, the auth wrapper) is
@@ -237,8 +236,7 @@ of the `media_gallery` handler, with realistic values:
   "image_types": ["jpg", "jpeg", "png", "gif", "webp"],
   "video_types": ["mp4", "webm", "m4v", "mov", "mkv", "avi", "ogv", "ogg"],
   "sort": "name",
-  "page_size": 60,
-  "page_sizes": ["60", "30", "120", "all"],
+  "page_sizes": ["60", "30", "120", "all"],   // per-page dropdown options (first = default)
   "thumb_width": 320,
   "thumb_height": 320,
   "thumb_format": "webp",
@@ -265,8 +263,7 @@ the same default value applies.
 | `image_types <ext1 ext2 ...>` | `"image_types"` | `[]string` | built-in list |
 | `video_types <ext1 ext2 ...>` | `"video_types"` | `[]string` | built-in list |
 | `sort <mtime\|name>` | `"sort"` | string | `mtime` |
-| `page_size <N>` | `"page_size"` | int | (first item of `page_sizes`) |
-| `page_sizes <N1 N2 ...>` | `"page_sizes"` | `[]string` | `["60", "30", "120", "all"]` |
+| `page_size <N1 N2 ...>` | `"page_sizes"` | `[]string` | `["60", "30", "120", "all"]` |
 | `thumb_width <N>` | `"thumb_width"` | int | `320` |
 | `thumb_height <N>` | `"thumb_height"` | int | `320` |
 | `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |

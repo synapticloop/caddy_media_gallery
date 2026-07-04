@@ -138,8 +138,7 @@ The `media_gallery` directive accepts these sub-options (full reference in [`doc
 | `root_name` | (none) | Display name for the root breadcrumb. Defaults to "media root". |
 | `image_types` | built-in list | Space-separated list of file extensions the gallery treats as images (e.g. `image_types jpg png webp`). Default: `jpg jpeg png gif webp`. **HEIC, AVIF, and SVG are NOT in the defaults** — Go's stdlib can't decode them. Files with those extensions are classified as "other" files (in the "Other files" section, shown with a 📄 icon). Operators can opt in with `image_types .heic .avif .svg` if they have external tooling to handle these formats. |
 | `video_types` | built-in list | Space-separated list of video extensions. Default: `mp4 webm m4v mov mkv avi ogv ogg`. |
-| `page_size` | `60` | Per-page default (the first item in `page_sizes` if set). |
-| `page_sizes` | `60 30 120 all` | Space-separated list of dropdown options; the first item is the default. Use `all` for "show all on one page". |
+| `page_size` | `60 30 120 all` | Space-separated list of dropdown options for the per-page dropdown; the first item is the default. Use `all` as one of the values for "show all items on one page" (only included in the dropdown if explicitly listed). The dropdown is always sorted by increasing numeric value with `"all"` at the end, so the operator can write the list in any order. Default: `60 30 120 all`. |
 | `thumb_width` | `320` | Max width of generated thumbnails (px). |
 | `thumb_height` | `320` | Max height of generated thumbnails (px). |
 | `thumb_format` | `webp` | Output format: `webp`, `png`, `jpeg` (or `jpg`). |
@@ -158,7 +157,7 @@ Example:
 ```caddyfile
 media_gallery {
     sort name
-    page_sizes 30 60 120 all
+    page_size 30 60 120 all
     search_match word
     template themes/dark/gallery.tmpl
 }
