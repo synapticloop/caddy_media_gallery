@@ -21,7 +21,7 @@
       } catch (e) { /* localStorage unavailable */ }
     })();
 
-    // Per user request 2026-07-04: language picker persistence.
+    // language picker persistence.
     //
     // Flow:
     //   1. On page load, read `gallery-language` from
@@ -38,7 +38,7 @@
     //      by checking if the URL has ?lang=; if so, write
     //      that value to localStorage + cookie.
     //
-    //   3. Per user feedback 2026-07-04: "full page reload
+    //   3. "full page reload
     //      — this should only ever happen once". After
     //      the first dropdown selection, the cookie is
     //      set, so the server's locale detection (in
@@ -105,7 +105,7 @@
       }
     })();
 
-    // Per user request 2026-07-04: after a dropdown click,
+    // after a dropdown click,
     // close the <details> element so the menu collapses.
     // (We don't need to do anything else — the <a href>
     // navigation handles the rest.)
@@ -143,7 +143,7 @@
   --bg-card: #ffffff;        /* card/chip background (sort UI, page-btn, dirs-row) */
   --bg-chip: #f3f6f7;        /* subtle chip background (dirs, sort indicator, theme toggle) */
   --bg-hover: #e5e9ea;       /* hover background for chips */
-  /* Per user request 2026-07-01: the relative-size bar in
+  /* the relative-size bar in
      the dirs/others tables. Darker than --bg-chip so it's
      visible against the white card background, but lighter
      than --border so it doesn't compete with the row
@@ -159,7 +159,7 @@
   --accent: #006ed3;         /* accent color (links, card hover border) */
   --accent-hover: #0095e4;   /* accent hover */
   --accent-bg: #006ed3;      /* button-background accent (active sort/page btns); darker in dark mode to fit the aesthetic */
-  /* Per user request 2026-06-19: the active sort + pagination
+  /* the active sort + pagination
      buttons no longer use the blue --accent-bg. Instead they
      use the OPPOSITE mode's page background (and foreground)
      for a color-contrast inversion:
@@ -192,15 +192,15 @@
        mirrors the light-mode behavior (--bg-chip = --bg in
        light mode too) and matches how the .tile-name /
        .tile-meta elements look on the card (text directly on
-       the card bg, no separate fill). Per user feedback
+       the card bg, no separate fill). 
        2026-06-18, even the previous #1d1d1d was 'too light
        for the page'; the user wants chips to blend in like
        the tile details. */
     --bg-chip: #1a1a1a;
     --bg-hover: #333333;
     --bg-active: #2a2a2a;
-    /* Per user request 2026-07-01: relative-size bar in
-       dark mode. Per user spec: bar color is #4d4d4d
+    /* relative-size bar in
+       dark mode. bar color is #4d4d4d
        (a clearly visible mid-grey, between the page
        background #1a1a1a and the row separator #333333).
        The text (var(--fg-muted) = #aaaaaa) is bright
@@ -254,7 +254,7 @@
   --bg-chip: #1a1a1a;
   --bg-hover: #333333;
   --bg-active: #2a2a2a;
-  /* Per user request 2026-07-01: relative-size bar in dark
+  /* relative-size bar in dark
      mode (per the user-clicked dark mode button — this
      selector is for when the user has explicitly toggled
      dark mode via the theme toggle, not for the OS-level
@@ -286,7 +286,7 @@
 }
 
 /* === THEME TOGGLE BUTTON GROUP (header) ====================== */
-/* Per user request 2026-07-04: language picker dropdown.
+/* language picker dropdown.
    Visually matches .theme-toggle (same chip-style background,
    same border-radius) so the two controls feel like siblings.
    The trigger is a <summary> inside <details> (same pattern
@@ -297,7 +297,7 @@
   position: relative;
   display: inline-block;
   margin-right: 0.5rem;
-  /* Per user request 2026-07-04: the language picker is
+  /* the language picker is
      now wider. The trigger and the menu both get a
      min-width of 8rem (instead of auto-fitting the
      longest option name). This makes the picker visually
@@ -322,7 +322,7 @@
   list-style: none;
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s;
-  /* Per user request 2026-07-04: trigger is also wider
+  /* trigger is also wider
      (matches the parent .lang-toggle min-width). */
   min-width: 100%;
   box-sizing: border-box;
@@ -431,7 +431,7 @@ main {
 }
 header {
   padding: 1.25rem 2rem 0;
-  /* Per user request 2026-06-19: removed border-bottom from the
+  /* removed border-bottom from the
      <header>. The line that separates the header content (title +
      meta + sort-bar) from the rest of the page is now the
      sort-bar's border-bottom, which extends to the viewport
@@ -446,14 +446,14 @@ header {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  /* Per user request 2026-07-04: the h1 (title) and the
+  /* the h1 (title) and the
      header-controls (language picker + light/dark selector)
      are now in the same flex row. The status row (.meta)
      was moved into its own div below this row. */
   padding-bottom: 0.25rem;
 }
 .header-main { flex: 1 1 auto; min-width: 0; }
-/* Per user request 2026-07-04: wrapper for the language
+/* wrapper for the language
    picker + light/dark selector that sits to the right of
    the title. The wrapper groups them visually so they
    sit next to each other. */
@@ -475,7 +475,7 @@ h1 {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  /* Per user request 2026-07-04: the .meta div moved out
+  /* the .meta div moved out
      of the header-top row and into its own row below the
      title/controls. Add a small top margin to separate it
      visually. */
@@ -494,7 +494,7 @@ h1 {
   transition: background 0.12s, border-color 0.12s;
 }
 a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border-strong); color: #006ed3; }
-/* Per user request 2026-06-18: arrows in the media gallery
+/* arrows in the media gallery
    should be the same color in both light and dark modes.
    Fixed #006ed3 (the light-mode accent) — a medium blue
    that's visible on both light and dark page backgrounds
@@ -508,7 +508,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .section:last-child { border-bottom: none; }
 .section-heading {
-  /* Per user request 2026-06-19: bumped from 0.7rem to 0.85rem —
+  /* bumped from 0.7rem to 0.85rem —
      the section headings (DIRECTORIES, OTHER FILES, MEDIA) were
      too small relative to the body text. 0.85rem matches the
      meta line size and is more readable. */
@@ -528,7 +528,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  /* Per user request 2026-06-19: the whole heading row is
+  /* the whole heading row is
      clickable (not just the small button). The padding +
      cursor: pointer + hover bg show the user this is
      interactive. We use cursor: pointer (not a cursor on the
@@ -542,14 +542,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   user-select: none;
 }
 .section-heading:hover { background: var(--bg-hover); }
-/* Per user request 2026-06-19: a horizontal rule between the
+/* a horizontal rule between the
    section name and the toggle button. The rule sits at roughly
    50% of the text height (the lowercase x-height) and stretches
    to fill the gap. It's a thin (1px) line in the muted border
    color so it doesn't dominate the heading — it's a visual
    link, not a divider. */
 .section-heading .heading-divider {
-  /* Per user request 2026-06-20 (Phase 108): the line between
+  /* the line between
      the section name and the toggle button was getting
      "lost" (effectively invisible) because:
      (a) the flex container with justify-content: space-between
@@ -589,7 +589,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   height: 1.5rem;
   cursor: pointer;
   display: inline-flex;
-  /* Per user request 2026-06-19: removed align-items: center.
+  /* removed align-items: center.
      The button is a fixed-size square (1.5rem x 1.5rem) and
      contains a single character (− or +) with line-height: 1.
      The center alignment was making the character sit at the
@@ -632,11 +632,11 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-/* Dirs section layout (Phase 24, per user request 2026-06-17):
+/* Dirs section layout (Phase 24):
    - Up chip is rendered on its OWN LINE, always first
    - The dirs section is only shown if there's an Up entry
      OR at least one subdir */
-/* Per user request 2026-06-20: subdirs are now a full-width
+/* subdirs are now a full-width
    table (see .files-table below), not a chip row. The Up chip
    remains above the table as a quick "go up" affordance.
    The .dirs-row and .dirs-section .dirs-row classes are kept
@@ -645,7 +645,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .dirs-section .up-chip-row {
   margin-bottom: 0.5rem; /* visual separation from the subdirs below */
 }
-/* Per user request 2026-06-19: the Up entry is now rendered
+/* the Up entry is now rendered
    as a SEPARATE TABLE above the dirs table (not as a row
    inside the dirs table). This avoids the up-spacer-row that
    used to highlight on hover. The up-row-table has no
@@ -663,7 +663,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 0.25rem; /* small gap before the dirs-table */
-  /* Per user request 2026-06-19: added font-size: 0.85rem to
+  /* added font-size: 0.85rem to
      match .files-table. The up-row-table didn't have a
      font-size override, so it inherited the default
      (typically 1rem / 16px), which made the Up link text
@@ -676,7 +676,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-card);
   border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
-  /* Per user request 2026-06-19: removed font-weight: 500.
+  /* removed font-weight: 500.
      The up-row's text was bolder (and thus appeared bigger)
      than the other directory rows in the dirs table below.
      Now both use the default font-weight (inherited from
@@ -745,7 +745,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   width: auto;
 }
 .files-table .col-type {
-  /* Per user request 2026-06-19: changed width from 6rem
+  /* changed width from 6rem
      (fixed narrow) to auto. With the dirs table no longer
      having a Type column (Phase 77), the col-type only
      applies to the others table. The 6rem fixed width was
@@ -762,7 +762,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.05em;
 }
 .files-table .col-size {
-  /* Per user request 2026-07-01: left-aligned (was right-
+  /* left-aligned (was right-
      aligned). The bar (see ::before below) extends from the
      left edge of the cell, so the size text reads as
      "anchored to the right edge of the bar" — natural
@@ -782,7 +782,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding-left: 0.5rem; /* small inset so the size text isn't
                             flush against the cell edge */
 }
-/* Per user request 2026-07-01: light-grey bar behind the
+/* light-grey bar behind the
    size text, showing the relative size compared to the
    rest of the directories/files in this section. The
    width is driven by the --size-pct CSS custom property
@@ -793,14 +793,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .files-table .col-size::before {
   content: "";
   position: absolute;
-   
+
   top: 7px;
   bottom: 5px;
   left: 0;
   width: var(--size-pct, 0%);
-   
+
   background: var(--bar-bg);
-   
+
   border-radius: 3px;
   z-index: 0;
 }
@@ -810,8 +810,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   z-index: 1;
 }
 
-/* Per user request 2026-06-27: # Files and # Dirs
-   columns in the dirs table. Per user request 2026-07-01:
+/* # Files and # Dirs
+   columns in the dirs table. 
    right-aligned (was left-aligned in the prior commit).
    Tabular-nums is still applied so the digits are the
    same width across rows — "1" and "11" align
@@ -819,7 +819,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    sits flush at the right margin of the column.
    Narrow (5rem) since these are small integers.
 
-   Per user request 2026-06-27: the column heading
+the column heading
    "#&nbsp;Files" / "#&nbsp;Dirs" uses non-breaking
    spaces (the entity inside the HTML, not just CSS) so
    the heading never splits across lines. The
@@ -829,7 +829,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    which would break the column alignment. */
 .col-count {
   width: 5rem;
-  /* Per user request 2026-07-01: right-aligned (was
+  /* right-aligned (was
      left-aligned). The 5rem width + 1-3 digit counts means
      the right edge of the counts varies by row (a "1" sits
      further right than "1359"), but the right margin of
@@ -842,7 +842,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  /* Per user request 2026-07-01: padding-right to
+  /* padding-right to
      align the values with the right edge of the
      header text.
 
@@ -879,7 +879,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    and comes LATER in the cascade — so the thead th
    rule would override the .col-count rule for the
    header. To make sure the header is also right-aligned
-   (per user request 2026-07-01), this more specific
+, this more specific
    selector wins. */
 .files-table thead .col-count {
   /* The .files-table thead th rule has
@@ -892,7 +892,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      to match the header text right edge — see
      the comment there for the calculation). */
   text-align: right;
-  /* Per user request 2026-07-04: the column
+  /* the column
      heading ("# Files" / "# Dirs") used to use
      a non-breaking space entity (#&nbsp;Files)
      so it never wrapped across lines. Now that
@@ -903,7 +903,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      etc.) on a single line. */
   white-space: nowrap;
 }
-/* Per user request 2026-07-01: the .files-table
+/* the .files-table
    tbody td rule has padding: 0.5rem 0.75rem
    which sets padding-right to 0.75rem (overriding
    the 1.85rem in the .col-count rule). To make
@@ -926,7 +926,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   white-space: nowrap;
 }
 
-/* Per user request 2026-06-27: clickable column headers for
+/* clickable column headers for
    the dirs and others tables. The .sortable class adds a
    pointer cursor and a hover effect. The .sort-indicator
    span inside the <th> shows ▲ (asc) or ▼ (desc) for the
@@ -941,7 +941,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 .sortable.sort-active {
   /* Active column header (when a dirs/others table column
-     is the current sort key). Per user request 2026-06-27:
+     is the current sort key). 
      no longer color or bold the active header — the ▲/▼
      glyph in the .sort-indicator span is enough to show
      which column is the active sort. */
@@ -953,7 +953,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   margin-left: 0.25rem;
   font-size: 0.75rem;
   vertical-align: middle;
-  /* Per user request 2026-06-27: removed color so the
+  /* removed color so the
      ▲/▼ indicator is no longer tinted with the brand
      colour. Inherits the default text colour from the
      <th> (which is the default page colour since the
@@ -972,7 +972,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .table-link:hover {
   color: var(--accent); /* hover state: accent color (slight affordance) */
 }
-/* Per user request 2026-06-19: the cell-link wraps the content
+/* the cell-link wraps the content
    of the Type/Size/Date cells (so clicking anywhere in the row
    navigates to the file). It uses display: block + height:
    100% to make the entire <td> clickable, with padding to match
@@ -1022,7 +1022,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   font-size: 0.85rem;
   flex-wrap: wrap;
-  /* Per user request 2026-06-19 (Phase 80): removed
+  /* removed
      margin: 0 -2rem (the sort-bar no longer needs to
      escape the header's 2rem padding because the visual
      separation above is now handled by .header-top's
@@ -1049,7 +1049,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   background: var(--bg-card);
   transition: background 0.12s, border-color 0.12s;
 }
-/* Per user request 2026-06-28: the sort button hover state
+/* the sort button hover state
    should match the Search all button's hover state. Both
    use --bg-hover background + --border-strong border, AND
    now --fg text color (the Search all button already had
@@ -1086,7 +1086,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      without changing the fill. */
   border-color: var(--border-strong);
 }
-/* Per user request 2026-06-19: the sort-by arrow (↑/↓) is
+/* the sort-by arrow (↑/↓) is
    too close to the button label ("Name", "Type", etc.).
    Add padding-left to the .arrow span so there's breathing
    room between the label text and the arrow. The arrow's
@@ -1096,7 +1096,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding-left: 0.3rem;
   font-weight: 600;
 }
-/* Per user request 2026-06-20 (Phase 3): the breadcrumb
+/* the breadcrumb
    is a small, unobtrusive row of links below the sort-bar.
    Each segment is a clickable link except the current
    directory (last segment, plain text). The separator is a
@@ -1104,16 +1104,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    convention (rather than the breadcrumb-arrow ">" which
    would compete visually with the sort buttons). The
    whole row wraps on narrow viewports (long path names). */
-/* Per user request 2026-06-20: the breadcrumb is rendered
-   as a row of rectangular pills (the "chevron" chevron shape
-   was removed in favour of a simpler rectangular design — see
-   the "show stop the chevrons" user request). Each segment
+/* the breadcrumb is rendered
+   as a row of rectangular pills. Each segment
    is a simple bordered box with the name + a » separator
    between segments. The CURRENT (last) segment is rendered
    as plain text (not a link) with a chevron-pointed right
    edge as the "you are here" indicator.
 
-   Per user request 2026-06-20: padding-bottom: 0.25rem added
+padding-bottom: 0.25rem added
    so the breadcrumb-link's own bottom border is NOT cut off
    by the breadcrumb container's bottom border (which is the
    separator line between the breadcrumb and the sort-bar
@@ -1124,18 +1122,18 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   flex-wrap: wrap;
   gap: 0.25rem 0.5rem;
   font-size: 0.85rem;
-  /* Per user request 2026-07-01: padding-top 0.25rem
+  /* padding-top 0.25rem
      (compact — keeps the breadcrumb close to the status
      area above) and padding-bottom 0.85rem (more visual
      breathing room before the separator). */
   padding: 0.25rem 0 0.85rem 0;
-  /* Per user request 2026-07-01: darker border under the
+  /* darker border under the
      breadcrumb. Using #c0c4c6 (a slightly darker shade
      than --border-strong #d0d4d6) for stronger visual
      separation from the sort-bar below. */
   border-bottom: 1px solid #c0c4c6;
 }
-/* Per user request 2026-06-20: the breadcrumb is now
+/* the breadcrumb is now
    rectangular (no chevron shape). All segments are simple
    bordered boxes with the name + a » separator after each.
    Only the CURRENT (last) segment gets the chevron shape +
@@ -1143,7 +1141,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    separator is the standard » (right-pointing double angle
    quotation mark) shown BETWEEN segments, not as part of
    the segment itself. */
-/* Per user request 2026-06-20: border-bottom added back.
+/* border-bottom added back.
    Originally removed in Phase 115 because the 4-sided
    border looked too heavy; re-added with the simpler
    4-sided "border:" declaration (cleaner than 3 separate
@@ -1156,7 +1154,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg);
 }
 
-/* Per user request 2026-06-20: the CURRENT (last) segment
+/* the CURRENT (last) segment
    gets the chevron shape and the softer colour scheme. It's
    the visual "you are here" indicator. --border-strong (medium
    grey) + --fg (readable text) in both light and dark mode. */
@@ -1173,7 +1171,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 
 
-/* Per user request 2026-06-20 (Phase 4): the file-type
+/* the file-type
    filter UI sits between the breadcrumb and the media
    section. The row is a single horizontal bar of "pills"
    (three dropdown triggers + the Filter button + the
@@ -1190,16 +1188,16 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    accent color for active. The Filter button is a primary
    CTA (slightly more prominent than the pills). */
 .filter-form {
-  /* Per user request 2026-06-20: padding now matches .sort-bar
+  /* padding now matches .sort-bar
      (0.75rem 0 0.75rem 0 — no horizontal padding). All three
      header rows (filter, breadcrumb, sort-bar) now have the
      same vertical padding and align to the page edge, so the
      left edge of the row aligns with the rest of the page
      content. */
   padding: 0.75rem 0 0.75rem 0;
-  /* Per user request 2026-07-01: added border-bottom to create
+  /* added border-bottom to create
      a visible separator between the filter row and the media
-     grid below. Per user request 2026-07-01: the border
+     grid below. the border
      color matches the darker #c0c4c6 used under the
      breadcrumb for visual consistency between the two
      "primary" separators in the header area. */
@@ -1212,7 +1210,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   gap: 0.4rem;
   font-size: 0.85rem;
 }
-/* Per user request 2026-06-30: the .type-filter-group wraps
+/* the .type-filter-group wraps
    the type filter elements (label + dropdowns + Filter +
    Reset) so they stay together as a unit, separate from the
    search controls. On desktop this is just a flex row that
@@ -1258,7 +1256,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 .filter-pill-active,
 .filter-dropdown[open] > .filter-pill,
 .filter-pill:active {
-  /* Per user request 2026-06-30: changed from --bg-hover
+  /* changed from --bg-hover
      (light gray) to --bg-card (white) to match the Sort
      by buttons' inactive background. The hover state
      uses --bg-hover (same as Sort by buttons' hover). */
@@ -1267,7 +1265,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg);
 }
 
-/* Per user request 2026-06-20: style the page-size <select>
+/* style the page-size <select>
    to match the filter-pill look. Same border, padding, font
    size, colors; same hover behaviour. The native caret is
    preserved by the browser (uses system UI). */
@@ -1361,7 +1359,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
-/* Per user request 2026-06-20: the Filter button (formerly
+/* the Filter button (formerly
    "Apply") uses the --active-bg / --active-fg /
    --active-border colour scheme, which is the OPPOSITE
    mode's page colour (light mode = dark with light text;
@@ -1371,7 +1369,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    share the same visual treatment, in both light and dark
    mode.
 
-   Per user request 2026-06-30: renamed from "Apply" to
+renamed from "Apply" to
    "Filter" (more descriptive of what the button does).
 
    The previous version used --accent (blue) which stood out
@@ -1392,7 +1390,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-/* Per user request 2026-06-28: the previous hover state
+/* the previous hover state
    used background: var(--bg-hover) which is the LIGHT
    card-hover color (light grey). In light mode, that
    produced light text on light grey — nearly invisible.
@@ -1407,7 +1405,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 }
 
 /* Phase 118: search controls (Phase 118).
-   Per user request 2026-06-20: add a search box + "Search all"
+add a search box + "Search all"
    button on the right of the filter row. The search box is a
    native <input type="search"> styled to match the filter
    pills (border, padding, font, background, hover behaviour).
@@ -1458,7 +1456,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-/* Per user request 2026-06-30: the search-button now uses
+/* the search-button now uses
    the active color scheme (same as Filter), so the hover
    uses filter: brightness() like .filter-apply (rather
    than background: --bg-hover, which is for secondary
@@ -1468,8 +1466,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--active-fg);
   border-color: var(--active-border);
 }
-/* Per user request 2026-06-28: the search Reset button.
-   Per user request 2026-06-30: updated twice.
+/* the search Reset button.
+updated twice.
    1. First: use the same color scheme as the .filter-pill
       (--bg-hover / --border-strong / --fg) so it matches
       the "All" pill.
@@ -1499,7 +1497,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-/* Per user request 2026-06-30: the search-reset-button
+/* the search-reset-button
    now uses the same color scheme as the Sort by buttons
    (--bg-card / --border / --fg) and the Reset pill in the
    filter row. The hover state uses --bg-hover (same as
@@ -1510,7 +1508,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   color: var(--fg);
 }
 
-/* Per user request 2026-06-30: cards that don't match the
+/* cards that don't match the
    current search are now GREYED OUT instead of hidden. The
    cards stay in their grid positions (so the layout doesn't
    reflow and matches don't cluster at the top), but they're
@@ -1564,7 +1562,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: none;
   color: inherit;
   transition: border-color 0.12s, transform 0.12s;
-  /* Per user request 2026-06-30: position: relative so the
+  /* position: relative so the
      hover tooltip (::before) can be positioned absolutely
      above the card. Without this, the tooltip would position
      itself relative to the nearest positioned ancestor
@@ -1573,7 +1571,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: relative;
 }
 .card:hover { border-color: var(--accent); transform: translateY(-1px); }
-/* Per user request 2026-06-30: on hover, show a custom
+/* on hover, show a custom
    tooltip with the filename (no extension, with _ and -
    replaced by spaces). The tooltip is rendered as a
    ::before pseudo-element on the card, positioned above
@@ -1642,7 +1640,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   justify-content: center;
   overflow: hidden;
 }
-/* Per user request 2026-06-27: a subtle shimmer animation
+/* a subtle shimmer animation
    while the thumbnail image is loading. The shimmer is a
    diagonal sweep of slightly-brighter pixels that loops
    across the thumbnail. Stops automatically when the <img>
@@ -1680,7 +1678,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   object-fit: cover;
   display: block;
 }
-/* Per user request 2026-06-27: the dimensions watermark
+/* the dimensions watermark
    appears at the bottom-LEFT of the IMAGE (inside .thumb
    div), always visible. Shows the W × H of the source image
    (or video). Styled like the open-btn (translucent
@@ -1695,7 +1693,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: absolute;
   bottom: 6px;
   left: 6px;
-  /* Per user request 2026-07-02: reduced vertical padding
+  /* reduced vertical padding
      from 2px to 1px so the background badge is less
      tall (more compact). Same horizontal padding (6px)
      for consistent text spacing. */
@@ -1710,7 +1708,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-variant-numeric: tabular-nums;
   z-index: 1;
 }
-/* Per user request 2026-07-02: video duration badge
+/* video duration badge
    shown at the BOTTOM-RIGHT of the thumbnail (parallel
    to the dimensions badge at the bottom-left). Same
    visual style as the dimensions badge — dark background,
@@ -1719,7 +1717,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   position: absolute;
   bottom: 6px;
   right: 6px;
-  /* Per user request 2026-07-02: reduced vertical padding
+  /* reduced vertical padding
      from 2px to 1px so the background badge is less
      tall (more compact). Same horizontal padding (6px)
      for consistent text spacing. */
@@ -1742,7 +1740,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   height: 28px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.85);
-  /* Per user request 2026-06-18: the arrow inside the open-btn
+  /* the arrow inside the open-btn
      span should be #111111 (a fixed dark color), not the
      theme-aware --fg token. The --fg variable stays at its
      current value (#e5e5e5 in dark mode, #111111 in light mode)
@@ -1764,7 +1762,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   z-index: 1;
   font-family: inherit;
   user-select: none;
-  /* Per user request 2026-06-18: dark border so the button
+  /* dark border so the button
      stands out more. The button has a light translucent bg
      (rgba(255,255,255,0.85)), so a dark border is visible
      in BOTH light and dark modes (the bg stays light over
@@ -1859,7 +1857,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.05em;
   flex: 0 0 auto;
 }
-/* Per user request 2026-06-27: the EXIF pill appears below
+/* the EXIF pill appears below
    the filetype-chip on the card overlay, only when the image
    has EXIF metadata. The pill is just a label (not a link)
    to inform the visitor that more info is available in the
@@ -1882,8 +1880,8 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   letter-spacing: 0.05em;
   cursor: help;
 }
-/* Per user request 2026-07-02: a META pill for video
-   cards that have video metadata. Per user clarification
+/* a META pill for video
+   cards that have video metadata. 
    2026-07-02 ("sorry the META pill should be the same
    as the EXIF pill"): same style as .exif-chip (accent
    background, accent colour, rounded corners). Visually
@@ -1917,7 +1915,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: none;
   background: var(--bg-card);
 }
-/* Per user request 2026-06-30: added color: var(--fg) to
+/* added color: var(--fg) to
    the hover state. Without this, the base `a:hover` rule
    (which uses --accent-hover, blue) takes effect because
    .page-btn:hover doesn't override the color. The result
@@ -1970,7 +1968,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   body { padding: 1rem 0.5rem 3rem; }
   header, .dirs-section, .others-section, .media-section { padding-left: 1rem; padding-right: 1rem; }
   .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  /* Per user request 2026-06-18: on small screens, stack the
+  /* on small screens, stack the
      .header-top vertically so the meta line wraps onto a new
      line (instead of being squished by the flex parent).
      Without this, the meta line ("375 images ... 50 per page")
@@ -2008,13 +2006,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   padding: 1.5rem 1rem 2rem;
   font-size: 0.8rem;
   color: var(--fg-muted);
-  /* Per user request 2026-06-19: removed the border-top. The
+  /* removed the border-top. The
      footer now blends into the page content above without a
      visible separator. Padding-top (1.5rem) still provides
      visual breathing room. */
   margin-top: 1rem;
 }
-/* Per user request 2026-06-27: the cache stats line under
+/* the cache stats line under
    "proudly served by caddy + synapticloop // media gallery".
    Small monospace text — four hex values separated by //
    (XX // YY // ZZ // AA). Light opacity to keep it out of
@@ -2038,7 +2036,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   text-decoration: underline;
 }
 
-/* Per user request 2026-07-01: "Back To Top" button.
+/* "Back To Top" button.
    - Fixed position at bottom-center, 1.5rem from the
      viewport bottom (a "little bit of marking from
      the bottom").
@@ -2054,7 +2052,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transform: translateX(-50%);
   background: #000;
   color: #fff;
-  /* Per user request 2026-07-02: the padding is now
+  /* the padding is now
      slightly asymmetric (more on the right) to give
      the .back-to-top-pct badge some breathing room.
      The flexbox layout puts the text and the percent
@@ -2081,7 +2079,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   opacity: 1;
   pointer-events: auto;
 }
-/* Per user request 2026-07-02: a small badge inside
+/* a small badge inside
    the back-to-top button that shows the current
    scroll percentage (e.g. "23%"). Subtle white-on-
    black with a slightly lighter background to make
@@ -2131,7 +2129,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: color 0.15s;
   font-family: inherit;
 }
-/* Per user request 2026-06-20: prev/next buttons fill the full
+/* prev/next buttons fill the full
    window height and extend ~120px into the window width, with a
    subtle hover background. The hit area is large (full height
    makes them easy to click on touch devices; the ~120px width
@@ -2194,7 +2192,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    would be a no-op but the comments help future readers understand
    the design intent). */
 /* Lightbox controls container — wraps the "open in new tab"
-   and "close" buttons in a rounded pill. Per user request
+   and "close" buttons in a rounded pill. 
    2026-06-18: the two buttons should be aligned (same y,
    same size, in a flex container) inside a rounded box with
    a visible background. The pill sits at top-right of the
@@ -2205,7 +2203,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   right: 1.5rem;
   display: flex;
   gap: 0;
-  /* Per user request 2026-06-19 (Phase 91: revert Phase 86
+  /*(Phase 91: revert Phase 86
      + 88): restored the .lb-controls pill's background +
      border + border-radius + padding. Phases 86 and 88
      moved the pill styling onto each individual button so
@@ -2220,7 +2218,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-radius: 10px;
   z-index: 2;
 }
-/* Per user request 2026-06-19 (Phase 91: revert Phase 86
+/*(Phase 91: revert Phase 86
    + 88): the buttons are now simple 28x28 transparent
    squares inside the lb-controls pill. The pill itself
    has the background + border + border-radius; the
@@ -2244,7 +2242,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   font-family: inherit;
   transition: background 0.12s;
 }
-/* Per user request 2026-06-19: the close × was visually
+/* the close × was visually
    smaller than the open ↗ (× is a thin cross at the
    baseline, ↗ has a bigger visual footprint). The user
    asked for a bigger close icon. We use a larger X glyph
@@ -2272,13 +2270,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   white-space: nowrap;
 }
 #gallery-lightbox .lb-exif {
-  /* Per user request 2026-06-27: the EXIF panel appears in
+  /* the EXIF panel appears in
      the lightbox below the caption, only when the current
      image has EXIF metadata. Shown as a compact 2-column
      table (label + value) for readability. Hidden via the
      hidden HTML attribute when there is no EXIF. */
   position: absolute;
-  /* Per user request 2026-07-02: the panel is now
+  /* the panel is now
      positioned higher (6rem from the bottom instead of
      3.5rem) so it doesn't overlap the video player's
      trackbar when viewing a video in the lightbox.
@@ -2299,7 +2297,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   line-height: 1.5;
   white-space: nowrap;
   backdrop-filter: blur(4px);
-  /* Per user request 2026-07-02: the panel width is
+  /* the panel width is
      fixed so the collapsed state (just the header) is
      the same width as the expanded state. Without this
      min-width, the collapsed panel shrinks to fit just
@@ -2310,7 +2308,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      USM" on the lens row). */
   min-width: 340px;
 }
-/* Per user request 2026-07-02: collapsible EXIF/META
+/* collapsible EXIF/META
    panel header. Always visible when the panel is shown
    (even when collapsed to just the header). Clickable
    (cursor: pointer) — toggles the .collapsed class on
@@ -2320,7 +2318,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
    localStorage (gallery-lb-exif-collapsed and
    gallery-lb-video-meta-collapsed) so the user doesn't
    have to re-pick on every visit.
-   Visual treatment (per user spec 2026-07-02):
+   Visual treatment:
    - Full-width title with a slightly lighter background
      (rgba(255,255,255,0.06) on top of the panel's
      rgba(0,0,0,0.55) = a subtle white wash)
@@ -2339,7 +2337,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   user-select: none;
   outline: none;
-  /* Per user request 2026-07-02: when the panel is
+  /* when the panel is
      collapsed, the whole panel moves to the LEFT side
      of the image (vertical bar) and the header text
      rotates 90 degrees clockwise so "EXIF" or "META"
@@ -2369,7 +2367,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   transition: transform 0.25s ease-in-out, background 0.2s ease-in-out;
 }
 #gallery-lightbox .lb-exif-header:hover {
-  /* No text-decoration: underline per user request.
+  /* No text-decoration: underline
      The visual hover cue is the cursor: pointer + the
      subtle background — the divider line is always
      visible so no underline is needed. */
@@ -2386,7 +2384,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 #gallery-lightbox .lb-video-meta.collapsed .lb-exif-body {
   display: none;
 }
-/* Per user request 2026-07-02: when the panel is
+/* when the panel is
    collapsed, the whole panel becomes a vertical bar
    and the header text rotates 90 degrees clockwise
    so "EXIF" or "META" reads bottom-to-top.
@@ -2412,7 +2410,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   min-width: 0;
   width: auto;
   padding: 0;
-  /* Per user report 2026-07-02: when the panel is
+  /* when the panel is
      collapsed, override bottom: 6rem (from the base
      .lb-exif / .lb-video-meta rules) to bottom: auto.
      Without this override, the panel has BOTH top: 50%
@@ -2438,7 +2436,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      default ltr direction). The horizontal divider
      and the negative margin trick from the base rule
      don't make sense for a vertical bar — remove them. */
-  /* Per user request 2026-07-02: vertical-lr (not vertical-rl)
+  /* vertical-lr (not vertical-rl)
      so the text reads top-to-bottom (ANTICLOCKWISE rotation).
      vertical-rl reads bottom-to-top (clockwise); vertical-lr
      reads top-to-bottom (anticlockwise). */
@@ -2458,14 +2456,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
      the text orientation but not the layout flow. */
   text-align: center;
 }
-/* Per user request 2026-07-02: video metadata panel
+/* video metadata panel
    (parallel to the .lb-exif panel for images). Shown
    when the current video has ffprobe-extracted metadata
    (duration, container, codecs, bitrate, framerate).
    Reuses the .lb-exif-table styles for the table layout. */
 #gallery-lightbox .lb-video-meta {
   position: absolute;
-  /* Per user request 2026-07-02: positioned 6rem from
+  /* positioned 6rem from
      the bottom (same as .lb-exif) so it doesn't overlap
      the video player's trackbar. */
   bottom: 6rem;
@@ -2479,7 +2477,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   line-height: 1.5;
   white-space: nowrap;
   backdrop-filter: blur(4px);
-  /* Per user request 2026-07-02: same min-width as the
+  /* same min-width as the
      EXIF panel so the collapsed META header is the
      same width as the expanded META rows. */
   min-width: 340px;
@@ -2546,7 +2544,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       </div>
     </div>
     <div class="meta">
-      {{/* Per user request 2026-06-19: show the total
+      {{/* show the total
          number of files at the start of the meta line, then
          the breakdown (images / videos / other files). The
          total is a quick "how many files are in this dir"
@@ -2563,7 +2561,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <span>//</span>
       <span>({{.TotalAllFilesSize}} {{t "total_size_label"}})</span>
       <span>//</span>{{if or .Up (gt (len .Subdirs) 0)}} <span>{{len .Subdirs}} {{if eq (len .Subdirs) 1}}{{t "directory_count"}}{{else}}{{t "directories_count"}}{{end}}{{if .Up}} (+{{t "parent_directory"}}){{end}}</span>{{end}}
-      <!-- Per user request 2026-06-20: a dropdown for page size.
+      <!-- a dropdown for page size.
    Shows the operator-configured list (defaults to
    30, 60, 120, "all"). "all" is a special token meaning
    "show all items on one page" - only included if the
@@ -2574,7 +2572,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <span>{{t "page_show"}}</span>
       <form method="get" action="" class="page-size-form">
         {{- /* Preserve other URL params (sort, filter, breadcrumb) when submitting. */ -}}
-        {{- /* Per user request 2026-06-27: EXCLUDE the "page" param -}}
+        {{- /* EXCLUDE the "page" param -}}
         {{- /* so changing page size always resets to page 1 (the */ -}}
         {{- /* current page number might not exist in the new size). */ -}}
         {{- /* Also exclude "page_size" — the dropdown itself supplies -}}
@@ -2583,7 +2581,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{- /* with both values when the form submits. */ -}}
         {{- queryToHiddenInputsExclude $.Query "page" "page_size" -}}
         <select name="page_size" class="page-size-select" onchange="this.form.submit()">
-          {{/* Per user request 2026-06-28: when PageSize is 0 (the
+          {{/* when PageSize is 0 (the
                "all" token from pageSizeFromQuery), compare
                against "all" instead of the string "0" so the
                dropdown shows "all" as selected (previously it
@@ -2619,7 +2617,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <a class="sort-btn{{if eq .Sort.Field "mtime"}} active{{end}}" href="?{{queryString (sortURL $q "mtime" (sortOrder .Sort.Field "mtime" .Sort.Order))}}">{{t "sort_modified"}}<span class="arrow">{{if eq .Sort.Field "mtime"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
       <a class="sort-btn{{if eq .Sort.Field "size"}} active{{end}}" href="?{{queryString (sortURL $q "size" (sortOrder .Sort.Field "size" .Sort.Order))}}">{{t "sort_size"}}<span class="arrow">{{if eq .Sort.Field "size"}}{{if eq .Sort.Order "asc"}} ↑{{else}} ↓{{end}}{{end}}</span></a>
     </div>
-    {{/* Per user request 2026-06-20 (Phase 3): breadcrumb
+    {{/* breadcrumb
        above the sort-bar, above the media section. Each
        segment is a link to that directory level except the
        last (current dir, plain text). The filter (?type=)
@@ -2630,7 +2628,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       {{- /* Preserve other URL params (sort, page_size, etc.) when submitting. */ -}}
-      {{- /* Per user request 2026-06-30: include page_size so changing */ -}}
+      {{- /* include page_size so changing */ -}}
       {{- /* the search query keeps the visitor's chosen page size. */ -}}
       {{- /* The "q" and "ext" are submitted by the form's own inputs */ -}}
       {{- /* (search input and checkboxes), so we exclude them. */ -}}
@@ -2638,7 +2636,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       {{- /* new filter set. */ -}}
       {{- queryToHiddenInputsExclude $.Query "page" "q" "ext" -}}
       <div class="filter-row">
-        {{/* Per user request 2026-06-30: wrap the type filter
+        {{/* wrap the type filter
              elements (label + dropdowns + Filter + Reset) in a
              single .type-filter-group div. On mobile screens
              (where the filter-row is stacked vertically), this
@@ -2708,9 +2706,9 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         {{end}}
 
         <button type="submit" class="filter-apply">{{t "filter_apply"}}</button>
-        {{/* Per user request 2026-06-30: moved here from
+        {{/* moved here from
              before the filter dropdowns. Renamed from "All"
-             to "Reset" (per user clarification: same function
+             to "Reset" (same function
              — resets the type filter to show all file types).
              The href is the same as before: the breadcrumb's
              current dir, or "./" if at the root. The pill is
@@ -2734,7 +2732,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
             autocomplete="off"
             aria-label="{{t "search_aria"}}">
           <button type="submit" class="search-button">{{t "search_button"}}</button>
-          {{/* Per user request 2026-06-28: a Reset button next
+          {{/* a Reset button next
                to "Search all" that clears the search input
                AND the ?q= URL parameter (if one is present).
                Uses the inverted color scheme — dark in light
@@ -2752,7 +2750,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     {{end}}
     </header>
 
-    <!-- Per user request 2026-06-27: pagination links now
+    <!-- pagination links now
        preserve the full query (sort, order, type filter,
        search query, page_size) — only page is replaced. The
        old links only had sort+order+page, which lost the
@@ -2792,14 +2790,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <button type="button" class="section-toggle" data-toggle="dirs" aria-expanded="true" aria-controls="dirs-body" title="{{t "section_show_hide_dirs"}}">−</button>
     </h2>
     <div class="section-body" id="dirs-body">
-    <!-- Per user request 2026-06-19: directory chips replaced
+    <!-- directory chips replaced
          with a full-width table. The Name column is the link
          (clicking navigates into the directory); Type shows
          "DIR"; Date shows the directory's mtime. Size is
          intentionally omitted for directories (meaningless
          — recursive size would require a separate scan).
 
-         Per user request 2026-06-19: the Up row is now a
+the Up row is now a
          separate <table class="up-row-table"> (no <thead>, no
          row-spacer) above the subdirs table. This avoids the
          up-spacer row (which used to highlight on hover because
@@ -2808,7 +2806,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
          the next table, NOT from an empty row. Each table is
          self-contained.
 
-         Per user request 2026-06-19: subdirs table has its own
+subdirs table has its own
          <thead> with Name/Type/Modified headers (the user said
          "no need to repeat headers" -- that means: no separate
          header row above the up-row, but the subdirs table
@@ -2827,7 +2825,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     <table class="files-table dirs-table" id="dirs-table">
       <thead>
         <tr>
-          <!-- Per user request 2026-06-27: each <th> is
+          <!-- each <th> is
                sortable via JS click. The data-sort-key
                attribute tells the JS handler what the column
                key is; data-default-order is the initial
@@ -2868,13 +2866,13 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       <button type="button" class="section-toggle" data-toggle="others" aria-expanded="true" aria-controls="others-body" title="{{t "section_show_hide_others"}}">−</button>
     </h2>
     <div class="section-body" id="others-body">
-    <!-- Per user request 2026-06-20: same full-width table format
+    <!-- same full-width table format
          as the directories table. Adds a Size column (directories
          omitted Size because it's not meaningful for folders). -->
     <table class="files-table others-table" id="others-table">
       <thead>
         <tr>
-          <!-- Per user request 2026-06-27: each <th> is
+          <!-- each <th> is
                sortable. data-sort-key tells the JS handler
                what column key this is. data-default-order is
                the initial direction. The default for the
@@ -2903,7 +2901,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
   <section class="media-section" data-section="media">
     <h2 class="section-heading">
-      {{- /* Per user request 2026-06-30: the data-search-header-default
+      {{- /* the data-search-header-default
            attribute is ALWAYS the no-search format
            ("Media (89 - Showing 1-60)" or similar) so the JS can
            restore it when the visitor clears the search input.
@@ -2916,7 +2914,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
            in the input on a form-submitted page (the JS then
            produced wrong values like "Media (0 - search 'str' - showing 33 of 0)").
       */ -}}
-      {{- /* Per user request 2026-06-30: the search header is
+      {{- /* the search header is
            structured in three parts:
 
            (1) The data-search-header-default attribute is
@@ -2951,7 +2949,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
                form-submitted page, producing wrong values
                like "Media (0 - search 'str' - showing 33 of 0)".
       */ -}}
-      {{- /* Per user request 2026-06-30: data-search-header-default is ALWAYS
+      {{- /* data-search-header-default is ALWAYS
            the no-search format (the "reset" state for the JS to restore to
            when the visitor clears the search). Hidden spans n/total/current
            are ALWAYS present so the JS can read them regardless of whether
@@ -3004,14 +3002,14 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   <div class="site-footer-brand">
     proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
   </div>
-  {{/* Per user request 2026-06-27: cache stats footer.
+  {{/* cache stats footer.
        XX // YY // ZZ // AA where XX is cache usage percent
        (00-FF, or "∞" if unbounded), YY/ZZ/AA are peak
        evictions per 1-hour bucket in last 24h / 7d / 28d.
        Refreshed every 30 sec by the stats-refresh goroutine. */}}
   <div class="site-footer-cache-stats" title="cache usage % // peak evictions in any 1h bucket in last 24h // 7d // 28d">{{.CacheStatsXX}} // {{.CacheStatsYY}} // {{.CacheStatsZZ}} // {{.CacheStatsAA}}</div>
 </footer>
-<!-- Per user request 2026-07-01: "Back To Top" button.
+<!-- "Back To Top" button.
      - Position: bottom-center, 1.5rem from the viewport
        bottom (a "little bit of marking from the bottom")
      - Style: black background, white text, rounded corners
@@ -3027,7 +3025,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 </a>
 <script>
 
-/* Per user feedback 2026-07-01: shimmer animation while
+/* shimmer animation while
    thumbnails are loading.
 
    BEHAVIOR:
@@ -3071,7 +3069,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
   }
 })();
 
-/* Per user request 2026-06-27: client-side filename
+/* client-side filename
    search filter with TWO match modes, configured by the
    operator in the Caddyfile via the  directive.
    The mode is rendered as a data-search-match attribute
@@ -3101,7 +3099,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
 
    Empty query = no filter (everything visible). */
 (function() {
-  // Per user request 2026-07-04: local t() helper + a
+  // local t() helper + a
   // search-header-specific TRANSLATIONS map. The lightbox
   // IIFE defines its own t() but it's in a different scope
   // — we need our own here so the JS search-header can
@@ -3156,7 +3154,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     }
     var matches = mode === 'word' ? matchesWord : matchesSubstring;
     var debounceTimer;
-    // Per user request 2026-06-28: helper to update the media
+    // helper to update the media
     // section header text as the user types.
     //
     // When search is empty: restore the default header
@@ -3176,7 +3174,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     // replace with the search format.
     var headerEl = document.querySelector('[data-search-header]');
     // The "default" is the no-search header (e.g. "Media (89 - Showing 1-60)").
-    // Per user request 2026-06-30: the server renders this as the
+    // the server renders this as the
     // data-search-header-default attribute. We DON'T use the initial
     // innerHTML (which may be the search header on a form-submitted
     // page). The default should ALWAYS be the no-search format so
@@ -3197,7 +3195,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
       pageSizeTotal = parseInt(nEl.textContent || '0', 10) || 0;
     }
     // Total file count in this directory. Used for the "Media (N -"
-    // prefix on the search header (per user request 2026-06-30:
+    // prefix on the search header (
     // the search header should keep the "Media (N -" prefix even
     // when searching, so the visitor can see the total directory
     // size at a glance).
@@ -3206,7 +3204,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (totalEl) {
       totalFiles = parseInt(totalEl.textContent || '0', 10) || 0;
     }
-    // Per user request 2026-06-30: the N value and the
+    // the N value and the
     // "<em>This page</em>" annotation depend on whether
     // the JS has taken over the search.
     //
@@ -3256,7 +3254,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
     if (fEl) {
       filteredTotal = parseInt(fEl.textContent || '0', 10) || 0;
     }
-    // Per user request 2026-06-30: capture the server's
+    // capture the server's
     // original header text (e.g. "Media (89 - search 'st'
     // - showing 30 of 33)") on page load. When the visitor
     // types more chars (JS takes over) and then types back
@@ -3277,7 +3275,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
         return;
       }
       // The current search query (read from the input).
-      // Per user request 2026-06-30: the header includes
+      // the header includes
       // the query in single quotes (e.g. "search 'cat' -").
       // We HTML-escape the query because the header uses
       // innerHTML — any <, >, &, or ' in the query would
@@ -3293,7 +3291,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           .replace(/'/g, '&#39;');
       }
       // Compare the ?q= URL param with the input value.
-      // Per user request 2026-06-30: when they match, the
+      // when they match, the
       // server has already rendered the correct header (e.g.
       // "Media (89 - search 'st' - showing 30 of 33)" for
       // pageSize=30, total=33). We just update the visible
@@ -3370,7 +3368,7 @@ a.sort-indicator:hover { background: var(--bg-hover); border-color: var(--border
           r.classList.add('filtered-out');
         }
       }
-      // Per user request 2026-06-30: ALWAYS update the media
+      // ALWAYS update the media
       // section header, even on a form-submitted page. The
       // previous logic returned early on form-submitted pages
       // because the server-rendered text was "correct for the
@@ -3407,7 +3405,7 @@ input.addEventListener('input', function() {
   }
 })();
 
-/* Per user request 2026-06-28: search reset button. Wired
+/* search reset button. Wired
    to the Reset button next to "Search all". On click:
 
    1. Clear the search input value.
@@ -3438,7 +3436,7 @@ input.addEventListener('input', function() {
     for (var i = 0; i < hidden.length; i++) {
       hidden[i].classList.remove('filtered-out');
     }
-    // 2b. Per user request 2026-06-28: restore the default
+    // 2b. restore the default
     // media header. Read the default from the data attribute
     // (captured on page load by the search IIFE) and reset
     // the visible text. This is for the client-side reset
@@ -3463,7 +3461,7 @@ input.addEventListener('input', function() {
 })();
 
 /* Phase 163: click-to-sort table column headers.
-   Per user request 2026-06-27: dirs and others tables have
+dirs and others tables have
    clickable column headers that sort the rows client-side.
    No page reload — JS reorders the <tbody> rows in place.
 
@@ -3557,7 +3555,7 @@ input.addEventListener('input', function() {
       rows.sort(function(a, b) {
         var av = a.getAttribute('data-' + key) || '';
         var bv = b.getAttribute('data-' + key) || '';
-        // Per user request 2026-07-02: the SIZE column has
+        // the SIZE column has
         // values like "58.2 MB" or "1.05 GB" — a raw
         // parseFloat would give 58.2 vs 1.05 (treating
         // MB and GB the same), which sorts the WRONG way.
@@ -3587,7 +3585,7 @@ input.addEventListener('input', function() {
         if (av > bv) return order === 'asc' ? 1 : -1;
         return 0;
       });
-      // Per user request 2026-07-02: convert human-readable
+      // convert human-readable
       // sizes (e.g. "58.2 MB", "1.05 GB") to bytes for
       // proper numeric comparison. Returns null on parse
       // failure (caller falls back to string compare).
@@ -3628,14 +3626,14 @@ input.addEventListener('input', function() {
 (function() {
   var overlay = document.createElement('div');
   overlay.id = 'gallery-lightbox';
-  // Per user request 2026-07-04: client-side translation
+  // client-side translation
   // helper. Looks up a key in the inline TRANSLATIONS map
   // (rendered server-side by the Go template, see TRANSLATIONS
   // below). Falls back to the key itself if not found. The
   // function name is short because the JS strings inline it
   // many times.
   //
-  // Per user request 2026-07-04: client-side translations
+  // client-side translations
   // (used by t() below). Rendered server-side by the Go
   // template. Only contains the keys that appear inside JS
   // strings (lightbox labels, EXIF/META rows, etc.).
@@ -3684,7 +3682,7 @@ input.addEventListener('input', function() {
     '<button class="lb-btn lb-next" aria-label="' + t('page_next') + '">›</button>' +
     '<span class="lb-counter"></span>' +
     '<span class="lb-caption"></span>' +
-    // Per user request 2026-07-02: the EXIF panel is
+    // the EXIF panel is
     // collapsible. The header (just "EXIF" text) is
     // always visible when the panel is shown. Clicking
     // it toggles between expanded (showing all rows)
@@ -3702,11 +3700,11 @@ input.addEventListener('input', function() {
         '</table>' +
       '</div>' +
     '</div>' +
-    // Per user request 2026-07-02: video metadata panel
+    // video metadata panel
     // (parallel to the EXIF panel for images). Shows
     // duration, container, codecs, bitrate, framerate
     // extracted from ffprobe (cached in .vmeta sidecars).
-    // Per user request 2026-07-02: parallel structure
+    // parallel structure
     // to the EXIF panel — collapsible header + body.
     // Same localStorage pattern (gallery-lb-video-meta-collapsed).
     '<div class="lb-video-meta" hidden>' +
@@ -3742,7 +3740,7 @@ input.addEventListener('input', function() {
   });
   var idx = 0;
 
-  // Per user request 2026-07-02: the EXIF and META
+  // the EXIF and META
   // panels are collapsible. Clicking the panel header
   // ("EXIF" or "META" text) toggles between expanded
   // (showing all rows) and collapsed (showing just the
@@ -3766,7 +3764,7 @@ input.addEventListener('input', function() {
       panel.classList.add('collapsed');
       header.setAttribute('aria-expanded', 'false');
     }
-    // Click toggles and persists. Per user request
+    // Click toggles and persists. 
     // 2026-07-02: when collapsing, we re-position the
     // panel so it sits to the left of the image (the
     // show() function positions the panel when it's
@@ -3812,7 +3810,7 @@ input.addEventListener('input', function() {
           requestAnimationFrame(positionPanel);
         }
       } else {
-        // Per user feedback 2026-07-02: when expanding,
+        // when expanding,
         // clear the inline top/left/transform styles
         // so the expanded CSS (bottom: 6rem, left: 50%,
         // transform: translateX(-50%)) takes effect
@@ -3859,7 +3857,7 @@ input.addEventListener('input', function() {
     var isVideo = c.classList.contains('video');
     clear();
     if (isVideo) {
-      // Per user request 2026-06-19: show the video thumbnail
+      // show the video thumbnail
       // (extracted from the first frame by ffmpeg, served as a
       // WebP by the server) as the <video poster>. The browser
       // shows the poster image until the user clicks play, then
@@ -3883,7 +3881,7 @@ input.addEventListener('input', function() {
       // frame, same as before Phase 62).
       if (thumbSrc) v.poster = thumbSrc;
       currentEl = v;
-      // Per user request 2026-07-02: hide the video
+      // hide the video
       // metadata panel while the video is playing, show
       // it again when paused. The user wants the panel
       // to not distract from the video content during
@@ -3918,7 +3916,7 @@ input.addEventListener('input', function() {
     media.appendChild(currentEl);
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
-    // Per user request 2026-06-29: EXIF is read EAGERLY at
+    // EXIF is read EAGERLY at
     // scan time and written to a .exif sidecar. The card
     // template renders the EXIF data inline as data-exif-*
     // attributes (so the lightbox has the data without a
@@ -3935,7 +3933,7 @@ input.addEventListener('input', function() {
     var exifPanel = overlay.querySelector('.lb-exif');
     var videoMetaPanel = overlay.querySelector('.lb-video-meta');
     if (isVideo) {
-      // Per user request 2026-07-02: populate the video
+      // populate the video
       // metadata panel for video files. Reads the
       // data-video-* attributes that buildVideoMetaAttrString
       // rendered onto the card. The panel is hidden if no
@@ -3953,7 +3951,7 @@ input.addEventListener('input', function() {
         videoMetaPanel.querySelector('[data-video="audio-codec"]').textContent = audioCodec || '\u2014';
         videoMetaPanel.querySelector('[data-video="bitrate"]').textContent = bitrate || '\u2014';
         videoMetaPanel.querySelector('[data-video="framerate"]').textContent = framerate || '\u2014';
-        // Per user request 2026-07-02: track the default
+        // track the default
         // visibility so the play/pause handlers can
         // restore it. The panel was hidden here because
         // the video has no metadata (data-default-hidden).
@@ -3994,14 +3992,14 @@ input.addEventListener('input', function() {
       exifPanel.hidden = true;
     }
     overlay.classList.add('open');
-    // Per user request 2026-07-02: when the panel is
+    // when the panel is
     // collapsed, position it to the right of the image,
     // slightly overlapping.
     //
     // For images: wait for decode() before measuring
     // (prevents width=0 race condition).
     //
-    // For videos: per user report 2026-07-02, the
+    // For videos:the
     // previous approach of waiting for loadedmetadata
     // had two problems:
     //   1. Until loadedmetadata fires, the panel sat at
@@ -4048,7 +4046,7 @@ input.addEventListener('input', function() {
       }
     }
   }
-  // Per user request 2026-07-02: when the panel is
+  // when the panel is
   // collapsed (vertical bar), position it just to
   // the LEFT of the image, vertically centered with
   // the image. This makes the panel feel attached
@@ -4091,7 +4089,7 @@ input.addEventListener('input', function() {
     }
     if (!panel || !panel.classList.contains('collapsed')) return;
     var panelRect = panel.getBoundingClientRect();
-    // Per user request 2026-07-02: position the collapsed
+    // position the collapsed
     // panel on the RIGHT side of the image, slightly
     // OVERLAPPING the image's right edge (instead of
     // positioned to the LEFT of the image with a gap).
@@ -4210,7 +4208,7 @@ input.addEventListener('input', function() {
        button's text + aria. The state is persisted in localStorage
        so the visitor's choice survives navigations and refreshes.
 
-       Per user request 2026-06-19: the WHOLE WIDTH of the section
+the WHOLE WIDTH of the section
        heading is now clickable, not just the small − / + button.
        The button is still rendered (and is still keyboard-tabbable
        + screen-reader-announceable) as a visual affordance +
@@ -4356,7 +4354,7 @@ input.addEventListener('input', function() {
 
     })();
 
-/* Per user request 2026-07-01: "Back To Top" button
+/* "Back To Top" button
    behavior. The button is fixed at the bottom-center of
    the viewport and is hidden by default (opacity: 0,
    pointer-events: none). The scroll listener toggles the
@@ -4368,7 +4366,7 @@ input.addEventListener('input', function() {
    equivalent, but the JS approach is more explicit and
    works in older browsers).
 
-   Per user request 2026-07-02: the button now also
+the button now also
    displays the scroll percentage (e.g. "23%") as a
    small badge. The percentage is computed as
    scrollY / (scrollHeight - clientHeight) * 100,
@@ -4389,7 +4387,7 @@ input.addEventListener('input', function() {
   var pctEl = btn.querySelector('.back-to-top-pct');
   // Threshold: one full viewport height. The button
   // appears after the user has scrolled at least one
-  // screen's worth of content (per user spec).
+  // screen's worth of content.
   var threshold = window.innerHeight;
   var rafId = 0;
   function update() {
