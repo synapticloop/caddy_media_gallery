@@ -656,34 +656,34 @@ func buildVideoMetaAttrString(v *VideoMeta) template.HTMLAttr {
 	var b strings.Builder
 	b.Grow(192) // pre-allocate ~192 bytes (typical size)
 	if v.Duration != "" {
-		b.WriteString(` data-video-duration="`)
-		b.WriteString(html.EscapeString(v.Duration))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-duration="`)
+		_, _ = b.WriteString(html.EscapeString(v.Duration))
+		_, _ = b.WriteString(`"`)
 	}
 	if v.Container != "" {
-		b.WriteString(` data-video-container="`)
-		b.WriteString(html.EscapeString(v.Container))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-container="`)
+		_, _ = b.WriteString(html.EscapeString(v.Container))
+		_, _ = b.WriteString(`"`)
 	}
 	if v.VideoCodec != "" {
-		b.WriteString(` data-video-video-codec="`)
-		b.WriteString(html.EscapeString(v.VideoCodec))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-video-codec="`)
+		_, _ = b.WriteString(html.EscapeString(v.VideoCodec))
+		_, _ = b.WriteString(`"`)
 	}
 	if v.AudioCodec != "" {
-		b.WriteString(` data-video-audio-codec="`)
-		b.WriteString(html.EscapeString(v.AudioCodec))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-audio-codec="`)
+		_, _ = b.WriteString(html.EscapeString(v.AudioCodec))
+		_, _ = b.WriteString(`"`)
 	}
 	if v.Bitrate != "" {
-		b.WriteString(` data-video-bitrate="`)
-		b.WriteString(html.EscapeString(v.Bitrate))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-bitrate="`)
+		_, _ = b.WriteString(html.EscapeString(v.Bitrate))
+		_, _ = b.WriteString(`"`)
 	}
 	if v.Framerate != "" {
-		b.WriteString(` data-video-framerate="`)
-		b.WriteString(html.EscapeString(v.Framerate))
-		b.WriteString(`"`)
+		_, _ = b.WriteString(` data-video-framerate="`)
+		_, _ = b.WriteString(html.EscapeString(v.Framerate))
+		_, _ = b.WriteString(`"`)
 	}
 	return template.HTMLAttr(b.String())
 }
@@ -704,23 +704,23 @@ func buildExifAttrString(e *ExifData) template.HTMLAttr {
 	// the &quot; to &amp;quot;).
 	var b strings.Builder
 	b.Grow(384) // pre-allocate ~384 bytes (typical EXIF size)
-	b.WriteString(` data-exif-camera-make="`)
-	b.WriteString(html.EscapeString(e.CameraMake))
-	b.WriteString(`" data-exif-camera-model="`)
-	b.WriteString(html.EscapeString(e.CameraModel))
-	b.WriteString(`" data-exif-lens="`)
-	b.WriteString(html.EscapeString(e.LensModel))
-	b.WriteString(`" data-exif-date="`)
-	b.WriteString(html.EscapeString(e.DateTaken))
-	b.WriteString(`" data-exif-shutter="`)
-	b.WriteString(html.EscapeString(e.ExposureTime))
-	b.WriteString(`" data-exif-aperture="`)
-	b.WriteString(html.EscapeString(e.Aperture))
-	b.WriteString(`" data-exif-iso="`)
-	b.WriteString(html.EscapeString(e.ISO))
-	b.WriteString(`" data-exif-focal="`)
-	b.WriteString(html.EscapeString(e.FocalLength))
-	b.WriteString(`"`)
+	_, _ = b.WriteString(` data-exif-camera-make="`)
+	_, _ = b.WriteString(html.EscapeString(e.CameraMake))
+	_, _ = b.WriteString(`" data-exif-camera-model="`)
+	_, _ = b.WriteString(html.EscapeString(e.CameraModel))
+	_, _ = b.WriteString(`" data-exif-lens="`)
+	_, _ = b.WriteString(html.EscapeString(e.LensModel))
+	_, _ = b.WriteString(`" data-exif-date="`)
+	_, _ = b.WriteString(html.EscapeString(e.DateTaken))
+	_, _ = b.WriteString(`" data-exif-shutter="`)
+	_, _ = b.WriteString(html.EscapeString(e.ExposureTime))
+	_, _ = b.WriteString(`" data-exif-aperture="`)
+	_, _ = b.WriteString(html.EscapeString(e.Aperture))
+	_, _ = b.WriteString(`" data-exif-iso="`)
+	_, _ = b.WriteString(html.EscapeString(e.ISO))
+	_, _ = b.WriteString(`" data-exif-focal="`)
+	_, _ = b.WriteString(html.EscapeString(e.FocalLength))
+	_, _ = b.WriteString(`"`)
 	return template.HTMLAttr(b.String())
 }
 
@@ -748,23 +748,23 @@ func buildCardHTML(v FileView) template.HTML {
 	b.Grow(1600)
 	// <a class="card..." data-filename="...">...</a>
 	if v.IsVideo {
-		b.WriteString(`<a class="card video" data-filename="`)
+		_, _ = b.WriteString(`<a class="card video" data-filename="`)
 	} else {
-		b.WriteString(`<a class="card" data-filename="`)
+		_, _ = b.WriteString(`<a class="card" data-filename="`)
 	}
-	b.WriteString(html.EscapeString(v.Name))
-	b.WriteString(`" data-display-name="`)
-	b.WriteString(html.EscapeString(v.DisplayName))
-	b.WriteString(`" href="`)
-	b.WriteString(html.EscapeString(v.Href))
-	b.WriteString(`" title="`)
-	b.WriteString(html.EscapeString(v.DisplayName))
-	b.WriteString(`"`)
-	b.WriteString(string(v.ExifAttrs))
+	_, _ = b.WriteString(html.EscapeString(v.Name))
+	_, _ = b.WriteString(`" data-display-name="`)
+	_, _ = b.WriteString(html.EscapeString(v.DisplayName))
+	_, _ = b.WriteString(`" href="`)
+	_, _ = b.WriteString(html.EscapeString(v.Href))
+	_, _ = b.WriteString(`" title="`)
+	_, _ = b.WriteString(html.EscapeString(v.DisplayName))
+	_, _ = b.WriteString(`"`)
+	_, _ = b.WriteString(string(v.ExifAttrs))
 	if v.VideoMetaAttrs != "" {
-		b.WriteString(string(v.VideoMetaAttrs))
+		_, _ = b.WriteString(string(v.VideoMetaAttrs))
 	}
-	b.WriteString(`>`)
+	_, _ = b.WriteString(`>`)
 	// <div class="thumb...">
 	// Per user feedback 2026-07-01: the 'loading' class
 	// is NOT pre-added here. If we did, browser-cached
@@ -776,31 +776,31 @@ func buildCardHTML(v FileView) template.HTML {
 	// complete — that way cached thumbs skip the shimmer
 	// entirely, and only true cold loads see it.
 	if v.IsVideo {
-		b.WriteString(`<div class="thumb thumb-video">`)
+		_, _ = b.WriteString(`<div class="thumb thumb-video">`)
 	} else {
-		b.WriteString(`<div class="thumb">`)
+		_, _ = b.WriteString(`<div class="thumb">`)
 	}
 	// Image or video image (if ThumbURL set)
 	if v.IsVideo {
 		if v.ThumbURL != "" {
-			b.WriteString(`<img class="thumb-img" loading="lazy" src="`)
-			b.WriteString(html.EscapeString(v.ThumbURL))
-			b.WriteString(`" alt="">`)
+			_, _ = b.WriteString(`<img class="thumb-img" loading="lazy" src="`)
+			_, _ = b.WriteString(html.EscapeString(v.ThumbURL))
+			_, _ = b.WriteString(`" alt="">`)
 		}
 		// Per Phase 62: video cards always show the play overlay
-		b.WriteString(`<div class="play-overlay">▶</div>`)
+		_, _ = b.WriteString(`<div class="play-overlay">▶</div>`)
 	} else {
-		b.WriteString(`<img loading="lazy" src="`)
-		b.WriteString(html.EscapeString(v.ThumbURL))
-		b.WriteString(`" alt="`)
-		b.WriteString(html.EscapeString(v.Name))
-		b.WriteString(`">`)
+		_, _ = b.WriteString(`<img loading="lazy" src="`)
+		_, _ = b.WriteString(html.EscapeString(v.ThumbURL))
+		_, _ = b.WriteString(`" alt="`)
+		_, _ = b.WriteString(html.EscapeString(v.Name))
+		_, _ = b.WriteString(`">`)
 	}
 	// Dimensions watermark (only when dimensions are known)
 	if v.Dimensions != "" {
-		b.WriteString(`<span class="thumb-dimensions">`)
-		b.WriteString(html.EscapeString(v.Dimensions))
-		b.WriteString(`</span>`)
+		_, _ = b.WriteString(`<span class="thumb-dimensions">`)
+		_, _ = b.WriteString(html.EscapeString(v.Dimensions))
+		_, _ = b.WriteString(`</span>`)
 	}
 	// Per user request 2026-07-02: video duration shown
 	// at the BOTTOM-RIGHT of the thumbnail (parallel to
@@ -811,33 +811,33 @@ func buildCardHTML(v FileView) template.HTML {
 	// a Duration field (some videos may have other metadata
 	// but no duration if ffprobe couldn't determine it).
 	if v.IsVideo && v.VideoMeta != nil && v.VideoMeta.Duration != "" {
-		b.WriteString(`<span class="thumb-duration">`)
-		b.WriteString(html.EscapeString(v.VideoMeta.Duration))
-		b.WriteString(`</span>`)
+		_, _ = b.WriteString(`<span class="thumb-duration">`)
+		_, _ = b.WriteString(html.EscapeString(v.VideoMeta.Duration))
+		_, _ = b.WriteString(`</span>`)
 	}
 	// Open-in-new-tab button
-	b.WriteString(`<span class="open-btn" data-open-url="`)
-	b.WriteString(html.EscapeString(v.Href))
-	b.WriteString(`" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>`)
-	b.WriteString(`</div>`)
+	_, _ = b.WriteString(`<span class="open-btn" data-open-url="`)
+	_, _ = b.WriteString(html.EscapeString(v.Href))
+	_, _ = b.WriteString(`" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>`)
+	_, _ = b.WriteString(`</div>`)
 	// <div class="tile-name">...</div>
-	b.WriteString(`<div class="tile-name">`)
-	b.WriteString(html.EscapeString(v.Name))
-	b.WriteString(`</div>`)
+	_, _ = b.WriteString(`<div class="tile-name">`)
+	_, _ = b.WriteString(html.EscapeString(v.Name))
+	_, _ = b.WriteString(`</div>`)
 	// <div class="tile-meta">...</div>
-	b.WriteString(`<div class="tile-meta"><div class="tile-meta-info">`)
-	b.WriteString(`<span class="date">`)
-	b.WriteString(html.EscapeString(v.Date))
-	b.WriteString(`</span>`)
-	b.WriteString(`<span class="size">`)
-	b.WriteString(html.EscapeString(v.Size))
-	b.WriteString(`</span></div>`)
+	_, _ = b.WriteString(`<div class="tile-meta"><div class="tile-meta-info">`)
+	_, _ = b.WriteString(`<span class="date">`)
+	_, _ = b.WriteString(html.EscapeString(v.Date))
+	_, _ = b.WriteString(`</span>`)
+	_, _ = b.WriteString(`<span class="size">`)
+	_, _ = b.WriteString(html.EscapeString(v.Size))
+	_, _ = b.WriteString(`</span></div>`)
 	// chips
-	b.WriteString(`<div class="tile-meta-chips"><span class="filetype-chip">`)
-	b.WriteString(html.EscapeString(v.Type))
-	b.WriteString(`</span>`)
+	_, _ = b.WriteString(`<div class="tile-meta-chips"><span class="filetype-chip">`)
+	_, _ = b.WriteString(html.EscapeString(v.Type))
+	_, _ = b.WriteString(`</span>`)
 	if string(v.ExifAttrs) != "" {
-		b.WriteString(`<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>`)
+		_, _ = b.WriteString(`<span class="exif-chip" title="This image has EXIF metadata — viewable in the lightbox">EXIF</span>`)
 	}
 	// Per user request 2026-07-02: a META pill for video
 	// cards that have video metadata (duration, codecs,
@@ -846,10 +846,10 @@ func buildCardHTML(v FileView) template.HTML {
 	// card") — dark background, white text, rounded
 	// corners — rather than the accent-coloured EXIF pill.
 	if v.IsVideo && string(v.VideoMetaAttrs) != "" {
-		b.WriteString(`<span class="meta-chip" title="This video has ffprobe metadata (duration, codecs, etc.) — viewable in the lightbox">META</span>`)
+		_, _ = b.WriteString(`<span class="meta-chip" title="This video has ffprobe metadata (duration, codecs, etc.) — viewable in the lightbox">META</span>`)
 	}
-	b.WriteString(`</div></div>`)
-	b.WriteString(`</a>`)
+	_, _ = b.WriteString(`</div></div>`)
+	_, _ = b.WriteString(`</a>`)
 	return template.HTML(b.String())
 }
 
@@ -1714,7 +1714,12 @@ func queryToHiddenInputsExcluding(query url.Values, exclude ...string) template.
 		for _, v := range vs {
 			kEsc := template.HTMLEscaper(k)
 			vEsc := template.HTMLEscaper(v)
-			fmt.Fprintf(&buf, `<input type="hidden" name="%s" value="%s">`, kEsc, vEsc)
+			// bytes.Buffer.Write always returns (n, nil) —
+			// writing to an in-memory buffer literally cannot
+			// fail. We discard the err with _, _ = to satisfy
+			// errcheck (and future-proof against any future
+			// change to the Fprintf return contract).
+			_, _ = fmt.Fprintf(&buf, `<input type="hidden" name="%s" value="%s">`, kEsc, vEsc)
 		}
 	}
 	return template.HTML(buf.String())

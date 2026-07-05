@@ -658,7 +658,12 @@ func (g *Gallery) Provision(caddy.Context) error {
 		// Don't fail Caddy startup on a translation
 		// load error — fall back to English-only and
 		// log a warning. Operators can fix and restart.
-		fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n init failed: %v (falling back to English only)\n", err)
+		// (The fmt.Fprintf return is the number of bytes
+		// written and a write error. Writing to os.Stderr
+		// cannot fail under normal conditions; if it does,
+		// the operator wouldn't see this warning anyway,
+		// so we discard both returns with _, _ = .)
+		_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n init failed: %v (falling back to English only)\n", err)
 		tr, _ = NewTranslator("")
 	}
 	g.translator = tr
