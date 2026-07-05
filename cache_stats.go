@@ -250,7 +250,15 @@ func (t *cacheStatsTracker) snapshot(cacheDir string, capMB int) *cacheStats {
 	// tree. We also count both thumbs (.webp / .jpg / .png)
 	// AND sidecars (.meta / .exif) toward fileCount for
 	// accurate reporting.
-	filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
+	//
+	// filepath.Walk returns an error if the root dir itself
+	// is unreadable (e.g. doesn't exist yet on a fresh
+	// install with no thumbs). The per-entry err callback
+	// already swallows individual file errors (returns nil),
+	// so the only error we'd see here is a top-level read
+	// failure. Log it to stderr and continue with whatever
+	// we managed to scan (best-effort).
+	if err := filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // skip unreadable entries
 		}
@@ -260,7 +268,9 @@ func (t *cacheStatsTracker) snapshot(cacheDir string, capMB int) *cacheStats {
 		sizeBytes += info.Size()
 		fileCount++
 		return nil
-	})
+	}); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: cache stats walk failed for %s: %v\n", cacheDir, err)
+	}
 
 	s := &cacheStats{
 		SizeBytes:        sizeBytes,

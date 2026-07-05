@@ -130,7 +130,7 @@ func TestEvictIfOver_OverLimit(t *testing.T) {
 	// at the top level). Instead, count files across all
 	// nested subdirs.
 	var remaining int
-	filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,9 @@ func TestEvictIfOver_OverLimit(t *testing.T) {
 			remaining++
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("filepath.Walk failed: %v", err)
+	}
 	if remaining != 0 {
 		t.Errorf("expected 0 .webp files remaining (2 MB > 0.8 MB target), got %d", remaining)
 	}
@@ -156,7 +158,7 @@ func TestEvictIfOver_UnderCapNoEviction(t *testing.T) {
 	evictIfOver(tmp, 5, nil) // 5 MB cap, 1 MB used
 	// Count remaining .webp files across the nested layout.
 	var remaining int
-	filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -164,7 +166,9 @@ func TestEvictIfOver_UnderCapNoEviction(t *testing.T) {
 			remaining++
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("filepath.Walk failed: %v", err)
+	}
 	if remaining != 10 {
 		t.Errorf("expected 10 files remaining (under cap), got %d", remaining)
 	}
