@@ -9,6 +9,55 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.0 — 2026-07-04
+
+### 🎉 First stable release
+
+Per user request 2026-07-04: the Caddyfile directive surface, JSON
+schema, and URL parameter API are now considered stable. Operators
+can pin to `1.0.0` (or any later version) in their xcaddy build pipeline
+and rely on backward-compatible behaviour for all existing features.
+
+What's in 1.0.0:
+- **Core gallery** — recursive directory walk, paginated image grid,
+  lightbox with EXIF/META panels, dark/light mode toggle
+- **Theming** — per-visitor light/auto/dark toggle, persisted in
+  localStorage, no-flash on first paint
+- **Search** — server-side (`?q=`) + client-side live filter, two
+  match modes (`word` / `substring`)
+- **Filters** — type filter (Images / Videos / Other) with checkboxes
+  per extension
+- **EXIF + dimensions** — extracted per-request, cached as `.exif` and
+  `.meta` sidecars (operator-opt-in via `no_exif false`)
+- **Video metadata** — duration / container / codecs / bitrate / framerate
+  via ffprobe, cached as `.vmeta` sidecars (operator-opt-in via
+  `no_meta false`)
+- **Thumbnails** — on-demand WebP generation (images + videos), 2-level
+  nested hash cache layout, LRU eviction with cap (operator-opt-in via
+  `no_thumbs false`)
+- **Internationalisation (i18n)** — 8 bundled locales (en/de/es/fr/ja/ko/zh/pt),
+  language picker in the header, locale persisted in localStorage + cookie
+  (added in this release)
+- **Operator UX** — system-installed templates are discoverable on disk
+  (operator can `ls` and edit), one env var (`GALLERY_TEMPLATES_DIR`)
+
+Stability promise:
+- Caddyfile directives, JSON config fields, and URL parameters that
+  exist in 1.0.0 will not be removed or have their semantics changed
+  in breaking ways in any 1.x release. New directives / fields / params
+  may be added.
+- Bug fixes are not considered breaking changes.
+- The default values of existing directives may change between major
+  versions (1.x → 2.x), with a deprecation period. The current 1.0.0
+  defaults are documented in `docs/01-configuration.md` and
+  `docs/02-configuration-reference.md`.
+
+See [README.md](README.md), [docs/00-readme.md](docs/00-readme.md), and
+the per-feature docs in `docs/03a-*` through `docs/03h-*` for the full
+operator reference.
+
+---
+
 ## 2026-07-04
 
 ### ✨ Feature: internationalisation (i18n)

@@ -1,7 +1,7 @@
 # caddy_media_gallery
 
-> NOTE: whilst useful and used, until this is designated as release 1.0.0, the functionality will change (and bugs will be squashed)
-> Internationalisation landed on 2026-07-04 — 8 locales bundled (en/de/es/fr/ja/ko/zh/pt), header language picker, locale persists in localStorage + cookie. See [docs/03h-feature-i18n.md](docs/03h-feature-i18n.md) for the full architecture.
+> **Release 1.0.0 — 2026-07-04.** API + Caddyfile directive surface is now stable. Future versions will be additive (new directives, new fields, new optional JSON keys); the existing Caddyfile directives, JSON fields, and URL parameters will not change in breaking ways. Operators can pin to `1.0.0` (or any later version) in their build pipeline.
+> Internationalisation landed in 1.0.0 — 8 locales bundled (en/de/es/fr/ja/ko/zh/pt), header language picker, locale persists in localStorage + cookie. See [docs/03h-feature-i18n.md](docs/03h-feature-i18n.md) for the full architecture.
 
 *The delightful way to serve a directory.*
 
