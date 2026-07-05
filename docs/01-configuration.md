@@ -239,17 +239,17 @@ of the `media_gallery` handler, with realistic values:
   "image_types": ["jpg", "jpeg", "png", "gif", "webp"],
   "video_types": ["mp4", "webm", "m4v", "mov", "mkv", "avi", "ogv", "ogg"],
   "sort": "name",
-  "page_sizes": ["60", "30", "120", "all"],   // per-page dropdown options (first = default)
+  "page_sizes": ["60", "30", "120", "all"],
   "thumb_width": 320,
   "thumb_height": 320,
   "thumb_format": "webp",
   "thumb_ttl": 1440,
-  "cache_scan": 1440,  // 24h (mtime check is the primary invalidation)
-  "no_thumbs": true,           // default since 2026-07-02 (was false)
+  "cache_scan": 1440,
+  "no_thumbs": true,
   "no_video_thumbs": false,
-  "no_exif": true,               // default since 2026-07-02 (was false)
-  "no_meta": true,               // default since 2026-07-02 (was false)
-  "default_language": "en",      // i18n default (added 2026-07-04)
+  "no_exif": true,
+  "no_meta": true,
+  "default_language": "en",
   "template": "gallery.tmpl",
   "search_match": "substring",
   "max_cache_size_mb": 1024

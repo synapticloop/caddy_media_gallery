@@ -391,12 +391,12 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 			}
 		}
 		if sidecarFresh {
-			if exif := parseExifSidecar(data); exif != nil || bytes.HasPrefix(data, []byte("has=false\n")) {
+			if ed := parseExifSidecar(data); ed != nil || bytes.HasPrefix(data, []byte("has=false\n")) {
 				// Successfully parsed. nil exif + "has=false"
 				// prefix means "no EXIF" (valid cached result).
 				// nil exif without that prefix means "malformed
 				// sidecar" — fall through to a fresh read.
-				return exif, nil
+				return ed, nil
 			}
 			// Malformed sidecar — fall through to a fresh
 			// read and overwrite (self-healing).
@@ -404,7 +404,7 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 	}
 	// Cache miss (no sidecar, malformed sidecar, or stale
 	// sidecar): do the real read.
-	exif, err := readExif(path)
+	ed, err := readExif(path)
 	if err != nil {
 		return nil, err
 	}
@@ -412,9 +412,9 @@ func readExifCached(path, cacheDir, thumbExt string) (*ExifData, error) {
 	// mtime so the staleness check on the NEXT read works
 	// cleanly (a sidecar with mtime = source.mtime is
 	// considered fresh until the source is modified again).
-	_ = writeExifFile(path, cacheDir, thumbExt, writeExifSidecar(exif))
+	_ = writeExifFile(path, cacheDir, thumbExt, writeExifSidecar(ed))
 	_ = os.Chtimes(exifMetaPath(path, cacheDir, thumbExt), srcInfo.ModTime(), srcInfo.ModTime())
-	return exif, err
+	return ed, err
 }
 
 // writeExifSidecar serializes the EXIF data to the text
@@ -525,7 +525,7 @@ func parseExifSidecar(data []byte) *ExifData {
 		return nil // malformed: unknown header
 	}
 	// Parse the rest of the lines.
-	exif := &ExifData{}
+	ed := &ExifData{}
 	// Start after the first newline.
 	rest := data[nl+1:]
 	for len(rest) > 0 {
@@ -560,25 +560,25 @@ func parseExifSidecar(data []byte) *ExifData {
 		// break the older version's parse).
 		switch key {
 		case "Camera Make":
-			exif.CameraMake = val
+			ed.CameraMake = val
 		case "Camera Model":
-			exif.CameraModel = val
+			ed.CameraModel = val
 		case "Lens Model":
-			exif.LensModel = val
+			ed.LensModel = val
 		case "Date Taken":
-			exif.DateTaken = val
+			ed.DateTaken = val
 		case "Exposure Time":
-			exif.ExposureTime = val
+			ed.ExposureTime = val
 		case "Aperture":
-			exif.Aperture = val
+			ed.Aperture = val
 		case "ISO":
-			exif.ISO = val
+			ed.ISO = val
 		case "Focal Length":
-			exif.FocalLength = val
+			ed.FocalLength = val
 		}
 	}
 	// Return nil if no fields were set (malformed sidecar
 	// with all-empty data). The caller checks for nil
 	// and treats it as a cache miss.
-	return exif
+	return ed
 }

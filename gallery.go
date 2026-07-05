@@ -10,7 +10,6 @@ package gallery
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -583,9 +582,9 @@ func (g *Gallery) Provision(caddy.Context) error {
 		// thereafter — see docs/01-configuration.md for the
 		// restart-after-install rationale.)
 		if g.ffmpegPath != "" {
-			fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg path: %s\n", g.ffmpegPath)
+			_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg path: %s\n", g.ffmpegPath)
 		} else if !g.NoVideoThumbs {
-			fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg NOT FOUND (video thumbnails disabled; set FFMPEG_PATH or install ffmpeg and restart Caddy)\n")
+			_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg NOT FOUND (video thumbnails disabled; set FFMPEG_PATH or install ffmpeg and restart Caddy)\n")
 		}
 	}
 	// Make the bundled templates discoverable on disk for the
@@ -594,7 +593,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 	// non-fatal error here doesn't block the module from serving
 	// (the bundled templates still work).
 	if err := writeBundledTemplates(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: caddy-media-gallery: could not write bundled templates to disk: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "warning: caddy-media-gallery: could not write bundled templates to disk: %v\n", err)
 	}
 
 	// Per user request 2026-06-27: cap the thumb cache.
@@ -663,7 +662,7 @@ func (g *Gallery) Provision(caddy.Context) error {
 		tr, _ = NewTranslator("")
 	}
 	g.translator = tr
-	fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n ready (locales: %s, default: %s)\n", strings.Join(tr.Locales(), ","), g.DefaultLanguage)
+	_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: i18n ready (locales: %s, default: %s)\n", strings.Join(tr.Locales(), ", "), g.DefaultLanguage)
 
 	return nil
 }
@@ -878,11 +877,10 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// synchronously so the first page render shows the EXIF
 	// pills and dimensions watermarks.
 	//
-	// We enrich the ORIGINAL files slice (not the visible-
-	// page sub-slice from visibleAndOffPage, which would be
-	// a copy that doesn't propagate back). The enrich is
-	// limited to image + video kinds; dirs and "other"
-	// files are skipped inside enrichParallel.
+	// We enrich the ORIGINAL files slice (not a visible-page
+	// sub-slice, which would be a copy that doesn't propagate
+	// back). The enrich is limited to image + video kinds;
+	// dirs and "other" files are skipped inside enrichParallel.
 	//
 	// Cost: 96 entries / 8 workers × ~10ms = ~120ms for the
 	// current media_gallery. For 4000-image directories
@@ -1294,59 +1292,4 @@ var (
 	_ caddyhttp.MiddlewareHandler = (*Gallery)(nil)
 )
 
-// visibleAndOffPage computes the page-visible files and the
-// off-page files for the given directory + query, mirroring
-// the filter/sort/paginate logic in RenderPage (compact — just
-// enough to partition the files).
-//
-// Per user request 2026-07-01: this lets ServeHTTP
-// synchronously pre-generate thumbs for the page-visible files
-// (so the browser sees them instantly) and background-generate
-// the rest (so subsequent page navigations are also warm).
-//
-// The order/sort spec is taken from the query (sort= and order=
-// URL params). Mirrors the same logic in RenderPage (which uses
-// parseSort) so the visible-and-off-page partition matches what
-// the user actually sees.
-//
-// Returns (paged, offPage, ok). ok=false means the helper
-// couldn't classify the files (it shouldn't happen — but the
-// caller falls back to lazy generation in that case).
-func visibleAndOffPage(files []FileInfo, query url.Values, searchMatch string, page, pageSize int, pageSizes []string) (paged, offPage []FileInfo, ok bool) {
-	// Validate pageSize (same as RenderPage).
-	pageSize = validatePageSize(pageSize, pageSizes)
-	if pageSize <= 0 {
-		// "all" option — everything is the visible page.
-		// Nothing to background.
-		return files, nil, true
-	}
-	// Same filter logic as RenderPage (search first, then type).
-	searchQuery := parseSearchQuery(query.Get("q"))
-	filtered := applySearchFilter(files, searchQuery, searchMatch)
-	typeFilter := parseTypeFilter(query)
-	filtered = applyTypeFilter(filtered, typeFilter)
-	// Split (dirs + others + images). Only images/videos have thumbs.
-	_, _, allImages := splitFiles(filtered)
-	// Same sort as RenderPage (respects ?sort= + ?order=).
-	sortSpec := parseSort(query)
-	sortFiles(allImages, sortSpec)
-	start := (page - 1) * pageSize
-	if start < 0 {
-		start = 0
-	}
-	if start >= len(allImages) {
-		// Out-of-range page (visitor navigated past the data).
-		// Nothing visible and nothing off-page.
-		return nil, nil, true
-	}
-	end := start + pageSize
-	if end > len(allImages) {
-		end = len(allImages)
-	}
-	paged = allImages[start:end]
-	if end < len(allImages) {
-		offPage = allImages[end:]
-	}
-	return paged, offPage, true
-}
 
