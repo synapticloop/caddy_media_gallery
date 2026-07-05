@@ -24,7 +24,7 @@ import (
 )
 
 func init() {
-	caddy.RegisterModule(Gallery{})
+	caddy.RegisterModule(&Gallery{})
 	httpcaddyfile.RegisterHandlerDirective("media_gallery", parseCaddyfile)
 	httpcaddyfile.RegisterDirectiveOrder("media_gallery", httpcaddyfile.Before, "file_server")
 }
@@ -387,7 +387,7 @@ type Gallery struct {
 	CacheStatsTracker *cacheStatsTracker
 }
 
-func (Gallery) CaddyModule() caddy.ModuleInfo {
+func (g *Gallery) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.handlers.media_gallery",
 		New: func() caddy.Module { return new(Gallery) },
