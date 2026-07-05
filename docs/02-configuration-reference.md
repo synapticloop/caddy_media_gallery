@@ -83,11 +83,11 @@ producer to set them:
   "thumb_format": "jpeg",
   "cache_scan": 1440,
   "thumb_ttl": 60,
-  "no_thumbs": true,           // default since 2026-07-02 (was false)
-  "no_exif": true,               // default since 2026-07-02 (was false)
-  "no_meta": true,               // default since 2026-07-02 (was false)
+  "no_thumbs": true,
+  "no_exif": true,
+  "no_meta": true,
   "no_video_thumbs": false,
-  "default_language": "en",      // i18n default (added 2026-07-04)
+  "default_language": "en",
   "search_match": "word",
   "template": "themes/dark/gallery.tmpl"
 }

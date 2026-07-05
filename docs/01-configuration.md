@@ -103,24 +103,27 @@ existing `Caddyfile.user` alone on subsequent builds.
 
 The full argument matrix is in `./build.sh --help`.
 
-### Example: skip thumbnail generation
+### Example: thumbnail generation
+
+Since 2026-07-02, `no_thumbs` defaults to `true` — the gallery behaves like caddys stock `file_server browse` out of the box (no thumb generation, no thumb cache, no ffmpeg CPU overhead). The directive name is now a misnomer (since its the default) but kept for backward compatibility.
+
+The default behaviour (no_thumbs=true):
+- Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
+- No thumb generation, no cache, no CPU cost on first request
+- The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
+- Video tiles show the placeholder gradient + play button instead of a video poster
+
+To enable the full thumbnail UX, set `no_thumbs false`:
 
 ```caddy
 handle_path /images/* {
     root * /var/www/html/images
     media_gallery {
-        no_thumbs
+        no_thumbs false
     }
     file_server
 }
 ```
-
-With `no_thumbs`:
-- Each tile's `<img src>` is the original image file (`./photo.jpg`), not `~/_thumbs/photo.webp`
-- No thumb generation, no cache, no CPU cost on first request
-- The browser downloads the full image per tile (bigger page payload, slower on dirs of large photos)
-
-Use `no_thumbs false` to turn it back on (the default is off, so the directive is opt-in).
 
 ### Example: disable video thumbnails
 
@@ -236,14 +239,17 @@ of the `media_gallery` handler, with realistic values:
   "image_types": ["jpg", "jpeg", "png", "gif", "webp"],
   "video_types": ["mp4", "webm", "m4v", "mov", "mkv", "avi", "ogv", "ogg"],
   "sort": "name",
-  "page_sizes": ["60", "30", "120", "all"],   // per-page dropdown options (first = default)
+  "page_sizes": ["60", "30", "120", "all"],
   "thumb_width": 320,
   "thumb_height": 320,
   "thumb_format": "webp",
   "thumb_ttl": 1440,
-  "cache_scan": 1440,  // 24h (mtime check is the primary invalidation)
-  "no_thumbs": false,
+  "cache_scan": 1440,
+  "no_thumbs": true,
   "no_video_thumbs": false,
+  "no_exif": true,
+  "no_meta": true,
+  "default_language": "en",
   "template": "gallery.tmpl",
   "search_match": "substring",
   "max_cache_size_mb": 1024
@@ -269,8 +275,11 @@ the same default value applies.
 | `thumb_format <fmt>` | `"thumb_format"` | string | `webp` |
 | `thumb_ttl <N>` | `"thumb_ttl"` | int (minutes) | `1440` |
 | `cache_scan <N>` | `"cache_scan"` | int (minutes) | `1440` (24h) |
-| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | `false` |
+| `no_thumbs` / `no_thumbs false` | `"no_thumbs"` | bool | **`true`** |
 | `no_video_thumbs` / `no_video_thumbs false` | `"no_video_thumbs"` | bool | `false` |
+| `no_exif` / `no_exif false` | `"no_exif"` | bool | **`true`** |
+| `no_meta` / `no_meta false` | `"no_meta"` | bool | **`true`** |
+| `default_language <locale>` | `"default_language"` | string | `"en"` (or whatever the operator sets) |
 | `template <name>` | `"template"` | string | `gallery.tmpl` |
 | `search_match <word\|substring>` | `"search_match"` | string | `substring` |
 | `max_cache_size_mb <N>` | `"max_cache_size_mb"` | int (MB) | `1024` (1 GB; `0` = no cap) |

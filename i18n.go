@@ -33,12 +33,6 @@ import (
 //go:embed lang/*.json
 var embeddedLangFS embed.FS
 
-// langEntry holds the parsed JSON content for one locale.
-type langEntry struct {
-	locale string
-	body   map[string]string
-}
-
 // Translator resolves translation keys to strings for the
 // given locale. Constructed once per Gallery (at Provision
 // time) and shared across all ServeHTTP calls (read-only

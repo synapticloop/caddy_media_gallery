@@ -1383,8 +1383,7 @@ func parseSearchQuery(q string) []string {
 //	 - "substring" (default) — query can match anywhere
 //	 - "word" — query must match the start of a word
 const (
-	searchMatchSubstring = "substring"
-	searchMatchWord      = "word"
+	searchMatchWord = "word"
 )
 
 // filenameMatchesQuery returns true when the filename matches
@@ -2341,24 +2340,12 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// "other" file (relative to the largest other file
 	// in this directory).
 	computeSizePercentages(tempOtherViews, others)
-	// Per user request 2026-07-04: guard against nil
-	// translator before calling .Locales(). The earlier
-	// nil-check at the top of the function should have
-	// handled this, but a translator might still be nil
-	// if it was passed in as nil explicitly (unit tests
-	// pre-dating i18n do this). We fall back to a
-	// freshly-constructed English-only translator so the
-	// template still renders correctly.
-	if translator == nil {
-		translator, _ = NewTranslator("")
-	}
-	// Default empty locale to "en" so the {{t}} function
-	// and the <html lang="..."> attribute both have a
-	// sensible value. Done BEFORE building the data
-	// struct so .Locale is populated.
-	if locale == "" {
-		locale = "en"
-	}
+	// translator and locale are guaranteed non-nil / non-empty
+	// by the guards at the top of this function (lines around
+	// "if translator == nil" / "if locale == \"\""). The earlier
+	// guards set them to safe English defaults if they were
+	// passed in as zero values, so no further check is needed
+	// here.
 	// (the package-level translator + locale for tr() and
 	// the {{t}} template function are set at the TOP of
 	// RenderPage, so the filter labels above already saw
@@ -2696,11 +2683,11 @@ func writeBundledTemplates() error {
 	// try to parse and fail on.
 	tmp := tmplPath + ".tmp"
 	if err := os.WriteFile(tmp, []byte(galleryTemplateFS), 0o644); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return fmt.Errorf("write %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, tmplPath); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return fmt.Errorf("rename %s: %w", tmplPath, err)
 	}
 	return nil
