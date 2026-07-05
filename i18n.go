@@ -1,3 +1,5 @@
+package gallery
+
 // Per user request 2026-07-04: internationalisation (i18n)
 // support for the caddy_media_gallery module. The visitor
 // can switch between languages via:
@@ -14,7 +16,6 @@
 // JSON file at `<templates_dir>/lang/<locale>.json`. No
 // rebuild needed — the disk file overrides the embedded
 // one (or adds a brand-new locale).
-package gallery
 
 import (
 	"embed"
@@ -235,10 +236,10 @@ func (t *Translator) refreshDiskOverrides() error {
 
 // T looks up a translation key in the given locale and
 // returns the formatted string. The fallback chain is:
-//   1. Requested locale
-//   2. "en" (English — always the canonical fallback)
-//   3. The key itself (so a missing key is visible in the
-//      rendered page rather than crashing)
+//  1. Requested locale
+//  2. "en" (English — always the canonical fallback)
+//  3. The key itself (so a missing key is visible in the
+//     rendered page rather than crashing)
 //
 // Placeholders use Go's fmt syntax: {key}, {name}, {n}, etc.
 // If args are supplied, they're substituted via fmt.Sprintf.
@@ -408,14 +409,14 @@ func (t *Translator) HasLocale(locale string) bool {
 
 // DetectLocale resolves the visitor's preferred locale using
 // the priority order documented at the top of this file:
-//   1. ?lang=<locale>  URL parameter
-//   2. <lang> cookie
-//   3. localStorage 'gallery-language' header (NOT handled
-//      here — localStorage is client-side only. The cookie
-//      layer (item 2) is the server-readable proxy for it)
-//   4. Accept-Language request header
-//   5. operator default (from Caddyfile `default_language`)
-//   6. "en"
+//  1. ?lang=<locale>  URL parameter
+//  2. <lang> cookie
+//  3. localStorage 'gallery-language' header (NOT handled
+//     here — localStorage is client-side only. The cookie
+//     layer (item 2) is the server-readable proxy for it)
+//  4. Accept-Language request header
+//  5. operator default (from Caddyfile `default_language`)
+//  6. "en"
 //
 // Returns the best match (in canonical short form, e.g.
 // "de" not "de-de"). If the visitor's preference is for a

@@ -61,7 +61,7 @@ func TestReadDimensions_SyntheticJPEG(t *testing.T) {
 	// Fill with a solid colour so the JPEG is non-trivial
 	for y := 0; y < 50; y++ {
 		for x := 0; x < 100; x++ {
-			img.Set(x, y, color.RGBA{255, 0, 0, 255})
+			img.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
 		}
 	}
 	if err := jpeg.Encode(tmp, img, nil); err != nil {
@@ -276,7 +276,6 @@ func TestReadDimensions_NoiseBufferNotEmpty(t *testing.T) {
 	}
 }
 
-
 // TestReadDimensionsCached_FirstReadWritesSidecar verifies the
 // first call to readDimensionsCached parses the source image
 // AND writes a sidecar file to the thumb cache dir. Per user
@@ -372,12 +371,12 @@ func TestReadDimensionsCached_SecondReadUsesSidecar(t *testing.T) {
 // for the per-user 2026-06-30 fix: if the source file is
 // modified AFTER the sidecar is written, the sidecar is stale
 // and the helper re-reads the source. We verify this by:
-// 1. Writing the sidecar with old dimensions
-// 2. Touching the source (mtime > sidecar mtime)
-// 3. Re-writing the source with NEW dimensions
-// 4. Verifying the next read returns the NEW dimensions
-//   (proving the stale sidecar was discarded and the source
-//   was re-read)
+//  1. Writing the sidecar with old dimensions
+//  2. Touching the source (mtime > sidecar mtime)
+//  3. Re-writing the source with NEW dimensions
+//  4. Verifying the next read returns the NEW dimensions
+//     (proving the stale sidecar was discarded and the source
+//     was re-read)
 func TestReadDimensionsCached_StaleSidecarRefetched(t *testing.T) {
 	tmp, err := os.CreateTemp("", "cache-*.jpg")
 	if err != nil {
@@ -448,7 +447,7 @@ func writeSyntheticJPEGHelper(t *testing.T, path string, w, h int) {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			img.Set(x, y, color.RGBA{128, 128, 128, 255})
+			img.Set(x, y, color.RGBA{R: 128, G: 128, B: 128, A: 255})
 		}
 	}
 	f, err := os.Create(path)

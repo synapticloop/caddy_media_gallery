@@ -480,7 +480,7 @@ func computeBreadcrumb(relPath, title, pathPrefix, breadcrumbRoot, absolutePrefi
 	if absolutePrefix != "" {
 		rootHref = absolutePrefix
 	}
-	out := []BreadcrumbSegment{}
+	var out []BreadcrumbSegment
 	out = append(out, BreadcrumbSegment{Name: rootName, Href: rootHref})
 	if relPath == "" {
 		return out
@@ -642,15 +642,16 @@ func displayNameForHover(name string) string {
 //
 // Attributes emitted (one per VideoMeta field, only if
 // non-empty):
-//   data-video-duration="5s"        (e.g. "0:05" or "1:23:45")
-//   data-video-container="mov,mp4,m4a,3gp,3g2,mj2"
-//   data-video-video-codec="h264"
-//   data-video-audio-codec="aac"   (only if audio stream)
-//   data-video-bitrate="5.2 Mbps"
-//   data-video-framerate="24 fps"
+//
+//	data-video-duration="5s"        (e.g. "0:05" or "1:23:45")
+//	data-video-container="mov,mp4,m4a,3gp,3g2,mj2"
+//	data-video-video-codec="h264"
+//	data-video-audio-codec="aac"   (only if audio stream)
+//	data-video-bitrate="5.2 Mbps"
+//	data-video-framerate="24 fps"
 func buildVideoMetaAttrString(v *VideoMeta) template.HTMLAttr {
 	if v == nil {
-		return template.HTMLAttr("")
+		return ""
 	}
 	var b strings.Builder
 	b.Grow(192) // pre-allocate ~192 bytes (typical size)
@@ -987,7 +988,6 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 func thumbStripExt(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
 }
-
 
 // computeSizePercentages sets the SizePct field on each
 // FileView in the slice, where the value is the relative
@@ -1654,7 +1654,6 @@ func dirLinkHref(query url.Values, dirPath string) template.URL {
 	return template.URL(dirPath + "?" + strings.Join(parts, "&"))
 }
 
-
 // queryForPage builds the URL query for a pagination link
 // that navigates to a specific page. It preserves the
 // EFFECTIVE sort/order (from the Sort field, which has
@@ -1890,7 +1889,7 @@ type FilterOption struct {
 	// an empty string because browsers skip empty checkboxes
 	// when serializing the form, which would lose the
 	// distinction between "unchecked" and "checked but empty".
-	IsNone     bool   // true for the (none) entry (files without an extension)
+	IsNone bool // true for the (none) entry (files without an extension)
 }
 
 // FilterGroup is one dropdown in the filter UI (Images, Videos,
@@ -2039,8 +2038,8 @@ func filterGroupFromMap(label string, counts map[string]struct {
 			// key (after parseTypeFilter translates "." to "").
 			// So we check activeFilter[""] for the Selected
 			// state.
-			Selected:   activeFilter[ext] || (isNone && activeFilter[""]),
-			IsNone:     isNone,
+			Selected: activeFilter[ext] || (isNone && activeFilter[""]),
+			IsNone:   isNone,
 		})
 	}
 	sort.Slice(out.Options, func(i, j int) bool {
@@ -2359,18 +2358,18 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Translator:       translator,
 		AvailableLocales: translator.Locales(),
 		Title:            title,
-		PathPrefix:  pathPrefix,
-		ThumbPrefix: thumbPrefix,
-		Up:          up,
-		Subdirs:     subdirViews,
-		OtherFiles:  tempOtherViews,
-		Images:      buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
-		Page:        page,
-		PageSize:    pageSize,
-		PageSizes:   pageSizes,
-		Query:       query,
-		SearchQuery: query.Get("q"),
-		SearchMatch: searchMatch,
+		PathPrefix:       pathPrefix,
+		ThumbPrefix:      thumbPrefix,
+		Up:               up,
+		Subdirs:          subdirViews,
+		OtherFiles:       tempOtherViews,
+		Images:           buildFileViews(paged, pathPrefix, thumbPrefix, noThumbs, noVideoThumbs),
+		Page:             page,
+		PageSize:         pageSize,
+		PageSizes:        pageSizes,
+		Query:            query,
+		SearchQuery:      query.Get("q"),
+		SearchMatch:      searchMatch,
 		// Per user request 2026-06-28: populate the
 		// search-aware header fields.
 		//
@@ -2480,7 +2479,6 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		locale = "en"
 	}
 
-
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", err
@@ -2497,7 +2495,6 @@ func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs, 
 	return out
 }
 
-
 // galleryFuncs is the funcmap registered with the html/template
 // engine. Add new helpers here and they'll be available in the
 // template as {{funcName arg1 arg2}}. The current set:
@@ -2509,6 +2506,7 @@ func buildFileViews(files []FileInfo, pathPrefix, thumbPrefix string, noThumbs, 
 //	                         "size"→"Size", "date"→"Date"; unknown fields
 //	                         fall back to the raw field name capitalised;
 //	                         empty string → "Modified" (the default)
+//
 // Per user request 2026-07-04: package-level translator
 // + locale. Set by RenderPage before each template
 // Execute, read by the {{t}} template function (defined
