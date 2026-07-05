@@ -513,11 +513,11 @@ func cachePath(src, cacheDir, suffix string) string {
 		abs = src
 	}
 	h := sha256.Sum256([]byte(abs))
-	hex := hex.EncodeToString(h[:16]) // 32 hex chars
+	hexStr := hex.EncodeToString(h[:16]) // 32 hex chars
 	// Nested layout: <cacheDir>/<aa>/<bb>/<rest32>.<suffix>
-	subdir1 := hex[:2]   // "aa"
-	subdir2 := hex[2:4]  // "bb"
-	rest := hex[4:]      // 28 hex chars
+	subdir1 := hexStr[:2]   // "aa"
+	subdir2 := hexStr[2:4]  // "bb"
+	rest := hexStr[4:]      // 28 hex chars
 	return filepath.Join(cacheDir, subdir1, subdir2, rest+suffix)
 }
 
