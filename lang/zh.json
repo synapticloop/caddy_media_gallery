@@ -48,6 +48,11 @@
   "filter_other": "其他",
   "filter_none": "(无)",
   "open_in_new_tab": "在新标签页中打开",
+  "filter_audio": "音频",
+  "meta_codec": "编解码器",
+  "meta_sample_rate": "采样率",
+  "meta_channels": "声道数",
+  "meta_channel_layout": "声道布局",
   "_meta": {
     "locale": "zh",
     "language": "中文",

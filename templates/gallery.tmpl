@@ -1818,6 +1818,46 @@ updated twice.
   align-items: center;
   justify-content: center;
 }
+/* Per user request 2026-07-04 (Q6 on the audio-integration
+   branch): audio files have no real thumbnail — the tile
+   uses an inline SVG speaker-icon placeholder. Background is
+   a different gradient from .thumb-video (warm purple
+   instead of cool blue-grey) so visitors can distinguish
+   audio cards from video cards at a glance. Centered SVG
+   icon at 56% size, themed via fill="currentColor" so the
+   icon adapts to the page's foreground colour. The CSS
+   variables (--fg-muted, --accent) keep the icon visible
+   in both light and dark mode without any per-mode CSS. */
+.thumb-audio {
+  background: linear-gradient(135deg, #2a1a35 0%, #4a2d50 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+}
+.thumb-audio .audio-icon {
+  width: 56%;
+  height: 56%;
+  color: var(--accent);
+}
+/* Per user request 2026-07-04: the audio duration pill
+   (data-audio-duration) sits at the bottom-left of the
+   card, mirroring the existing video duration pill. Same
+   style — same background, padding, font. Visible only
+   when AudioMeta has a parsed Duration (e.g. "1:23"). */
+.thumb-audio-duration {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.4rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
 .play-overlay {
   /* Per Phase 62: position: absolute so the play button sits
      on top of the video thumbnail image (when present) instead
@@ -2666,7 +2706,7 @@ updated twice.
        doesn't lose their filter state when navigating up. */}}
 
 
-        {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
+        {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterAudioOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       {{- /* Preserve other URL params (sort, page_size, etc.) when submitting. */ -}}
       {{- /* include page_size so changing */ -}}
@@ -2717,6 +2757,25 @@ updated twice.
           </summary>
           <div class="filter-dropdown-body">
             {{range .FilterVideoOptions.Options}}
+            <label class="filter-option">
+              <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
+              <span class="filter-option-name">{{.DisplayExt}}</span>
+              <span class="filter-option-count">({{.Count}})</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+
+        {{if gt .FilterAudioOptions.Total 0}}
+        <details class="filter-dropdown">
+          <summary class="filter-pill{{if gt .FilterAudioOptions.Selected 0}} filter-pill-has-selection{{end}}">
+            {{.FilterAudioOptions.Label}}
+            <span class="filter-count">({{.FilterAudioOptions.Selected}}/{{.FilterAudioOptions.Total}})</span>
+            <span class="filter-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="filter-dropdown-body">
+            {{range .FilterAudioOptions.Options}}
             <label class="filter-option">
               <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
               <span class="filter-option-name">{{.DisplayExt}}</span>
@@ -3776,6 +3835,26 @@ dirs and others tables have
           '<tr><td class="lb-exif-label">' + t('meta_framerate') + '</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
         '</table>' +
       '</div>' +
+    '</div>' +
+    // audio metadata panel
+    // (parallel to the EXIF and VIDEO panels for image and
+    // video respectively). Shows codec, sample rate,
+    // channels, channel layout, duration, bitrate extracted
+    // from ffprobe (cached in .ameta sidecars). Same
+    // collapsible-header pattern as the other panels.
+    // Storage key: gallery-lb-audio-meta-collapsed.
+    '<div class="lb-audio-meta" hidden>' +
+      '<div class="lb-exif-header" data-lb-panel="audio-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "meta_label"}}</div>' +
+      '<div class="lb-exif-body">' +
+        '<table class="lb-exif-table">' +
+          '<tr><td class="lb-exif-label">' + t('meta_codec') + '</td><td class="lb-exif-val" data-audio="codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_sample_rate') + '</td><td class="lb-exif-val" data-audio="sample-rate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_channels') + '</td><td class="lb-exif-val" data-audio="channels"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_channel_layout') + '</td><td class="lb-exif-val" data-audio="channel-layout"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_duration') + '</td><td class="lb-exif-val" data-audio="duration"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_bitrate') + '</td><td class="lb-exif-val" data-audio="bitrate"></td></tr>' +
+        '</table>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 
@@ -3790,10 +3869,18 @@ dirs and others tables have
   // child instead of an <img>). Both open in the unified
   // lightbox. Other file types (no <img> and not .video) keep
   // their default link behavior.
+  // Per user request 2026-07-04 (audio-integration
+  // branch): cards with the .audio class are also picked
+  // up here (parallel to .video). The card itself has no
+  // <img> child (audio cards use an inline SVG speaker-
+  // icon placeholder instead), so the filter checks the
+  // .audio class explicitly. The lightbox handler in
+  // openLightbox() then renders an <audio controls>
+  // element for .audio cards.
   var cards = Array.prototype.slice.call(
     document.querySelectorAll('.card')
   ).filter(function(c) {
-    return c.querySelector('img') || c.classList.contains('video');
+    return c.querySelector('img') || c.classList.contains('video') || c.classList.contains('audio');
   });
   var idx = 0;
 
@@ -3912,6 +3999,7 @@ dirs and others tables have
     var href = c.getAttribute('href') || '';
     var name = (c.querySelector('.tile-name') || {}).textContent || '';
     var isVideo = c.classList.contains('video');
+    var isAudio = c.classList.contains('audio');
     clear();
     if (isVideo) {
       // show the video thumbnail
@@ -3964,6 +4052,27 @@ dirs and others tables have
         var defaultHidden = videoMetaPanel.getAttribute('data-default-hidden') === 'true';
         videoMetaPanel.hidden = defaultHidden;
       });
+    } else if (isAudio) {
+      // Per user request 2026-07-04 (audio-integration
+      // branch): the audio lightbox path is parallel to
+      // the video path above. The card carries
+      // data-audio-* attributes (rendered by
+      // buildAudioMetaAttrString in render.go); the JS
+      // reads them and populates a separate
+      // lb-audio-meta panel. The <audio controls>
+      // element is a native browser audio player — no
+      // custom playback controls needed. The tile card
+      // (already rendered with an SVG speaker-icon
+      // placeholder) is shown as the "poster" via the
+      // browser's default "first frame" behavior — but
+      // for audio there's no frame, so the player just
+      // shows the controls.
+      var a = document.createElement('audio');
+      a.src = href;
+      a.controls = true;
+      a.preload = 'metadata';
+      a.alt = name;
+      currentEl = a;
     } else {
       var img = document.createElement('img');
       img.src = href;
@@ -3989,6 +4098,7 @@ dirs and others tables have
     // hidden.
     var exifPanel = overlay.querySelector('.lb-exif');
     var videoMetaPanel = overlay.querySelector('.lb-video-meta');
+    var audioMetaPanel = overlay.querySelector('.lb-audio-meta');
     if (isVideo) {
       // populate the video
       // metadata panel for video files. Reads the
@@ -4021,6 +4131,37 @@ dirs and others tables have
     } else {
       videoMetaPanel.hidden = true;
       videoMetaPanel.setAttribute('data-default-hidden', 'true');
+    }
+    // Per user request 2026-07-04 (audio-integration
+    // branch): populate the audio metadata panel. Reads
+    // data-audio-* attributes (rendered by
+    // buildAudioMetaAttrString in render.go). The panel
+    // is hidden if no audio metadata is available —
+    // mirrors the video panel's "if any field is non-empty,
+    // show the panel" logic. Layout: the panel header
+    // says "AUDIO" (parallel to "VIDEO"); rows for codec,
+    // sample rate, channels, channel layout, duration,
+    // bitrate.
+    if (isAudio) {
+      var audioCodecA = c.getAttribute('data-audio-codec') || '';
+      var sampleRate = c.getAttribute('data-audio-sample-rate') || '';
+      var channels = c.getAttribute('data-audio-channels') || '';
+      var channelLayout = c.getAttribute('data-audio-channel-layout') || '';
+      var audioDuration = c.getAttribute('data-audio-duration') || '';
+      var audioBitrate = c.getAttribute('data-audio-bitrate') || '';
+      if (audioCodecA || sampleRate || channels || channelLayout || audioDuration || audioBitrate) {
+        audioMetaPanel.querySelector('[data-audio="codec"]').textContent = audioCodecA || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="sample-rate"]').textContent = sampleRate || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="channels"]').textContent = channels || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="channel-layout"]').textContent = channelLayout || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="duration"]').textContent = audioDuration || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="bitrate"]').textContent = audioBitrate || '\u2014';
+        audioMetaPanel.hidden = false;
+      } else {
+        audioMetaPanel.hidden = true;
+      }
+    } else {
+      audioMetaPanel.hidden = true;
     }
     if (!isVideo) {
       var cameraMake = c.getAttribute('data-exif-camera-make') || '';

@@ -838,6 +838,14 @@ func buildCardHTML(v FileView) template.HTML {
 	// <a class="card..." data-filename="...">...</a>
 	if v.IsVideo {
 		_, _ = b.WriteString(`<a class="card video" data-filename="`)
+	} else if v.IsAudio {
+		// Per user request 2026-07-04 (audio-integration
+		// branch): audio cards get the .audio class so
+		// the JS lightbox path can pick them up (parallel
+		// to .video). The card itself has no <img> child
+		// — the .thumb-audio SVG speaker-icon placeholder
+		// is rendered inline below.
+		_, _ = b.WriteString(`<a class="card audio" data-filename="`)
 	} else {
 		_, _ = b.WriteString(`<a class="card" data-filename="`)
 	}
@@ -853,6 +861,17 @@ func buildCardHTML(v FileView) template.HTML {
 	if v.VideoMetaAttrs != "" {
 		_, _ = b.WriteString(string(v.VideoMetaAttrs))
 	}
+	// Per user request 2026-07-04 (audio-integration
+	// branch): emit the data-audio-* attributes for
+	// KindAudio cards. The lightbox JS reads them and
+	// populates a separate audio-metadata panel. Empty
+	// when AudioMeta is nil (e.g. audio_types set but
+	// ffmpeg missing → Q3 fallback), in which case the
+	// lightbox shows the audio player but the metadata
+	// panel stays hidden.
+	if v.AudioMetaAttrs != "" {
+		_, _ = b.WriteString(string(v.AudioMetaAttrs))
+	}
 	_, _ = b.WriteString(`>`)
 	// <div class="thumb...">
 	// Per user feedback 2026-07-01: the 'loading' class
@@ -866,6 +885,22 @@ func buildCardHTML(v FileView) template.HTML {
 	// entirely, and only true cold loads see it.
 	if v.IsVideo {
 		_, _ = b.WriteString(`<div class="thumb thumb-video">`)
+	} else if v.IsAudio {
+		// Per user request 2026-07-04 (Q6 on the
+		// audio-integration branch): audio cards have
+		// no real thumbnail — render an inline SVG
+		// speaker icon. The .thumb-audio CSS class
+		// (defined in the CSS block above) gives it
+		// the warm-purple gradient background. The SVG
+		// uses fill="currentColor" so the icon colour
+		// tracks the page's --accent variable (light
+		// blue in light mode, lighter blue in dark mode).
+		// No <img> child — the card is purely CSS/SVG.
+		_, _ = b.WriteString(`<div class="thumb thumb-audio">`)
+		_, _ = b.WriteString(`<svg class="audio-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">`)
+		_, _ = b.WriteString(`<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`)
+		_, _ = b.WriteString(`</svg>`)
+		_, _ = b.WriteString(`</div>`)
 	} else {
 		_, _ = b.WriteString(`<div class="thumb">`)
 	}
@@ -878,6 +913,9 @@ func buildCardHTML(v FileView) template.HTML {
 		}
 		// Per Phase 62: video cards always show the play overlay
 		_, _ = b.WriteString(`<div class="play-overlay">▶</div>`)
+	} else if v.IsAudio {
+		// (no <img> for audio — the SVG icon above is the
+		// entire thumbnail)
 	} else {
 		_, _ = b.WriteString(`<img loading="lazy" src="`)
 		_, _ = b.WriteString(html.EscapeString(v.ThumbURL))
@@ -902,6 +940,19 @@ func buildCardHTML(v FileView) template.HTML {
 	if v.IsVideo && v.VideoMeta != nil && v.VideoMeta.Duration != "" {
 		_, _ = b.WriteString(`<span class="thumb-duration">`)
 		_, _ = b.WriteString(html.EscapeString(v.VideoMeta.Duration))
+		_, _ = b.WriteString(`</span>`)
+	}
+	// Per user request 2026-07-04 (audio-integration
+	// branch): parallel pill for audio. Same
+	// data-source (AudioMeta.Duration) but a different
+	// CSS class so the pill colour matches the audio
+	// card's purple gradient. Empty pill if the operator
+	// has no_audio_meta set OR if ffmpeg/ffprobe isn't
+	// available (Q3 fallback: audio works without
+	// metadata, just no duration label on the card).
+	if v.IsAudio && v.AudioMeta != nil && v.AudioMeta.Duration != "" {
+		_, _ = b.WriteString(`<span class="thumb-audio-duration">`)
+		_, _ = b.WriteString(html.EscapeString(v.AudioMeta.Duration))
 		_, _ = b.WriteString(`</span>`)
 	}
 	// Open-in-new-tab button. The title + aria-label are translated

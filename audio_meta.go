@@ -248,36 +248,39 @@ func parseAudioStreamEntries(s string) (codec, sampleRate, channels, channelLayo
 }
 
 // formatSampleRate formats a raw Hz value (e.g. "44100",
-// "48000", "22050") as a human-readable string. Decimals
-// are shown only when they're meaningful (44.1 kHz vs
-// 48 kHz) — values that are exact multiples of 1000
-// are shown without decimals.
+// "48000", "22050", "11025") as a human-readable string.
+// Uses up to 3 decimal places to cover the common
+// 44.1 kHz / 22.05 kHz / 11.025 kHz "odd" rates that
+// don't divide evenly into thousands. Trailing zeros
+// are trimmed (48000 → "48 kHz" not "48.000 kHz").
+// Returns "" for empty or unparseable input (N/A, etc.).
 func formatSampleRate(s string) string {
-	if s == "" {
+	if s == "" || s == "N/A" {
 		return ""
 	}
 	hz, err := strconv.Atoi(s)
 	if err != nil {
-		// Not a number (e.g. ffprobe returned "N/A") —
-		// pass through as-is. Rare.
-		return s
+		// Not a number (rare; ffprobe usually returns
+		// "N/A" which we've already filtered above) —
+		// return "" so callers don't display garbage.
+		return ""
 	}
 	if hz%1000 == 0 {
-		// 48000 → "48 kHz", 22050 → "22.05 kHz" (22050 % 1000 = 50)
-		// 44100 → "44.1 kHz" (44100 % 1000 = 100)
-		// 22050 / 44100 — 22050 % 1000 = 50, 44100 % 1000 = 100.
-		// Actually 22050 % 1000 = 50, NOT 0. So 22050 falls
-		// through to the decimal branch.
+		// 48000 → "48 kHz"
+		return strconv.Itoa(int(hz/1000)) + " kHz"
 	}
 	kHz := float64(hz) / 1000.0
-	// Show one decimal if it's a "common" value (44.1, 22.05,
-	// 11.025, etc.); otherwise round to integer.
 	if kHz == float64(int(kHz)) {
+		// Multiple of 1000 with an integer quotient (e.g.
+		// 32000, 16000, 8000). Should have hit the
+		// hz%1000==0 branch above; this is just a
+		// safety net for the .0 case.
 		return strconv.Itoa(int(kHz)) + " kHz"
 	}
-	// Format with up to 2 decimal places, trim trailing zeros
-	// + decimal point if any.
-	s = strconv.FormatFloat(kHz, 'f', 2, 64)
+	// Format with up to 3 decimal places, trim trailing
+	// zeros + decimal point if any. 3 places covers
+	// 44.1, 22.05, 11.025, 8.0008, etc.
+	s = strconv.FormatFloat(kHz, 'f', 3, 64)
 	s = strings.TrimRight(s, "0")
 	s = strings.TrimRight(s, ".")
 	return s + " kHz"
@@ -438,6 +441,7 @@ func parseAudioMetaSidecar(data []byte) *AudioMeta {
 		return nil
 	}
 	meta := &AudioMeta{}
+	parsedAny := false
 	for _, line := range lines[1:] {
 		eq := strings.IndexByte(line, '=')
 		if eq < 0 {
@@ -448,17 +452,33 @@ func parseAudioMetaSidecar(data []byte) *AudioMeta {
 		switch key {
 		case "Codec":
 			meta.Codec = val
+			parsedAny = true
 		case "SampleRate":
 			meta.SampleRate = val
+			parsedAny = true
 		case "Channels":
 			meta.Channels = val
+			parsedAny = true
 		case "ChannelLayout":
 			meta.ChannelLayout = val
+			parsedAny = true
 		case "Duration":
 			meta.Duration = val
+			parsedAny = true
 		case "Bitrate":
 			meta.Bitrate = val
+			parsedAny = true
 		}
+	}
+	// Per the project convention (mirroring parseVideoMetaSidecar /
+	// parseExifSidecar): if the sidecar has the "has=true" header
+	// but no recognised key=value lines, treat the sidecar as
+	// malformed and return nil. The caller (readAudioMetaCached)
+	// falls through to a fresh read in that case, which will
+	// re-run ffprobe and overwrite the bad sidecar. (Same
+	// self-healing pattern as the video meta pipeline.)
+	if !parsedAny {
+		return nil
 	}
 	return meta
 }

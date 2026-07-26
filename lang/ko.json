@@ -48,6 +48,11 @@
   "filter_other": "기타",
   "filter_none": "(없음)",
   "open_in_new_tab": "새 탭에서 열기",
+  "filter_audio": "오디오",
+  "meta_codec": "코덱",
+  "meta_sample_rate": "샘플 레이트",
+  "meta_channels": "채널 수",
+  "meta_channel_layout": "채널 배치",
   "_meta": {
     "locale": "ko",
     "language": "한국어",

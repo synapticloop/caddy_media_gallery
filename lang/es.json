@@ -48,6 +48,11 @@
   "filter_other": "Otros",
   "filter_none": "(ninguno)",
   "open_in_new_tab": "Abrir en nueva pestaña",
+  "filter_audio": "Audio",
+  "meta_codec": "Códec",
+  "meta_sample_rate": "Frecuencia de muestreo",
+  "meta_channels": "Canales",
+  "meta_channel_layout": "Disposición de canales",
   "_meta": {
     "locale": "es",
     "language": "Español",

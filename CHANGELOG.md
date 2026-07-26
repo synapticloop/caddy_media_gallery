@@ -11,22 +11,138 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ## 1.1.0 — 2026-07-04
 
-### 🎵 TBD: audio integration
+### 🎵 Audio: opt-in audio file support
 
-Per user request 2026-07-04: a minor release on the
-`audio-integration` branch. Bumps the version from 1.0.3
-to 1.1.0 to signal the additive scope (new Caddyfile
-directive, new file kind, new lang keys).
+Per user request 2026-07-04 (audio-integration branch):
+the gallery now supports audio-only files (mp3, flac, opus,
+m4a, etc.) as a first-class media type, alongside images and
+videos. Files matching the operator's `audio_types` directive
+are classified as `KindAudio`, get an SVG speaker-icon tile
+placeholder, a `<audio controls>` element in the lightbox, and
+stream-level metadata (codec, sample rate, channels, channel
+layout, duration, bitrate) extracted via `ffprobe` and cached
+in `.ameta` sidecars.
 
-No code changes in this commit — this is just the version
-bump to mark the branch's starting point. The actual
-audio integration work will land in subsequent commits
-on this branch, and 1.1.0's release notes will be filled
-in then.
+Audio is OPT-IN since 1.1.0 — the default `audio_types`
+list is empty, so existing 1.0.x configurations are unaffected
+(operator opt-in is required). The branch landing was
+coordinated via 4 commits on the `audio-integration` branch
+before the merge.
 
-The running binary today is still 1.0.3. The 1.1.0
-release will ship once the audio integration is complete
-and reviewed.
+What's new in 1.1.0:
+
+  - **New `KindAudio` FileKind**: parallel to `KindImage` /
+    `KindVideo` / `KindOther`. Per Q2 ("video wins"), a file
+    with a video stream is `KindVideo` even if it also has
+    audio; a file with only audio streams is `KindAudio`.
+  - **New Caddyfile directive `audio_types <list>`**: same
+    shape as `image_types` / `video_types`. Empty by default
+    in 1.1.0 (opt-in). Recommended starting list:
+    `.mp3 .m4a .aac .flac .opus .wav .ogg .oga` (8 formats).
+  - **New Caddyfile directive `no_audio_meta`** (no arg → true,
+    accepts "false"): defaults to FALSE (audio metadata
+    extraction on by default when `audio_types` is enabled).
+    Mirrors `no_meta` for video metadata.
+  - **New `AudioMeta` struct**: Tier-1 stream-level fields
+    (Codec, SampleRate, Channels, ChannelLayout, Duration,
+    Bitrate). NO ID3 / Vorbis / iTunes tag extraction (per
+    Q5 — Tier 1 only). Populated by `readAudioMetaCached`
+    which uses two ffprobe subprocesses (stream info +
+    format) and caches the result in a `.webp.ameta` sidecar
+    parallel to the video's `.webp.vmeta`.
+  - **Filter UI**: new "Audio" dropdown between "Videos"
+    and "Other" (per Q7). Hidden when `audio_types` is empty.
+  - **Card tile placeholder**: inline SVG speaker icon
+    (Material Design `volume_up` glyph, fill="currentColor"
+    themed via `--accent` CSS variable). Warm-purple gradient
+    background distinguishes audio cards from video cards.
+    No `<img>` child — purely CSS/SVG.
+  - **Lightbox audio player**: native `<audio controls
+    preload="metadata">` element, plus a parallel metadata
+    panel with six rows (codec, sample rate, channels, channel
+    layout, duration, bitrate). Panel is collapsible (state
+    in localStorage, parallel to the video META panel).
+  - **5 new lang keys × 8 locales = 40 translations**:
+    `filter_audio`, `meta_codec`, `meta_sample_rate`,
+    `meta_channels`, `meta_channel_layout`.
+  - **Q3 ffmpeg-missing fallback**: if `audio_types` is set
+    but `ffmpeg/ffprobe` isn't installed, a one-line stderr
+    WARNING is logged at Provision() and audio files still
+    work (KindAudio, filter membership, tile rendering,
+    lightbox `<audio controls>` player) — only the audio
+    metadata panel is empty. This matches the 1.0.x video
+    behaviour where videos were still served even when
+    ffmpeg was missing (just with a black play button
+    instead of a poster frame).
+  - **Scanner cache key** updated to include the audio ext
+    set + `no_audio_meta` flag. Toggling `audio_types` or
+    `no_audio_meta` in the Caddyfile invalidates the scan
+    cache so visitors don't see stale `KindAudio=0` or stale
+    `AudioMeta` fields.
+  - **No new Caddyfile directive beyond `audio_types` /
+    `no_audio_meta`**. Pure additive change. Stable per
+    the 1.0 promise: no breaking changes within 1.x.
+
+Implementation:
+
+  - `scanner.go` — new `KindAudio` constant +
+    `defaultAudioExts` map (empty). `Classify()` signature
+    gained `audioExts map[string]bool`. The "video wins"
+    rule preserves backwards compat: a file whose
+    extension is in BOTH `video_types` and `audio_types`
+    is `KindVideo` (the existing defaultVideoExts has
+    higher priority in the switch).
+  - `gallery.go` — new `AudioExts []string`,
+    `audioExtsMap map[string]bool`, `NoAudioMeta bool`,
+    `NoAudioMetaSet bool` fields on `Gallery`. The
+    `audio_types` and `no_audio_meta` Caddyfile directives.
+    Provision() logs a one-line stderr WARNING if
+    `audio_types` is set but ffmpeg is missing.
+  - `audio_meta.go` (NEW, ~480 lines) — `AudioMeta` struct
+    + `readAudio()` (ffprobe subprocess) +
+    `readAudioMetaCached()` (cache-aware entry point) +
+    `audioMetaPath()` / `readAudioMetaFile()` /
+    `writeAudioMetaSidecar()` / `parseAudioMetaSidecar()`
+    (sidecar I/O). Format functions: `formatSampleRate`
+    (44.1 / 22.05 / 11.025 kHz with trimmed decimals) +
+    shared `formatDuration` and `formatBitrate` from
+    `video_meta.go`.
+  - `scancache.go` — `Cache.Get` and `extSetsKey` signatures
+    gained `audioExts` + `noAudioMeta` parameters. Cache
+    key now embeds `|a:<audKeys>|` and `|M:<noAudioMetaStr>|`
+    segments.
+  - `render.go` — `FileInfo.AudioMeta` field. `FileView`
+    gained `AudioMeta`, `AudioMetaAttrs`, `IsAudio` fields.
+    `buildFileView` has a new `case KindAudio:` branch
+    (sets `v.IsAudio = true`, leaves `ThumbURL` empty for
+    the SVG fallback path, emits a `.thumb-audio` div with
+    SVG icon, emits a `.thumb-audio-duration` pill when
+    `AudioMeta.Duration != ""`). `buildAudioMetaAttrString`
+    formats `AudioMeta` into `data-audio-*` attributes.
+    `computeFilterGroups` signature gained `audioExts` and
+    returns `(images, videos, audio, other FilterGroup)`.
+    `RenderPage` signature gained `noAudioMeta bool` and
+    `audioExts map[string]bool` (21 → 23 args).
+  - `templates/gallery.tmpl` — new "Audio" filter dropdown
+    between Videos and Other. Inline SVG speaker icon in
+    the audio tile. New `<audio controls>` lightbox path
+    parallel to the existing `<video controls>` path. New
+    `lb-audio-meta` lightbox panel with six metadata rows.
+  - `lang/*.json` — 5 new keys × 8 locales = 40 entries.
+
+Behaviour change:
+
+  - **Before 1.1.0**: audio files (mp3, flac, etc.) were
+    treated as `KindOther` and shown in the "Other files"
+    strip with a 📄 icon. No thumbnail, no metadata, no
+    audio filter, no `<audio controls>` lightbox.
+  - **After 1.1.0**: when the operator has set `audio_types`,
+    audio files become `KindAudio` and get the full
+    audio UX: SVG tile placeholder, audio filter
+    membership, metadata panel, lightbox audio player.
+    When `audio_types` is empty (default), audio files
+    fall through to `KindOther` — the 1.0.x behaviour is
+    preserved.
 
 ---
 

@@ -48,6 +48,11 @@
   "filter_other": "Outros",
   "filter_none": "(nenhum)",
   "open_in_new_tab": "Abrir em nova guia",
+  "filter_audio": "Áudio",
+  "meta_codec": "Codec",
+  "meta_sample_rate": "Taxa de amostragem",
+  "meta_channels": "Canais",
+  "meta_channel_layout": "Disposição dos canais",
   "_meta": {
     "locale": "pt",
     "language": "Português",

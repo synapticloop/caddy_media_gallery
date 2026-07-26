@@ -48,6 +48,11 @@
   "filter_other": "その他",
   "filter_none": "(なし)",
   "open_in_new_tab": "新しいタブで開く",
+  "filter_audio": "オーディオ",
+  "meta_codec": "コーデック",
+  "meta_sample_rate": "サンプルレート",
+  "meta_channels": "チャンネル数",
+  "meta_channel_layout": "チャンネルレイアウト",
   "_meta": {
     "locale": "ja",
     "language": "日本語",
