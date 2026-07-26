@@ -89,7 +89,71 @@ NO BEHAVIOR CHANGES outside the XX field. The
 eviction, scan cache, scan refresh, and stats refresh
 behaviour are unchanged from v1.1.0.
 
-All 450+ Go tests pass.
+### 🔤 Polish: cache-status footer in monospace font
+
+Per user request 2026-07-04: the cache-status footer
+hex value ("D6 // 00 // 00 // 00") should render in a
+monospace font so the digit pairs and `//` separators
+align vertically.
+
+ROOT CAUSE:
+
+  The `.site-footer-cache-stats` CSS rule referenced
+  `var(--font-mono)` but the variable was never defined
+  in the `:root` block. The `var()` call resolved to
+  nothing and the browser fell back to the body font
+  (proportional). The footer was effectively
+  proportional — the digit pairs ("D6", "00", "00",
+  "00") were slightly misaligned.
+
+FIX (templates/gallery.tmpl):
+
+  1. Added `--font-mono` to the default `:root` block.
+     Stack: ui-monospace, SFMono-Regular, Menlo, Monaco,
+     Consolas, Liberation Mono, Courier New, monospace.
+     Modern systems (macOS, recent Linux) get a nice
+     ui-monospace; older systems fall back to a system
+     monospace; the last resort is the generic monospace
+     family. This is the same variable the `.meta` status
+     line COULD use (if a future commit enables it there)
+     — but the user asked specifically for the cache
+     status line only in this commit.
+
+  2. The existing `.site-footer-cache-stats` rule was
+     unchanged — it already referenced `var(--font-mono)`.
+     The fix was just to define the variable.
+
+USER-VISIBLE CHANGE (verified on the live page
+https://hermes.synapticloop.com/images/ after the Caddy
+binary is rebuilt):
+
+  Before this commit (v1.1.1 partial):
+    "D6 // 00 // 00 // 00" rendered in the proportional
+    body font — the digit pairs (D6, 00, 00, 00) had
+    slightly varying widths, so the column structure
+    was hard to read at a glance.
+
+  After this commit (v1.1.1):
+    "D6 // 00 // 00 // 00" rendered in monospace — the
+    digit pairs are now uniformly wide and the `//`
+    separators align vertically between them.
+
+  The `.meta` status line ("50 files // 36 images · 8
+  videos · 3 audios · 3 other files // (38.2 MB total)
+  // 52 directories · Show 60 Per page") is
+  intentionally UNCHANGED in this commit — the user
+  asked specifically for the cache status line only.
+  The status line still uses the proportional font. If
+  a future commit wants to monospace the status line
+  too, it can just add `font-family: var(--font-mono);`
+  to the `.meta` rule.
+
+NO BEHAVIOR CHANGES — this is a pure CSS / cosmetic
+fix. No Go code touched, no tests changed, no Caddyfile
+changes.
+
+All 450+ Go tests pass (CSS-only change; tests
+exercise the Go server logic, not the rendered HTML).
 
 ### 🎵 Audio: opt-in audio file support
 
