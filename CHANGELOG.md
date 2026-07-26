@@ -9,6 +9,27 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.1.0 — 2026-07-04
+
+### 🎵 TBD: audio integration
+
+Per user request 2026-07-04: a minor release on the
+`audio-integration` branch. Bumps the version from 1.0.3
+to 1.1.0 to signal the additive scope (new Caddyfile
+directive, new file kind, new lang keys).
+
+No code changes in this commit — this is just the version
+bump to mark the branch's starting point. The actual
+audio integration work will land in subsequent commits
+on this branch, and 1.1.0's release notes will be filled
+in then.
+
+The running binary today is still 1.0.3. The 1.1.0
+release will ship once the audio integration is complete
+and reviewed.
+
+---
+
 ## 1.0.3 — 2026-07-04
 
 ### ✨ i18n: translate the "Open in new tab" thumbnail link
