@@ -9,7 +9,27 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
-## 1.1.0 — 2026-07-04
+## 1.1.1 — 2026-07-04
+
+### 🐛 Fix: TBD (placeholder)
+
+Per user request 2026-07-04: this is a patch release
+on the `minor-cache-fix` branch (1.1.x line). Cuts the
+1.1.0 release line so any work on this branch ships
+against 1.1.1 instead of touching 1.1.0.
+
+No code changes in this commit — this is just the
+version bump to mark the branch's starting point. The
+actual 1.1.1 work (a single fix to the cache-status
+footer's percent scale in `cache_stats.go`) will land
+in subsequent commits on this branch, and 1.1.1's
+release notes will be filled in then.
+
+The running binary today is still 1.1.0 (the v1.1.0
+build at `44f4266` was a stable release that did not
+have any cache-fix work in it); a new tagged release
+of 1.1.1 will be cut when the cache fix is merged
+into main and reviewed.
 
 ### 🎵 Audio: opt-in audio file support
 
