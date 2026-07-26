@@ -9,6 +9,72 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.2 — 2026-07-04
+
+### ✨ UI: build / version metadata in the site footer
+
+Per user request 2026-07-04: the site footer now includes a
+new line between the existing "proudly served by caddy +
+synapticloop // media gallery" brand line and the cache-stats
+line. The new line shows the running binary's release tag
+and short git commit hash:
+
+    caddy_media_gallery 1.0.2 //
+    [abc1234](https://github.com/synapticloop/caddy_media_gallery/commit/abc1234)
+
+The commit hash becomes a clickable link to the GitHub
+commit page so visitors can see exactly which source tree
+the running binary was built from. The "unknown" fallback
+(dev builds, or no -ldflags) renders as plain text with no
+link.
+
+Implementation:
+
+  - New `version.go` defines exported package-level vars
+    `Version` and `Commit`, plus a `VersionString()` helper.
+    Both default to "dev" / "unknown" so the binary still
+    renders correctly when built without -ldflags.
+  - `render.go`'s `PageData` carries two new fields,
+    `ModuleVersion` and `ModuleCommit`, populated from the
+    package vars at the end of `RenderPage()`.
+  - `templates/gallery.tmpl` has a new `.site-footer-version`
+    div with matching CSS styling (mirrors the existing
+    cache-stats rule — same mono font, muted colour, small
+    size). Uses `{{if eq .ModuleCommit "unknown"}}...{{end}}`
+    to choose between plain text and an anchor link.
+  - `build.sh` extracts `git describe --tags --always` for the
+    version and `git rev-parse --short HEAD` for the commit,
+    then passes them to xcaddy via the documented
+    `XCADDY_GO_BUILD_FLAGS="-ldflags '-X pkg.Var=value'"`
+    env-var mechanism. Echoes the values to stdout during the
+    build so the maintainer can confirm what was baked in.
+
+Maintainer workflow (one-command release build):
+
+    ./build.sh            # runs the existing build script;
+                          # all the ldflags plumbing is now
+                          # automatic. Just needs a git
+                          # checkout with at least one tag
+                          # reachable.
+
+Behaviour change:
+
+  - **Before 1.0.2**: the running binary's version + commit
+    were not displayed anywhere. Operators had to check git
+    tags + read the commit themselves to know which build
+    was running.
+  - **After 1.0.2**: the site footer shows the version + commit
+    on every page render. The values are baked in at build
+    time via Go's -ldflags mechanism so they reflect exactly
+    what the binary was built from, not whatever happens to be
+    in the source tree right now.
+
+No new Caddyfile directives, no new JSON fields, no new URL
+parameters. Pure UI + build-system change. Stable per the 1.0
+promise.
+
+---
+
 ## 1.0.1 — 2026-07-04
 
 ### ✨ UI: highlight filter pills that have an active selection

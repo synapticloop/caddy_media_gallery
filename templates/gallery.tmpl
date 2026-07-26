@@ -2057,6 +2057,18 @@ updated twice.
   opacity: 0.75;
   letter-spacing: 0.05em;
 }
+/* Build / version metadata footer (1.0.2+, build/version-details branch).
+   Shows the running binary's release tag + short git commit hash.
+   Visually mirrors the cache-stats line above (mono font, muted,
+   small) so the two footer detail rows feel like a related pair. */
+.site-footer-version {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  opacity: 0.75;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
 .site-footer a {
   color: var(--accent);
   text-decoration: none;
@@ -3030,6 +3042,22 @@ subdirs table has its own
 <footer class="site-footer">
   <div class="site-footer-brand">
     proudly served by <a href="https://caddyserver.com" rel="noopener" target="_blank">caddy</a> + <a href="https://github.com/synapticloop/caddy_media_gallery" rel="noopener" target="_blank">synapticloop // media gallery</a>
+  </div>
+  {{/* Build metadata footer (Phase 1.0.2, build/version-details branch).
+       Shows the caddy_media_gallery version + short git commit the
+       running binary was built from. The values come from
+       package-level Version / Commit variables in version.go that
+       xcaddy populates via `-ldflags "-X ..."` at build time. On
+       dev builds (no ldflags) they fall back to "dev" / "unknown".
+
+       Format: "caddy_media_gallery <version> // <commit>" — the
+       "//" separator matches the cache-stats line below for visual
+       consistency. Anchored to the gallery repo if the commit is
+       a real hex hash (so visitors can click to view source), or
+       just plain text if it's the "unknown" fallback. */}}
+  <div class="site-footer-version">
+    caddy_media_gallery {{.ModuleVersion}} //
+    {{if eq .ModuleCommit "unknown"}}{{.ModuleCommit}}{{else}}<a href="https://github.com/synapticloop/caddy_media_gallery/commit/{{.ModuleCommit}}" rel="noopener" target="_blank">{{.ModuleCommit}}</a>{{end}}
   </div>
   {{/* cache stats footer.
        XX // YY // ZZ // AA where XX is cache usage percent

@@ -15,10 +15,20 @@ import (
 	"time"
 )
 
-// PageData is the top-level template data for a gallery page.
-// All values are pre-formatted for direct template use — no
+// PageData is the bag-of-stuff passed to gallery.tmpl. Most fields are
+// direct copies of inputs; the rest are pre-rendered HTML or other
 // template-level computations needed.
 type PageData struct {
+	// Build metadata (added in 1.0.2, build/version-details branch).
+	// Populated from package-level Version / Commit vars in render.go's
+	// PageData construction. When the binary is built with the standard
+	// -ldflags "-X ..." invocation, these reflect the release tag and
+	// the short git commit hash; when built without ldflags they fall
+	// back to the safe defaults ("dev" and "unknown") so the footer
+	// still renders something sensible.
+	ModuleVersion string
+	ModuleCommit  string
+
 	Title       string
 	PathPrefix  string // e.g. "./" — prefix for relative links
 	ThumbPrefix string // e.g. "./_thumbs/" — prefix for thumb URLs
@@ -2375,6 +2385,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		Query:            query,
 		SearchQuery:      query.Get("q"),
 		SearchMatch:      searchMatch,
+		// Build metadata (added 1.0.2, build/version-details branch).
+		// ModuleVersion / ModuleCommit come from package-level vars that
+		// are set at xcaddy build time via -ldflags "-X ...". Falls
+		// back to "dev" / "unknown" so the footer always renders
+		// something meaningful even on dev builds.
+		ModuleVersion: Version,
+		ModuleCommit:  Commit,
 		// Per user request 2026-06-28: populate the
 		// search-aware header fields.
 		//
