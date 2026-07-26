@@ -2569,16 +2569,18 @@ updated twice.
 #gallery-lightbox .lb-exif-table td {
   padding: 0;
   /* Per user request 2026-07-04 (audio-integration
-     branch): the labels and values are now vertically
-     centered in the td (the previous `vertical-align:
-     top` left the labels at the top of each cell, which
-     looked misaligned with the values when the label
-     line height differed from the value line height).
-     "middle" centers them in the row height. This
-     affects all 3 meta panels (image EXIF, video META,
-     audio META) because they all share this CSS rule
-     via the .lb-exif-table class. */
-  vertical-align: middle;
+     branch): the previous vertical-align was `top` (labels
+     stuck to the top of the row, misaligned with the value
+     baseline when the fonts had different sizes). The
+     user then iterated to `middle` (vertically centered
+     in the row) and then to `bottom` (vertically aligned
+     with the baseline of the row — preferred because
+     the values look balanced with the row's bottom
+     edge rather than floating in the middle).
+     `bottom` affects all 3 meta panels (image EXIF,
+     video META, audio META) because they all share this
+     CSS rule via the .lb-exif-table class. */
+  vertical-align: bottom;
 }
 #gallery-lightbox .lb-exif-label {
   /* Per user report 2026-07-04 (audio-integration
