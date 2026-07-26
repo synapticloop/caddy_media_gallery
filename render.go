@@ -1230,7 +1230,16 @@ func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 		switch f.Kind {
 		case KindDir:
 			dirs = append(dirs, f)
-		case KindImage, KindVideo:
+		// Per user request 2026-07-04 (audio-integration branch):
+		// KindAudio is included in the images slice so audio
+		// files get rendered as `<a class="card audio">` cards
+		// (with the SVG speaker-icon placeholder tile) instead
+		// of falling through to the "Other files" table at the
+		// bottom of the page. Audio files still have a row in
+		// the Other table too (handled by the "default" case)
+		// if the visitor clicks a file with no thumbnail; the
+		// card is the primary way to open them in the lightbox.
+		case KindImage, KindVideo, KindAudio:
 			images = append(images, f)
 		default:
 			others = append(others, f)
