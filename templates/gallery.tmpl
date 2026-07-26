@@ -1818,6 +1818,46 @@ updated twice.
   align-items: center;
   justify-content: center;
 }
+/* Per user request 2026-07-04 (Q6 on the audio-integration
+   branch): audio files have no real thumbnail — the tile
+   uses an inline SVG speaker-icon placeholder. Background is
+   a different gradient from .thumb-video (warm purple
+   instead of cool blue-grey) so visitors can distinguish
+   audio cards from video cards at a glance. Centered SVG
+   icon at 56% size, themed via fill="currentColor" so the
+   icon adapts to the page's foreground colour. The CSS
+   variables (--fg-muted, --accent) keep the icon visible
+   in both light and dark mode without any per-mode CSS. */
+.thumb-audio {
+  background: linear-gradient(135deg, #2a1a35 0%, #4a2d50 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fg-muted);
+}
+.thumb-audio .audio-icon {
+  width: 56%;
+  height: 56%;
+  color: var(--accent);
+}
+/* Per user request 2026-07-04: the audio duration pill
+   (data-audio-duration) sits at the bottom-left of the
+   card, mirroring the existing video duration pill. Same
+   style — same background, padding, font. Visible only
+   when AudioMeta has a parsed Duration (e.g. "1:23"). */
+.thumb-audio-duration {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.4rem;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+}
 .play-overlay {
   /* Per Phase 62: position: absolute so the play button sits
      on top of the video thumbnail image (when present) instead
@@ -2528,10 +2568,33 @@ updated twice.
 }
 #gallery-lightbox .lb-exif-table td {
   padding: 0;
-  vertical-align: top;
+  /* Per user request 2026-07-04 (audio-integration
+     branch): the previous vertical-align was `top` (labels
+     stuck to the top of the row, misaligned with the value
+     baseline when the fonts had different sizes). The
+     user then iterated to `middle` (vertically centered
+     in the row) and then to `bottom` (vertically aligned
+     with the baseline of the row — preferred because
+     the values look balanced with the row's bottom
+     edge rather than floating in the middle).
+     `bottom` affects all 3 meta panels (image EXIF,
+     video META, audio META) because they all share this
+     CSS rule via the .lb-exif-table class. */
+  vertical-align: bottom;
 }
 #gallery-lightbox .lb-exif-label {
-  color: rgba(255, 255, 255, 0.55);
+  /* Per user report 2026-07-04 (audio-integration
+     branch): the previous color (rgba(255, 255, 255,
+     0.55)) was too dim — the labels (CODEC, SAMPLE RATE,
+     CHANNELS, etc.) were hard to read against the dark
+     panel background. The user asked: "they should be
+     the same colour as the other values in the image
+     and video meta" — i.e. the value color, which is
+     rgba(255, 255, 255, 0.9) (inherited from the panel
+     color). We now set the label color explicitly to
+     match so the user can read both the label and the
+     value at the same brightness. */
+  color: rgba(255, 255, 255, 0.9);
   padding-right: 0.6rem !important;
   text-transform: uppercase;
   font-size: 0.65rem;
@@ -2598,6 +2661,18 @@ updated twice.
       <span>//</span>
       <span>{{.ImageCount}} {{if eq .ImageCount 1}}{{t "image_count"}}{{else}}{{t "images_count"}}{{end}}</span>
       {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} {{if eq .TotalVideos 1}}{{t "video_count"}}{{else}}{{t "videos_count"}}{{end}}</span>{{end}}
+      {{- /* Per user request 2026-07-04 (audio-integration
+           branch): the audio count goes BETWEEN the
+           video count and the "other files" count, so
+           visitors can see at a glance how many audio
+           files are in the directory. Same show-if-N>0
+           pattern as the video count above — only shown
+           when there are actually audio files
+           (operator-set via audio_types). The
+           "audios_count" / "audio_count" lang keys
+           mirror the image/video pair (singular vs plural
+           — e.g. "1 audio" vs "3 audios"). */}}
+      {{if gt .TotalAudio 0}}<span>·</span><span>{{.TotalAudio}} {{if eq .TotalAudio 1}}{{t "audio_count"}}{{else}}{{t "audios_count"}}{{end}}</span>{{end}}
       {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} {{if eq (len .OtherFiles) 1}}{{t "other_file"}}{{else}}{{t "other_files"}}{{end}}</span>{{end}}
       <span>//</span>
       <span>({{.TotalAllFilesSize}} {{t "total_size_label"}})</span>
@@ -2666,7 +2741,7 @@ updated twice.
        doesn't lose their filter state when navigating up. */}}
 
 
-        {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
+        {{if or (gt .FilterImageOptions.Total 0) (gt .FilterVideoOptions.Total 0) (gt .FilterAudioOptions.Total 0) (gt .FilterOtherOptions.Total 0)}}
     <form class="filter-form" method="get" action="">
       {{- /* Preserve other URL params (sort, page_size, etc.) when submitting. */ -}}
       {{- /* include page_size so changing */ -}}
@@ -2717,6 +2792,25 @@ updated twice.
           </summary>
           <div class="filter-dropdown-body">
             {{range .FilterVideoOptions.Options}}
+            <label class="filter-option">
+              <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
+              <span class="filter-option-name">{{.DisplayExt}}</span>
+              <span class="filter-option-count">({{.Count}})</span>
+            </label>
+            {{end}}
+          </div>
+        </details>
+        {{end}}
+
+        {{if gt .FilterAudioOptions.Total 0}}
+        <details class="filter-dropdown">
+          <summary class="filter-pill{{if gt .FilterAudioOptions.Selected 0}} filter-pill-has-selection{{end}}">
+            {{.FilterAudioOptions.Label}}
+            <span class="filter-count">({{.FilterAudioOptions.Selected}}/{{.FilterAudioOptions.Total}})</span>
+            <span class="filter-caret" aria-hidden="true">▾</span>
+          </summary>
+          <div class="filter-dropdown-body">
+            {{range .FilterAudioOptions.Options}}
             <label class="filter-option">
               <input type="checkbox" name="ext" value="{{.Ext}}" {{if .Selected}}checked{{end}}>
               <span class="filter-option-name">{{.DisplayExt}}</span>
@@ -3717,6 +3811,22 @@ dirs and others tables have
     meta_audio: '{{t "meta_audio"}}',
     meta_bitrate: '{{t "meta_bitrate"}}',
     meta_framerate: '{{t "meta_framerate"}}',
+    // Per user report 2026-07-04 (audio-integration branch):
+    // the audio-meta panel in the lightbox uses four extra
+    // translation keys for codec / sample rate / channels /
+    // channel layout. The first commit that added them
+    // (9b8557a "audio: add audio count to the status line")
+    // also added the keys to all 8 lang files but FORGOT to
+    // add them to this inline TRANSLATIONS map. Result: the
+    // raw key was rendered in the lightbox instead of the
+    // translation (e.g. "meta_codec" instead of "Codec" /
+    // "Codec" / "Códec" / "コーデック" / etc.). This commit
+    // wires them up so the audio meta panel labels are
+    // localised for every supported language.
+    meta_codec: '{{t "meta_codec"}}',
+    meta_sample_rate: '{{t "meta_sample_rate"}}',
+    meta_channels: '{{t "meta_channels"}}',
+    meta_channel_layout: '{{t "meta_channel_layout"}}',
     media_label: '{{t "media_label"}}',
     search_label: '{{t "search_label"}}',
     search_showing: '{{t "search_showing"}}',
@@ -3776,6 +3886,26 @@ dirs and others tables have
           '<tr><td class="lb-exif-label">' + t('meta_framerate') + '</td><td class="lb-exif-val" data-video="framerate"></td></tr>' +
         '</table>' +
       '</div>' +
+    '</div>' +
+    // audio metadata panel
+    // (parallel to the EXIF and VIDEO panels for image and
+    // video respectively). Shows codec, sample rate,
+    // channels, channel layout, duration, bitrate extracted
+    // from ffprobe (cached in .ameta sidecars). Same
+    // collapsible-header pattern as the other panels.
+    // Storage key: gallery-lb-audio-meta-collapsed.
+    '<div class="lb-audio-meta" hidden>' +
+      '<div class="lb-exif-header" data-lb-panel="audio-meta" role="button" tabindex="0" aria-expanded="true" title="Click to collapse/expand">{{t "meta_label"}}</div>' +
+      '<div class="lb-exif-body">' +
+        '<table class="lb-exif-table">' +
+          '<tr><td class="lb-exif-label">' + t('meta_codec') + '</td><td class="lb-exif-val" data-audio="codec"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_sample_rate') + '</td><td class="lb-exif-val" data-audio="sample-rate"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_channels') + '</td><td class="lb-exif-val" data-audio="channels"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_channel_layout') + '</td><td class="lb-exif-val" data-audio="channel-layout"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_duration') + '</td><td class="lb-exif-val" data-audio="duration"></td></tr>' +
+          '<tr><td class="lb-exif-label">' + t('meta_bitrate') + '</td><td class="lb-exif-val" data-audio="bitrate"></td></tr>' +
+        '</table>' +
+      '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 
@@ -3790,10 +3920,18 @@ dirs and others tables have
   // child instead of an <img>). Both open in the unified
   // lightbox. Other file types (no <img> and not .video) keep
   // their default link behavior.
+  // Per user request 2026-07-04 (audio-integration
+  // branch): cards with the .audio class are also picked
+  // up here (parallel to .video). The card itself has no
+  // <img> child (audio cards use an inline SVG speaker-
+  // icon placeholder instead), so the filter checks the
+  // .audio class explicitly. The lightbox handler in
+  // openLightbox() then renders an <audio controls>
+  // element for .audio cards.
   var cards = Array.prototype.slice.call(
     document.querySelectorAll('.card')
   ).filter(function(c) {
-    return c.querySelector('img') || c.classList.contains('video');
+    return c.querySelector('img') || c.classList.contains('video') || c.classList.contains('audio');
   });
   var idx = 0;
 
@@ -3912,6 +4050,7 @@ dirs and others tables have
     var href = c.getAttribute('href') || '';
     var name = (c.querySelector('.tile-name') || {}).textContent || '';
     var isVideo = c.classList.contains('video');
+    var isAudio = c.classList.contains('audio');
     clear();
     if (isVideo) {
       // show the video thumbnail
@@ -3964,6 +4103,27 @@ dirs and others tables have
         var defaultHidden = videoMetaPanel.getAttribute('data-default-hidden') === 'true';
         videoMetaPanel.hidden = defaultHidden;
       });
+    } else if (isAudio) {
+      // Per user request 2026-07-04 (audio-integration
+      // branch): the audio lightbox path is parallel to
+      // the video path above. The card carries
+      // data-audio-* attributes (rendered by
+      // buildAudioMetaAttrString in render.go); the JS
+      // reads them and populates a separate
+      // lb-audio-meta panel. The <audio controls>
+      // element is a native browser audio player — no
+      // custom playback controls needed. The tile card
+      // (already rendered with an SVG speaker-icon
+      // placeholder) is shown as the "poster" via the
+      // browser's default "first frame" behavior — but
+      // for audio there's no frame, so the player just
+      // shows the controls.
+      var a = document.createElement('audio');
+      a.src = href;
+      a.controls = true;
+      a.preload = 'metadata';
+      a.alt = name;
+      currentEl = a;
     } else {
       var img = document.createElement('img');
       img.src = href;
@@ -3971,6 +4131,144 @@ dirs and others tables have
       currentEl = img;
     }
     media.appendChild(currentEl);
+    // Per user request 2026-07-04 (audio-integration
+    // branch): re-parent the audio meta panel to be
+    // inside the media div (as a sibling of the <audio>
+    // element) so it appears BELOW the audio controls in
+    // document flow. We do this AFTER media.appendChild
+    // so the audio is already a child of media (the
+    // insertBefore below needs a valid reference node).
+    //
+    // Without this, the audio meta panel inherits the
+    // .lb-video-meta CSS (`position: absolute; bottom:
+    // 6rem; left: 50%`) and ends up at the same Y
+    // position as the audio controls (also at the bottom
+    // of the overlay) — visually OVERLAPPING them in a
+    // side-by-side layout. The user reported this on
+    // 2026-07-04: "in the lightbox for audio files, put
+    // the meta information below the audio controls".
+    if (isAudio) {
+      // Find the audio meta panel. It was originally a
+      // child of overlay (placed there by the innerHTML
+      // at lightbox creation time). On subsequent card
+      // clicks, the panel may have been re-parented into
+      // a previous media div (from an earlier audio card
+      // click) — check both locations.
+      var amp = media.querySelector('.lb-audio-meta');
+      if (!amp) {
+        amp = overlay.querySelector('.lb-audio-meta');
+      }
+      if (amp) {
+        // Make the audio meta a sibling of the <audio>
+        // element inside the media div. Use
+        // insertBefore(currentEl) so the audio is FIRST
+        // and the meta is SECOND. With flex-direction:
+        // column, that renders as audio on top, meta on
+        // bottom (the order the user asked for).
+        media.insertBefore(amp, null);
+        media.style.flexDirection = 'column';
+        media.style.gap = '1.5rem';
+        amp.style.position = 'static';
+        amp.style.left = 'auto';
+        amp.style.right = 'auto';
+        amp.style.bottom = 'auto';
+        amp.style.transform = 'none';
+        amp.style.margin = '0';
+        amp.style.display = 'block';
+        // Per user report 2026-07-04 (audio-integration
+        // branch): when the audio meta is moved INTO the
+        // media div, it loses the .lb-exif / .lb-video-meta
+        // CSS rules (which only target direct children of
+        // the overlay). The values rendered with the
+        // body's default color (rgb(17, 17, 17) — almost
+        // black) and a transparent background. To match
+        // the visual treatment of the other panels we
+        // set the color, background, padding, and other
+        // properties inline — duplicating the .lb-exif CSS
+        // values here. (The video-meta and exif panels
+        // use the same colors via the .lb-exif /
+        // .lb-video-meta CSS rules; for the audio panel
+        // we're outside that ruleset because we moved it
+        // out of the overlay.)
+        amp.style.color = 'rgba(255, 255, 255, 0.9)';
+        amp.style.background = 'rgba(0, 0, 0, 0.55)';
+        amp.style.padding = '0.6rem 0.9rem';
+        amp.style.borderRadius = '6px';
+        amp.style.fontSize = '0.8rem';
+        amp.style.lineHeight = '1.5';
+        amp.style.whiteSpace = 'nowrap';
+        amp.style.backdropFilter = 'blur(4px)';
+        amp.style.minWidth = '340px';
+        // align-self: center centers the panel horizontally
+        // (main axis is vertical because flex-direction is
+        // column, so align-self affects the cross axis =
+        // horizontal). center = horizontally centered.
+        amp.style.alignSelf = 'center';
+      }
+    } else {
+      // Per user report 2026-07-04 (audio-integration
+      // branch): for non-audio cards (images, videos,
+      // or files that have no card class), the audio
+      // meta panel must NOT be visible. If a previous
+      // card click moved the audio meta INTO the media
+      // div (the audio branch above), it stays there as
+      // a sibling of the <img>/<video> element. The
+      // `hidden` attribute alone isn't enough because
+      // the audio branch above sets `display: block`
+      // inline, which overrides the browser's default
+      // `[hidden] { display: none }` style.
+      //
+      // Two things to fix:
+      //   1. Move the audio meta BACK to the overlay
+      //      (its original location from the innerHTML)
+      //      so it doesn't sit next to the image/video
+      //      in document flow.
+      //   2. CLEAR the inline display: block style
+      //      (set to empty string) so the browser's
+      //      default `[hidden] { display: none }` works
+      //      again. Setting `display = ''` removes the
+      //      inline style entirely; the browser's CSS
+      //      default for `[hidden]` then takes over.
+      var amp2 = media.querySelector('.lb-audio-meta');
+      if (!amp2) {
+        amp2 = overlay.querySelector('.lb-audio-meta');
+      }
+      if (amp2) {
+        // Move back to overlay (its original position).
+        // The audio meta was a direct child of overlay
+        // (after the lb-video-meta div, before the media
+        // div) per the innerHTML template. We just append
+        // it back to overlay; the exact DOM position
+        // doesn't matter because it's hidden when
+        // !isAudio.
+        if (amp2.parentElement !== overlay) {
+          overlay.appendChild(amp2);
+        }
+        // Clear the inline display style so the
+        // [hidden] attribute works as expected.
+        amp2.style.display = '';
+        // Reset the position overrides (the audio branch
+        // sets position: static etc.; for non-audio we
+        // want the panel to revert to its inherited CSS
+        // — .lb-video-meta { position: absolute; ... }
+        // — so it sits at the bottom of the viewport.
+        amp2.style.position = '';
+        amp2.style.left = '';
+        amp2.style.right = '';
+        amp2.style.bottom = '';
+        amp2.style.transform = '';
+        amp2.style.margin = '';
+        amp2.style.alignSelf = '';
+        // Reset the media div's flex-direction back to
+        // row (the default) — the audio branch sets it
+        // to column for audio cards. Non-audio cards
+        // need the default layout (which is fine
+        // because the media div has only one child
+        // — <img> or <video> — for non-audio cards).
+        media.style.flexDirection = '';
+        media.style.gap = '';
+      }
+    }
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
     // EXIF is read EAGERLY at
@@ -3989,6 +4287,7 @@ dirs and others tables have
     // hidden.
     var exifPanel = overlay.querySelector('.lb-exif');
     var videoMetaPanel = overlay.querySelector('.lb-video-meta');
+    var audioMetaPanel = overlay.querySelector('.lb-audio-meta');
     if (isVideo) {
       // populate the video
       // metadata panel for video files. Reads the
@@ -4021,6 +4320,37 @@ dirs and others tables have
     } else {
       videoMetaPanel.hidden = true;
       videoMetaPanel.setAttribute('data-default-hidden', 'true');
+    }
+    // Per user request 2026-07-04 (audio-integration
+    // branch): populate the audio metadata panel. Reads
+    // data-audio-* attributes (rendered by
+    // buildAudioMetaAttrString in render.go). The panel
+    // is hidden if no audio metadata is available —
+    // mirrors the video panel's "if any field is non-empty,
+    // show the panel" logic. Layout: the panel header
+    // says "AUDIO" (parallel to "VIDEO"); rows for codec,
+    // sample rate, channels, channel layout, duration,
+    // bitrate.
+    if (isAudio) {
+      var audioCodecA = c.getAttribute('data-audio-codec') || '';
+      var sampleRate = c.getAttribute('data-audio-sample-rate') || '';
+      var channels = c.getAttribute('data-audio-channels') || '';
+      var channelLayout = c.getAttribute('data-audio-channel-layout') || '';
+      var audioDuration = c.getAttribute('data-audio-duration') || '';
+      var audioBitrate = c.getAttribute('data-audio-bitrate') || '';
+      if (audioCodecA || sampleRate || channels || channelLayout || audioDuration || audioBitrate) {
+        audioMetaPanel.querySelector('[data-audio="codec"]').textContent = audioCodecA || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="sample-rate"]').textContent = sampleRate || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="channels"]').textContent = channels || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="channel-layout"]').textContent = channelLayout || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="duration"]').textContent = audioDuration || '\u2014';
+        audioMetaPanel.querySelector('[data-audio="bitrate"]').textContent = audioBitrate || '\u2014';
+        audioMetaPanel.hidden = false;
+      } else {
+        audioMetaPanel.hidden = true;
+      }
+    } else {
+      audioMetaPanel.hidden = true;
     }
     if (!isVideo) {
       var cameraMake = c.getAttribute('data-exif-camera-make') || '';

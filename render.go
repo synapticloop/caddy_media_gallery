@@ -145,11 +145,15 @@ type PageData struct {
 	// Configured via the `page_sizes` Caddyfile directive;
 	// defaults to [30, 60, 120, "all"].
 	PageSizes []string
-	// TotalImages is the total media count (images + videos)
-	// AFTER the search/type filters have been applied. Used
-	// for the pagination math and the visibility check on
-	// the images grid section. If the user has ?q=foo in
-	// the URL, this is the count of items matching "foo".
+	// TotalImages is the total media count (images + videos +
+	// audio) AFTER the search/type filters have been
+	// applied. Used for the pagination math and the
+	// visibility check on the images grid section. If the
+	// user has ?q=foo in the URL, this is the count of
+	// items matching "foo". Per user request 2026-07-04
+	// (audio-integration branch): audio files (KindAudio)
+	// are part of this count too — they share the same
+	// paginated media grid as images and videos.
 	TotalImages int
 	// DirectoryTotal is the total media count in the
 	// directory BEFORE any search/type filters are applied.
@@ -176,18 +180,28 @@ type PageData struct {
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
 	TotalVideos int
+	// TotalAudio is the count of audio files only — shown
+	// in the header meta line as "N audio" / "N audios"
+	// (after videos, only if > 0). Per user request
+	// 2026-07-04 (audio-integration branch): the status
+	// line needed a separate audio count between the video
+	// and "other files" counts, so visitors can see at a
+	// glance how many audio files are in the directory
+	// without expanding the "Other files" table.
+	TotalAudio int
 	// TotalFiles is the sum of all files in the directory:
-	// ImageCount + TotalVideos + len(OtherFiles). Computed
-	// in RenderPage (not the template) and shown at the start
-	// of the header meta line as "N files" (per user request
-	// 2026-06-19: a quick "how many files are in this dir"
-	// answer at the top of the meta line).
+	// ImageCount + TotalVideos + TotalAudio + len(OtherFiles).
+	// Computed in RenderPage (not the template) and shown
+	// at the start of the header meta line as "N files"
+	// (per user request 2026-06-19: a quick "how many files
+	// are in this dir" answer at the top of the meta line).
 	TotalFiles int
 	// TotalAllFilesSize is the pre-formatted (via humanSize) total
-	// size of ALL files in the directory: images + videos + other
-	// files. Excludes subdirectories (which don't have a Size
-	// field). Shown in the header meta line as a separate segment
-	// wrapped in `//` separators, per user request 2026-06-18:
+	// size of ALL files in the directory: images + videos +
+	// audio + other files. Excludes subdirectories (which
+	// don't have a Size field). Shown in the header meta line
+	// as a separate segment wrapped in `//` separators, per
+	// user request 2026-06-18:
 	//   "the X.X KB is the total for all files in the directory"
 	// e.g. "34 images ·8 videos ·2 other files // (8.3 MB) //
 	//        ·26 directories ·50 per page"
@@ -233,15 +247,29 @@ type PageData struct {
 	// so the user can re-submit their selection.
 	TypeFilterQuery string
 
-	// FilterImageOptions / FilterVideoOptions / FilterOtherOptions
-	// are the three filter dropdowns (Images / Videos / Other).
-	// Each contains the extensions present in the current
-	// directory, with their counts, marked as Selected if
-	// currently in the active filter. The UI renders these
-	// as three side-by-side dropdowns + an Apply button.
+	// FilterImageOptions / FilterVideoOptions / FilterAudioOptions /
+	// FilterOtherOptions are the four filter dropdowns
+	// (Images / Videos / Audio / Other). Each contains the
+	// extensions present in the current directory, with
+	// their counts, marked as Selected if currently in the
+	// active filter. The UI renders these as four
+	// side-by-side dropdowns + an Apply button.
+	// Per user request 2026-07-04 (Q7 on the audio-integration
+	// branch): the Audio group is only populated when the
+	// operator has set `audio_types`; otherwise the field
+	// stays zero (FilterGroup's default empty Options slice)
+	// and the template hides the dropdown.
 	FilterImageOptions FilterGroup
 	FilterVideoOptions FilterGroup
+	FilterAudioOptions FilterGroup
 	FilterOtherOptions FilterGroup
+	// AudioNoMetaSet is true when the operator explicitly set
+	// `no_audio_meta` in the Caddyfile. Mirrors the existing
+	// NoMetaSet pattern for video. Currently informational
+	// only — the template could use it to show a "metadata
+	// disabled" hint next to the Audio dropdown. Not used
+	// yet (1.1.0-rc1); reserved for a future enhancement.
+	AudioNoMetaSet bool
 }
 
 // FileView is the template-friendly representation of a single
@@ -256,6 +284,11 @@ type FileView struct {
 	IsUp     bool // true for the synthetic "../" up-link entry (rendered with ↑ icon, no trailing /)
 	IsImage  bool
 	IsVideo  bool
+	// IsAudio is true for KindAudio entries (per user
+	// request 2026-07-04 on the audio-integration branch).
+	// The template uses it to render the SVG speaker-
+	// icon placeholder tile and the audio lightbox path.
+	IsAudio  bool
 	IsOther  bool
 	// Per user request 2026-06-30: DisplayName is the name
 	// shown to the visitor as a hover tooltip on each
@@ -341,7 +374,22 @@ type FileView struct {
 	// Empty if no video metadata. The lightbox JS
 	// reads these attributes and populates a separate
 	// "video metadata" panel.
-	VideoMetaAttrs template.HTMLAttr // pre-rendered video data attributes (trusted HTML — values are html.EscapeString'd)
+	VideoMetaAttrs template.HTMLAttr
+	// Per user request 2026-07-04 (Q4 on the audio-
+	// integration branch): AudioMeta holds the
+	// stream-level audio metadata for KindAudio files.
+	// Nil for non-audio entries. The lightbox JS reads
+	// the AudioMetaAttrs string below to populate the
+	// "audio metadata" panel (parallel to the video META
+	// panel — but rendered in the audio lightbox path,
+	// not the video one).
+	AudioMeta *AudioMeta
+	// AudioMetaAttrs is the pre-rendered `data-audio-*`
+	// attribute string (parallel to VideoMetaAttrs).
+	// Empty if no audio metadata. Values are
+	// html.EscapeString'd (trusted HTML, same as
+	// VideoMetaAttrs / ExifAttrs).
+	AudioMetaAttrs template.HTMLAttr
 
 	// CardHTML is the entire card markup pre-rendered as a
 	// single string. Per optimization 2026-07-01: instead of
@@ -698,6 +746,51 @@ func buildVideoMetaAttrString(v *VideoMeta) template.HTMLAttr {
 	return template.HTMLAttr(b.String())
 }
 
+// buildAudioMetaAttrString formats AudioMeta into a
+// data-audio-* attribute string. Parallel to
+// buildVideoMetaAttrString (above). The attributes are
+// consumed by the lightbox JS to populate a separate
+// "audio metadata" panel (visible only for KindAudio files).
+// Empty if no metadata (no audio meta or no ffmpeg).
+func buildAudioMetaAttrString(a *AudioMeta) template.HTMLAttr {
+	if a == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(192) // pre-allocate ~192 bytes (typical size)
+	if a.Codec != "" {
+		_, _ = b.WriteString(` data-audio-codec="`)
+		_, _ = b.WriteString(html.EscapeString(a.Codec))
+		_, _ = b.WriteString(`"`)
+	}
+	if a.SampleRate != "" {
+		_, _ = b.WriteString(` data-audio-sample-rate="`)
+		_, _ = b.WriteString(html.EscapeString(a.SampleRate))
+		_, _ = b.WriteString(`"`)
+	}
+	if a.Channels != "" {
+		_, _ = b.WriteString(` data-audio-channels="`)
+		_, _ = b.WriteString(html.EscapeString(a.Channels))
+		_, _ = b.WriteString(`"`)
+	}
+	if a.ChannelLayout != "" {
+		_, _ = b.WriteString(` data-audio-channel-layout="`)
+		_, _ = b.WriteString(html.EscapeString(a.ChannelLayout))
+		_, _ = b.WriteString(`"`)
+	}
+	if a.Duration != "" {
+		_, _ = b.WriteString(` data-audio-duration="`)
+		_, _ = b.WriteString(html.EscapeString(a.Duration))
+		_, _ = b.WriteString(`"`)
+	}
+	if a.Bitrate != "" {
+		_, _ = b.WriteString(` data-audio-bitrate="`)
+		_, _ = b.WriteString(html.EscapeString(a.Bitrate))
+		_, _ = b.WriteString(`"`)
+	}
+	return template.HTMLAttr(b.String())
+}
+
 // buildExifAttrString formats the EXIF data for the
 // data-exif-* HTML attributes. Per optimization 2026-06-30:
 // this avoids 8 separate reflection-based field lookups in
@@ -759,6 +852,14 @@ func buildCardHTML(v FileView) template.HTML {
 	// <a class="card..." data-filename="...">...</a>
 	if v.IsVideo {
 		_, _ = b.WriteString(`<a class="card video" data-filename="`)
+	} else if v.IsAudio {
+		// Per user request 2026-07-04 (audio-integration
+		// branch): audio cards get the .audio class so
+		// the JS lightbox path can pick them up (parallel
+		// to .video). The card itself has no <img> child
+		// — the .thumb-audio SVG speaker-icon placeholder
+		// is rendered inline below.
+		_, _ = b.WriteString(`<a class="card audio" data-filename="`)
 	} else {
 		_, _ = b.WriteString(`<a class="card" data-filename="`)
 	}
@@ -774,6 +875,17 @@ func buildCardHTML(v FileView) template.HTML {
 	if v.VideoMetaAttrs != "" {
 		_, _ = b.WriteString(string(v.VideoMetaAttrs))
 	}
+	// Per user request 2026-07-04 (audio-integration
+	// branch): emit the data-audio-* attributes for
+	// KindAudio cards. The lightbox JS reads them and
+	// populates a separate audio-metadata panel. Empty
+	// when AudioMeta is nil (e.g. audio_types set but
+	// ffmpeg missing → Q3 fallback), in which case the
+	// lightbox shows the audio player but the metadata
+	// panel stays hidden.
+	if v.AudioMetaAttrs != "" {
+		_, _ = b.WriteString(string(v.AudioMetaAttrs))
+	}
 	_, _ = b.WriteString(`>`)
 	// <div class="thumb...">
 	// Per user feedback 2026-07-01: the 'loading' class
@@ -787,6 +899,33 @@ func buildCardHTML(v FileView) template.HTML {
 	// entirely, and only true cold loads see it.
 	if v.IsVideo {
 		_, _ = b.WriteString(`<div class="thumb thumb-video">`)
+	} else if v.IsAudio {
+		// Per user request 2026-07-04 (Q6 on the
+		// audio-integration branch): audio cards have
+		// no real thumbnail — render an inline SVG
+		// speaker icon. The .thumb-audio CSS class
+		// (defined in the CSS block above) gives it
+		// the warm-purple gradient background. The SVG
+		// uses fill="currentColor" so the icon colour
+		// tracks the page's --accent variable (light
+		// blue in light mode, lighter blue in dark mode).
+		// No <img> child — the card is purely CSS/SVG.
+		_, _ = b.WriteString(`<div class="thumb thumb-audio">`)
+		_, _ = b.WriteString(`<svg class="audio-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">`)
+		_, _ = b.WriteString(`<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`)
+		_, _ = b.WriteString(`</svg>`)
+		// Per user report 2026-07-04 (audio-integration
+		// branch, post-merge bug): the </div> was
+		// INSIDE the audio branch, but the image and
+		// video branches close their .thumb div at the
+		// shared line below. That extra </div> here made
+		// the audio card's HTML unbalanced (5 <div
+		// vs 6 </div>), which caused the browser to
+		// close the <a> early, swallowing the next
+		// sibling card. The audio card then occupied
+		// the full column width. Removed — the </div>
+		// at the shared close point now handles audio
+		// too.
 	} else {
 		_, _ = b.WriteString(`<div class="thumb">`)
 	}
@@ -799,6 +938,9 @@ func buildCardHTML(v FileView) template.HTML {
 		}
 		// Per Phase 62: video cards always show the play overlay
 		_, _ = b.WriteString(`<div class="play-overlay">▶</div>`)
+	} else if v.IsAudio {
+		// (no <img> for audio — the SVG icon above is the
+		// entire thumbnail)
 	} else {
 		_, _ = b.WriteString(`<img loading="lazy" src="`)
 		_, _ = b.WriteString(html.EscapeString(v.ThumbURL))
@@ -823,6 +965,19 @@ func buildCardHTML(v FileView) template.HTML {
 	if v.IsVideo && v.VideoMeta != nil && v.VideoMeta.Duration != "" {
 		_, _ = b.WriteString(`<span class="thumb-duration">`)
 		_, _ = b.WriteString(html.EscapeString(v.VideoMeta.Duration))
+		_, _ = b.WriteString(`</span>`)
+	}
+	// Per user request 2026-07-04 (audio-integration
+	// branch): parallel pill for audio. Same
+	// data-source (AudioMeta.Duration) but a different
+	// CSS class so the pill colour matches the audio
+	// card's purple gradient. Empty pill if the operator
+	// has no_audio_meta set OR if ffmpeg/ffprobe isn't
+	// available (Q3 fallback: audio works without
+	// metadata, just no duration label on the card).
+	if v.IsAudio && v.AudioMeta != nil && v.AudioMeta.Duration != "" {
+		_, _ = b.WriteString(`<span class="thumb-audio-duration">`)
+		_, _ = b.WriteString(html.EscapeString(v.AudioMeta.Duration))
 		_, _ = b.WriteString(`</span>`)
 	}
 	// Open-in-new-tab button. The title + aria-label are translated
@@ -951,6 +1106,20 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		}
 		v.Size = humanSize(f.Size)
 		v.Date = formatDate(f.ModTime)
+	case KindAudio:
+		// Per user request 2026-07-04 (Q6 on the audio-
+		// integration branch): no real thumbnail for
+		// audio — the tile uses an inline SVG speaker-
+		// icon placeholder (rendered in the template).
+		// ThumbURL stays empty so the template renders
+		// the SVG fallback path instead of an <img>.
+		// The duration pill (data-audio-duration) is
+		// rendered from the data-audio-* attributes that
+		// the lightbox JS reads.
+		v.IsAudio = true
+		v.Href = pathPrefix + f.Name
+		v.Size = humanSize(f.Size)
+		v.Date = formatDate(f.ModTime)
 	default:
 		v.IsOther = true
 		v.Href = pathPrefix + f.Name
@@ -984,6 +1153,14 @@ func buildFileView(f FileInfo, pathPrefix, thumbPrefix string, noThumbs, noVideo
 		v.VideoMeta = f.VideoMeta
 		v.VideoMetaAttrs = buildVideoMetaAttrString(f.VideoMeta)
 	}
+	// Per user request 2026-07-04 (audio-integration
+	// branch): same flow for audio. f.AudioMeta is
+	// nil for non-KindAudio entries; the Attrs string
+	// is empty in that case (the lightbox JS path
+	// checks AudioMetaAttrs == "" to decide whether
+	// to render the audio metadata panel).
+	v.AudioMeta = f.AudioMeta
+	v.AudioMetaAttrs = buildAudioMetaAttrString(f.AudioMeta)
 	// Copy dimensions through. Per user request 2026-06-27:
 	// the bottom-right watermark shows the source file's
 	// W × H. The formatDimensions helper returns an empty
@@ -1078,7 +1255,16 @@ func splitFiles(files []FileInfo) (dirs, others, images []FileInfo) {
 		switch f.Kind {
 		case KindDir:
 			dirs = append(dirs, f)
-		case KindImage, KindVideo:
+		// Per user request 2026-07-04 (audio-integration branch):
+		// KindAudio is included in the images slice so audio
+		// files get rendered as `<a class="card audio">` cards
+		// (with the SVG speaker-icon placeholder tile) instead
+		// of falling through to the "Other files" table at the
+		// bottom of the page. Audio files still have a row in
+		// the Other table too (handled by the "default" case)
+		// if the visitor clicks a file with no thumbnail; the
+		// card is the primary way to open them in the lightbox.
+		case KindImage, KindVideo, KindAudio:
 			images = append(images, f)
 		default:
 			others = append(others, f)
@@ -1928,17 +2114,24 @@ type FilterGroup struct {
 }
 
 // computeFilterGroups scans the file list and groups the
-// extensions into three filter groups (Images, Videos, Other).
-// Each group lists the extensions present in the directory
-// with their counts, marking the ones currently in the active
-// filter as Selected.
+// extensions into four filter groups (Images, Videos, Audio,
+// Other). Each group lists the extensions present in the
+// directory with their counts, marking the ones currently
+// in the active filter as Selected.
 //
-// The imageExts and videoExts maps come from the Gallery's
-// config (defaultImageExts / defaultVideoExts if not
-// overridden). The active filter is the set of extensions
-// currently selected (?type= query param).
-func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter map[string]bool) (images, videos, other FilterGroup) {
-	// Three maps keyed by lowercase ext (with leading dot).
+// The imageExts, videoExts, and audioExts maps come from
+// the Gallery's config (defaults if not overridden).
+// Per user request 2026-07-04 (Q7 on the audio-integration
+// branch): the order is Images / Videos / Audio / Other.
+// The "Audio" group only appears when the operator has set
+// `audio_types` (audioExts is non-empty); when empty, audio
+// files fall through to the "Other" group, which is the
+// pre-1.1.0 behavior.
+//
+// The active filter is the set of extensions currently
+// selected (?type= query param).
+func computeFilterGroups(files []FileInfo, imageExts, videoExts, audioExts, activeFilter map[string]bool) (images, videos, audio, other FilterGroup) {
+	// Four maps keyed by lowercase ext (with leading dot).
 	// Each maps ext -> (count, displayExt). displayExt is the
 	// canonical-case form — for the first file we see with
 	// that ext, we use whatever case the file actually used
@@ -1949,6 +2142,10 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 		displayExt string
 	}{}
 	vidCounts := map[string]struct {
+		count      int
+		displayExt string
+	}{}
+	audCounts := map[string]struct {
 		count      int
 		displayExt string
 	}{}
@@ -2002,10 +2199,20 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 				e.displayExt = filepath.Ext(f.Name)
 			}
 			vidCounts[ext] = e
+		case ext != "" && audioExts[ext]:
+			// Per user request 2026-07-04 (Q7): audio is
+			// a separate group, only populated when the
+			// operator has opted in via audio_types.
+			e := audCounts[ext]
+			e.count++
+			if e.displayExt == "" {
+				e.displayExt = filepath.Ext(f.Name)
+			}
+			audCounts[ext] = e
 		default:
 			// Includes files with no extension (ext == "")
 			// AND files with extensions that don't match
-			// image or video types.
+			// image / video / audio types.
 			e := otherCounts[ext]
 			e.count++
 			if e.displayExt == "" {
@@ -2027,6 +2234,7 @@ func computeFilterGroups(files []FileInfo, imageExts, videoExts, activeFilter ma
 	// function runs.
 	images = filterGroupFromMap(tr("filter_image"), imgCounts, activeFilter)
 	videos = filterGroupFromMap(tr("filter_video"), vidCounts, activeFilter)
+	audio = filterGroupFromMap(tr("filter_audio"), audCounts, activeFilter)
 	other = filterGroupFromMap(tr("filter_other"), otherCounts, activeFilter)
 	return
 }
@@ -2120,7 +2328,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs, noAudioMeta bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts, audioExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
 	// Per user request 2026-07-04: set the package-level
 	// translator + locale at the TOP of RenderPage so the
 	// filter labels (computed by computeFilterGroups, which
@@ -2178,8 +2386,8 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// ones). The user might want to switch from "jpg" to "png"
 	// and we should show them "png" exists in the dropdown.
 	typeFilter := parseTypeFilter(query)
-	imgGroup, vidGroup, otherGroup := computeFilterGroups(
-		files, imageExts, videoExts, typeFilter,
+	imgGroup, vidGroup, audGroup, otherGroup := computeFilterGroups(
+		files, imageExts, videoExts, audioExts, typeFilter,
 	)
 
 	// Apply the ?q= search filter to the file list BEFORE
@@ -2282,21 +2490,36 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// (video count) separately. Per user request 2026-06-17:
 	// videos were previously miscounted as images in the
 	// "X images" label.
+	//
+	// Per user request 2026-07-04 (audio-integration
+	// branch): audio files are counted as their own
+	// kind (KindAudio) and tracked separately as
+	// audioCount — they are NEITHER images nor videos in
+	// the header meta line. The image-count includes only
+	// KindImage; the video-count includes only KindVideo;
+	// the audio-count (new field TotalAudio) includes
+	// only KindAudio. The TotalFiles sum below
+	// accounts for all four: images + videos + audio +
+	// other files.
 	imageCount := 0
 	videoCount := 0
+	audioCount := 0
 	var totalAllBytes int64
 	for _, f := range allImages {
-		if f.Kind == KindVideo {
+		switch f.Kind {
+		case KindVideo:
 			videoCount++
-		} else {
+		case KindAudio:
+			audioCount++
+		default:
 			imageCount++
 		}
 		totalAllBytes += f.Size
 	}
 	// Per user request 2026-06-18 (Phase 44): the size shown in
 	// the header is the TOTAL of ALL files (images + videos +
-	// other files), not just images or just other files. Excludes
-	// subdirectories.
+	// audio + other files), not just images or just other
+	// files. Excludes subdirectories.
 	for _, f := range others {
 		totalAllBytes += f.Size
 	}
@@ -2457,12 +2680,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		ImageStart:       imageStart,
 		ImageEnd:         imageEnd,
 		TotalVideos:      videoCount,
+		TotalAudio:       audioCount,
 		// Per user request 2026-06-19: pre-compute the total
-		// number of files (images + videos + other files) for
-		// the "N files" label at the start of the meta line.
-		// Doing this in Go (vs in the template) avoids needing
-		// an `add` template function.
-		TotalFiles:         imageCount + videoCount + len(others),
+		// number of files (images + videos + audio + other
+		// files) for the "N files" label at the start of the
+		// meta line. Doing this in Go (vs in the template)
+		// avoids needing an `add` template function.
+		TotalFiles:         imageCount + videoCount + audioCount + len(others),
 		TotalAllFilesSize:  humanSize(totalAllBytes),
 		TotalPages:         totalPages,
 		HasPrev:            page > 1,
@@ -2475,6 +2699,12 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		TypeFilterQuery:    strings.TrimSpace(query.Get("type")),
 		FilterImageOptions: imgGroup,
 		FilterVideoOptions: vidGroup,
+		// Per user request 2026-07-04 (Q7 on the audio-
+		// integration branch): the Audio group is rendered
+		// between Videos and Other. When the operator hasn't
+		// set audio_types, len(audGroup.Options) is 0 and the
+		// template hides the dropdown entirely.
+		FilterAudioOptions: audGroup,
 		FilterOtherOptions: otherGroup,
 		// Per user request 2026-06-27: footer cache stats.
 		// Pre-formatted hex strings passed in from the

@@ -89,7 +89,7 @@ func (c *ScanCache) SetFiles(dir string, files []FileInfo) {
 // sets (used by Scanner.Classify to decide KindImage vs KindVideo vs
 // KindOther). They are part of the cache key because a Gallery
 // reconfigured to recognise a new extension should re-scan.
-func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bool, noExif, noMeta bool, thumbCacheDir, thumbFormat string) ([]FileInfo, error) {
+func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts, audioExts map[string]bool, noExif, noMeta, noAudioMeta bool, thumbCacheDir, thumbFormat string) ([]FileInfo, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 	c.mu.RLock()
 	entry, ok := c.items[dir]
 	c.mu.RUnlock()
-	extKey := extSetsKey(imageExts, videoExts, noExif, noMeta)
+	extKey := extSetsKey(imageExts, videoExts, audioExts, noExif, noMeta, noAudioMeta)
 	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
 		// Return a copy so callers can't mutate the cached slice.
 		out := make([]FileInfo, len(entry.files))
@@ -120,7 +120,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 		return out, nil
 	}
 
-	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, NoExif: noExif, NoMeta: noMeta, ThumbCacheDir: thumbCacheDir, ThumbFormat: thumbFormat}
+	scanner := &Scanner{Root: dir, Sort: sortMode, ImageExts: imageExts, VideoExts: videoExts, AudioExts: audioExts, NoExif: noExif, NoMeta: noMeta, NoAudioMeta: noAudioMeta, ThumbCacheDir: thumbCacheDir, ThumbFormat: thumbFormat}
 	files, err := scanner.Scan()
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts map[string]bo
 //
 // Cheap to compute (one sort + one string concat per cache lookup)
 // and cheap to compare (one string compare).
-func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) string {
+func extSetsKey(imageExts, videoExts, audioExts map[string]bool, noExif, noMeta, noAudioMeta bool) string {
 	// Per user request 2026-07-02: include noExif AND noMeta
 	// in the cache key. If either flag changes, the cache
 	// is invalidated (otherwise the Gallery would re-classify
@@ -172,6 +172,14 @@ func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) strin
 	// VideoMeta populated, showing META pills that should be
 	// hidden). Both flags affect FileInfo fields (Exif,
 	// VideoMeta), so both must be in the key.
+	//
+	// Per user request 2026-07-04 (audio-integration branch):
+	// audioExts is also part of the key (operators who set
+	// audio_types shouldn't see stale KindAudio=0 entries
+	// from a previous config). noAudioMeta is in the key for
+	// the same reason as noExif / noMeta — toggling the audio
+	// enrichment flag should invalidate cache so AudioMeta
+	// reflects the new setting.
 	imgKeys := make([]string, 0, len(imageExts))
 	for k := range imageExts {
 		imgKeys = append(imgKeys, k)
@@ -182,6 +190,11 @@ func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) strin
 		vidKeys = append(vidKeys, k)
 	}
 	sort.Strings(vidKeys)
+	audKeys := make([]string, 0, len(audioExts))
+	for k := range audioExts {
+		audKeys = append(audKeys, k)
+	}
+	sort.Strings(audKeys)
 	noExifStr := "0"
 	if noExif {
 		noExifStr = "1"
@@ -190,6 +203,10 @@ func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) strin
 	if noMeta {
 		noMetaStr = "1"
 	}
+	noAudioMetaStr := "0"
+	if noAudioMeta {
+		noAudioMetaStr = "1"
+	}
 	// Per user request 2026-07-02: include noExif AND
 	// noMeta in the cache key. Per the previous comment
 	// block, if either flag changes, the cache should be
@@ -197,5 +214,5 @@ func extSetsKey(imageExts, videoExts map[string]bool, noExif, noMeta bool) strin
 	// files but the cached FileInfo would still have the OLD
 	// EXIF/VideoMeta values). Both flags affect FileInfo
 	// fields (Exif, VideoMeta), so both must be in the key.
-	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",") + "|e:" + noExifStr + "|m:" + noMetaStr
+	return "i:" + strings.Join(imgKeys, ",") + "|v:" + strings.Join(vidKeys, ",") + "|a:" + strings.Join(audKeys, ",") + "|e:" + noExifStr + "|m:" + noMetaStr + "|M:" + noAudioMetaStr
 }

@@ -38,14 +38,73 @@ func TestClassify(t *testing.T) {
 		{"logo.svg", KindOther},
 		{"movie.mp4", KindVideo},
 		{"clip.webm", KindVideo},
+		// Per user request 2026-07-04 (audio-integration
+		// branch): audio types default to empty so .mp3 etc.
+		// fall through to KindOther when the operator hasn't
+		// opted in via `audio_types`. The cases below verify
+		// that with the empty default, audio extensions are
+		// classified as KindOther; the integration tests
+		// (in gallery_test.go) cover the opted-in path.
+		{"song.mp3", KindOther},
+		{"song.flac", KindOther},
+		{"voice.m4a", KindOther},
+		{"sound.opus", KindOther},
+		{"recording.wav", KindOther},
+		// `.ogg` is in BOTH defaultVideoExts (Theora) AND the
+		// audio extension set the operator can opt into. With
+		// defaultAudioExts empty (operator hasn't set
+		// audio_types), .ogg falls through to video extension
+		// check first; since .ogg IS in defaultVideoExts, this
+		// is KindVideo. To flip .ogg to KindAudio, the operator
+		// would either remove .ogg from video_types OR override
+		// video_types entirely.
+		{"sound.ogg", KindVideo},
 		{"notes.txt", KindOther},
 		{"beach.html", KindOther},
 		{"archive.tar.gz", KindOther},
 		{"noext", KindOther},
 	}
 	for _, c := range cases {
-		if got := Classify(c.name, defaultImageExts, defaultVideoExts); got != c.want {
+		if got := Classify(c.name, defaultImageExts, defaultVideoExts, defaultAudioExts); got != c.want {
 			t.Errorf("Classify(%q) = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestClassifyAudioTypesOptedIn verifies that when the operator
+// sets `audio_types` (i.e. populates the audio extensions map),
+// files matching those extensions are classified as KindAudio.
+func TestClassifyAudioTypesOptedIn(t *testing.T) {
+	audioMap := map[string]bool{
+		".mp3": true, ".flac": true, ".opus": true,
+		".m4a": true, ".wav": true, ".ogg": true,
+	}
+	cases := []struct {
+		name string
+		want FileKind
+	}{
+		{"song.mp3", KindAudio},
+		{"song.flac", KindAudio},
+		{"song.opus", KindAudio},
+		// ".ogg" is in BOTH defaultVideoExts AND the populated
+		// audioMap. Per Q2 ("video wins") the file is
+		// KindVideo at extension-only classification time.
+		// To classify an .ogg as KindAudio via extensions
+		// alone, the operator would remove .ogg from
+		// video_types. The full stream-inspection upgrade
+		// is left as a future enhancement (out of scope for
+		// 1.1.0).
+		{"clip.ogg", KindVideo},
+		// ".mp4" is in defaultVideoExts but not in audioMap,
+		// so it remains KindVideo.
+		{"clip.mp4", KindVideo},
+		// An unrelated .txt that doesn't match either set:
+		// KindOther.
+		{"song.txt", KindOther},
+	}
+	for _, c := range cases {
+		if got := Classify(c.name, defaultImageExts, defaultVideoExts, audioMap); got != c.want {
+			t.Errorf("Classify(%q) = %q, want %q (audioMap opted in)", c.name, got, c.want)
 		}
 	}
 }

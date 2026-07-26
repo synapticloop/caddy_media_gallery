@@ -100,6 +100,22 @@ type Gallery struct {
 	// built-in video list (mp4, webm, m4v, mov, mkv, avi, ogv, ogg).
 	VideoExts []string
 
+	// AudioExts is the set of file extensions the gallery
+	// treats as audio-only files (mp3, flac, opus, etc.).
+	// Set from the `audio_types` Caddyfile subdirective
+	// (same syntax as `image_types` and `video_types`).
+	// Empty (default) — audio support is opt-in since 1.1.0.
+	// When the operator sets `audio_types <list>`, files
+	// matching those extensions become KindAudio, surface in
+	// the Audio filter dropdown, and get stream-level metadata
+	// extracted via ffprobe (when ffmpeg is available at
+	// startup). Without audio_types configured, audio files
+	// (if any dropped in) fall through to KindOther — no
+	// audio filter, no audio metadata, just the standard
+	// "Other files" row. See docs/03i-feature-audio.md for
+	// the recommended starting list.
+	AudioExts []string
+
 	// NoThumbs disables the on-the-fly WebP thumbnail generation.
 	// When true, the gallery uses the original image as the tile
 	// <img src> instead of . Requests to the
@@ -209,6 +225,30 @@ type Gallery struct {
 	// the directive appears, even with value "false".
 	NoMetaSet bool
 
+	// Per user request 2026-07-04 (Q4 on the audio-
+	// integration branch): NoAudioMeta is the audio-only
+	// equivalent of NoMeta. When true, the scanner skips
+	// the readAudioMetaCached call entirely for KindAudio
+	// files (no ffprobe subprocess, no .ameta sidecar
+	// writes, no parsing). Defaults to FALSE — unlike
+	// NoMeta (which defaults to true for backward compat
+	// with the post-2026-07-02 default flip), NoAudioMeta
+	// is opt-in because audio support is itself opt-in.
+	// Operators who configure `audio_types` get
+	// auto-extraction by default; setting `no_audio_meta`
+	// (no arg → true) opts out. Setting `no_audio_meta false`
+	// is also accepted (explicit "do extract metadata")
+	// even though it's the default. The video default-flip
+	// precedent (NoMeta=true post-2026-07-02) doesn't
+	// apply here because there was no pre-1.1 audio
+	// metadata behaviour to be backward-compatible with.
+	NoAudioMeta bool
+	// NoAudioMetaSet is the audio-equivalent of NoMetaSet.
+	// Tracks whether the operator explicitly set
+	// no_audio_meta. Used by Provision to distinguish
+	// "operator set" from "use the default false".
+	NoAudioMetaSet bool
+
 	// ffmpegPath is the absolute path to the ffmpeg binary, set
 	// in Provision. Empty when ffmpeg is not installed (or when
 	// NoVideoThumbs is true — we skip the lookup since it would
@@ -229,6 +269,13 @@ type Gallery struct {
 	// videoExtsMap is the resolved video-extension set, same
 	// shape as imageExtsMap.
 	videoExtsMap map[string]bool
+
+	// audioExtsMap is the resolved audio-extension set, same
+	// shape as imageExtsMap / videoExtsMap. Derived from
+	// AudioExts at Provision() time; empty (mirroring the
+	// empty defaultAudioExts) when the operator hasn't set
+	// `audio_types`.
+	audioExtsMap map[string]bool
 
 	// PageSize is the number of image entries per page, set per
 	// request. Default is 60 (or the first numeric item of
@@ -549,6 +596,69 @@ func (g *Gallery) Provision(caddy.Context) error {
 	if len(g.VideoExts) > 0 {
 		g.videoExtsMap = extsToMap(g.VideoExts)
 	}
+	// Audio is opt-in (defaultAudioExts is empty). If the operator
+	// has set `audio_types`, populate g.audioExtsMap accordingly;
+	// otherwise leave it empty so audio file matching never
+	// matches anything (the operator's existing 1.0.x configs
+	// are unaffected — no audio file will ever be classified
+	// KindAudio unless they opt in).
+	g.audioExtsMap = defaultAudioExts
+	if len(g.AudioExts) > 0 {
+		g.audioExtsMap = extsToMap(g.AudioExts)
+	}
+
+	// Detect ffmpeg for video thumbnail generation. We do this
+	// once at Provision (not per-scan) since ffmpeg availability
+	// doesn't change at runtime. If ffmpeg is missing OR
+	// NoVideoThumbs is true, g.ffmpegPath stays empty and the
+	// video-thumb code path falls back to the placeholder.
+	//
+	// Resolution order (Phase 67):
+	//   1. FFMPEG_PATH env var (if set and points to an executable)
+	//   2. exec.LookPath("ffmpeg") (scans /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin)
+	// If both fail, g.ffmpegPath stays empty and the video-thumb
+	// code path falls back to the placeholder.
+	if !g.NoVideoThumbs {
+		if path := os.Getenv("FFMPEG_PATH"); path != "" {
+			// Verify the env var actually points to an executable.
+			// (We don't want to silently store a bad path that
+			// would fail at request time with a confusing error.)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				if info.Mode()&0o111 != 0 {
+					g.ffmpegPath = path
+				}
+			}
+		}
+		if g.ffmpegPath == "" {
+			if path, err := exec.LookPath("ffmpeg"); err == nil {
+				g.ffmpegPath = path
+			}
+		}
+		// Per Phase 106: log the resolved ffmpeg path so the operator
+		// can confirm the right binary was picked up at startup.
+		// (The path is cached and reused for every video thumb request
+		// thereafter — see docs/01-configuration.md for the
+		// restart-after-install rationale.)
+		if g.ffmpegPath != "" {
+			_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg path: %s\n", g.ffmpegPath)
+		} else if !g.NoVideoThumbs {
+			_, _ = fmt.Fprintf(os.Stderr, "caddy-media-gallery: ffmpeg NOT FOUND (video thumbnails disabled; set FFMPEG_PATH or install ffmpeg and restart Caddy)\n")
+		}
+	}
+
+	// Audio + ffmpeg interaction (per Q3/Q4 on the audio-
+	// integration branch): if audio_types was set but ffmpeg
+	// is missing, log a one-line warning. The file is still
+	// recognised as KindAudio (the Audio filter membership
+	// still works, the SVG placeholder tile still renders, the
+	// `<audio controls>` lightbox still plays); only the audio
+	// metadata card will be missing fields. This is
+	// intentional — audio works without ffmpeg, just without
+	// metadata enrichment. We do this AFTER ffmpeg detection
+	// (above) so we have the final ffmpegPath to check.
+	if len(g.AudioExts) > 0 && g.ffmpegPath == "" {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: caddy-media-gallery: audio_types was set (%v) but ffmpeg/ffprobe is not installed; audio files will be served without metadata enrichment (file playback in the browser still works)\n", g.AudioExts)
+	}
 	// Detect ffmpeg for video thumbnail generation. We do this
 	// once at Provision (not per-scan) since ffmpeg availability
 	// doesn't change at runtime. If ffmpeg is missing OR
@@ -846,7 +956,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	}
 
 	// It's a directory. Scan it and render the gallery.
-	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.NoExif, g.NoMeta, g.thumbCacheDir(), g.ThumbFormat)
+	files, err := g.Cache.Get(resolved, g.Sort, g.imageExtsMap, g.videoExtsMap, g.audioExtsMap, g.NoExif, g.NoMeta, g.NoAudioMeta, g.thumbCacheDir(), g.ThumbFormat)
 	if err != nil {
 		// Scan failure (permission denied, etc.) — fall through.
 		return next.ServeHTTP(w, r)
@@ -899,8 +1009,10 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 		Sort:         g.Sort,
 		ImageExts:    g.imageExtsMap,
 		VideoExts:    g.videoExtsMap,
+		AudioExts:    g.audioExtsMap,
 		NoExif:       g.NoExif,
 		NoMeta:       g.NoMeta,
+		NoAudioMeta:  g.NoAudioMeta,
 		ThumbCacheDir: g.thumbCacheDir(),
 		ThumbFormat:  g.ThumbFormat,
 	}
@@ -956,7 +1068,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// operator's default_language > "en". This is computed
 	// on every request (cheap — no I/O).
 	locale := DetectLocale(r, g.translator.Locales(), g.DefaultLanguage)
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.NoAudioMeta, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.audioExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
@@ -1077,6 +1189,49 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// "explicit false" (preserve the false) from
 			// "no directive" (apply the default true).
 			g.NoMetaSet = true
+
+		case "no_audio_meta":
+			// Per user request 2026-07-04 (Q4 on the audio-
+			// integration branch): operator can disable
+			// audio metadata extraction entirely
+			// (codec, sample rate, channels, channel
+			// layout, duration, bitrate via ffprobe).
+			// When true, the scanner skips the
+			// readAudioMetaCached call entirely (no
+			// ffprobe subprocess, no .ameta sidecar
+			// writes, no parsing). The audio metadata
+			// card in the lightbox is skipped automatically
+			// because it only renders when FileInfo.AudioMeta
+			// is non-nil. Files are still classified
+			// KindAudio (audio filter membership still
+			// works, the SVG placeholder tile still renders,
+			// the `<audio controls>` lightbox still plays).
+			//
+			// Unlike no_meta (which defaults to true to
+			// preserve backward compat with the post-2026-
+			// 07-02 default flip), no_audio_meta defaults
+			// to false because audio support is itself
+			// opt-in (set via audio_types). When audio_types
+			// is configured but the operator wants no
+			// metadata enrichment, they set no_audio_meta
+			// with no arg.
+			// Usage:
+			//   no_audio_meta     # disable extraction
+			//   no_audio_meta false  # (re-)enable extraction
+			// Default (no directive): false, extraction on
+			// when audio_types is set.
+			g.NoAudioMeta = true
+			if d.NextArg() {
+				if d.Val() != "false" {
+					return d.ArgErr()
+				}
+				g.NoAudioMeta = false
+			}
+			// Mark that the operator explicitly set this
+			// directive — used by Provision to distinguish
+			// "explicit false" from "no directive" (use
+			// the default false).
+			g.NoAudioMetaSet = true
 
 		case "default_language":
 			// Per user request 2026-07-04: the operator can
@@ -1252,6 +1407,22 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				g.VideoExts = nil
 				for d.NextArg() {
 					g.VideoExts = append(g.VideoExts, d.Val())
+				}
+			case "audio_types":
+				// Per user request 2026-07-04 (Q3 on the audio-
+				// integration branch): audio is opt-in. The Caddyfile
+				// has no default for audio_types (an empty list
+				// means "no audio support"). Operators who want
+				// audio enable it explicitly:
+				//   audio_types mp3 flac opus
+				//   audio_types .mp3 .m4a .aac .flac .opus .wav .ogg .oga
+				// Same shape as image_types / video_types; entries
+				// are normalized via extsToMap() in Provision.
+				// When empty, g.audioExtsMap stays empty and no file
+				// is ever classified as KindAudio.
+				g.AudioExts = nil
+				for d.NextArg() {
+					g.AudioExts = append(g.AudioExts, d.Val())
 				}
 			case "path_prefix":
 				// URL mount path for the gallery, used by the

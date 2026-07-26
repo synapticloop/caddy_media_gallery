@@ -316,7 +316,7 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 // HTML includes the cache stats footer.
 func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 func TestRenderPage_FooterShowsInfinityWhenUnbounded(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
 	// Pass the pre-formatted strings — XX is ∞, others are 00
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, "", "", "substring", "en", nil, "\u221e", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "\u221e", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
