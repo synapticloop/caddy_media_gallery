@@ -9,6 +9,26 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.3 — 2026-07-04
+
+### 🐛 TBD: minor internationalisation fix
+
+Per user request 2026-07-04: a patch release on the
+`minor-i18n-fix` branch. Cuts the 1.0.2 release line so
+any work on this branch ships against 1.0.3 instead of
+touching 1.0.2.
+
+No code changes in this commit — this is just the version
+bump to mark the branch's starting point. The actual 1.0.3
+fix will land in subsequent commits on this branch, and
+1.0.3's release notes will be filled in then.
+
+The running binary today is still 1.0.2. The 1.0.3
+release will ship once the branch's planned i18n fix is
+complete and reviewed.
+
+---
+
 ## 1.0.2 — 2026-07-04
 
 ### ✨ UI: build / version metadata in the site footer
