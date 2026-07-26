@@ -9,6 +9,29 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.1 — 2026-07-04
+
+### 🐛 Patch: filter highlight branch
+
+Per user request 2026-07-04: a patch release on the
+`filter-highlight` branch (will be released as 1.0.1 once
+the branch's planned changes ship). Cuts the 1.0.0 release
+line so any work on `filter-highlight` ships against
+1.0.1 instead of touching 1.0.0.
+
+No code changes in this commit — this is just the version
+bump to mark the branch's starting point. The actual 1.0.1
+work (whatever filter-highlight turns out to be) will
+land in subsequent commits on this branch, and 1.0.1's
+release notes will be filled in then.
+
+The running binary today is still 1.0.0 (the v1.0.0 build
+was a stable release that did not have any filter-highlight
+work in it). The 1.0.1 release will ship once the branch's
+planned changes are complete and reviewed.
+
+---
+
 ## 1.0.0 — 2026-07-04
 
 ### 🎉 First stable release
