@@ -23,9 +23,19 @@ const (
 	KindImage FileKind = "image"
 	// KindVideo is a video file (mp4, webm).
 	KindVideo FileKind = "video"
-	// KindOther is a non-image, non-video file (html, txt, etc.).
-	// These are shown in the "Other files" strip above the image
-	// grid.
+	// KindAudio is an audio-only file (mp3, flac, opus, etc.).
+	// Per user request 2026-07-04 (Q2 decision on the audio-
+	// integration branch): files have exactly one Kind. A file
+	// with a video stream is KindVideo (video wins over audio)
+	// even if it also has an audio stream. KindAudio applies
+	// only to files that have NO video stream — pure audio
+	// files. Files in BOTH audio_types and video_types are
+	// classified by stream inspection at scan time (ffprobe),
+	// not extension alone.
+	KindAudio FileKind = "audio"
+	// KindOther is a non-image, non-video, non-audio file
+	// (html, txt, etc.). These are shown in the "Other files"
+	// strip above the image grid.
 	KindOther FileKind = "other"
 )
 
@@ -57,6 +67,17 @@ var defaultVideoExts = map[string]bool{
 	".m4v": true, ".mov": true, ".mkv": true,
 	".avi": true, ".ogv": true, ".ogg": true,
 }
+
+// defaultAudioExts is the default set of audio-only file
+// extensions that the gallery recognises. Intentionally empty
+// in 1.1.0 — operators opt in explicitly via the `audio_types`
+// Caddyfile directive. The default-extensions list is
+// documented in docs/03i-feature-audio.md as a starting point
+// for operators (".mp3 .m4a .aac .flac .opus .wav .ogg .oga"),
+// but the gallery does NOT enable any of them by default —
+// to preserve the 1.0 stability promise for configurations
+// that don't opt in.
+var defaultAudioExts = map[string]bool{}
 
 // extsToMap is a small helper used by Provision() to convert
 // a Caddyfile list (e.g. "jpg jpeg png") into a map for
@@ -143,6 +164,15 @@ type Scanner struct {
 	Sort      string // "mtime" (default) or "name"
 	ImageExts map[string]bool
 	VideoExts map[string]bool
+	// AudioExts is the operator-configured set of audio-only
+	// file extensions (set via the `audio_types` Caddyfile
+	// directive; defaults to empty so audio is opt-in). Used
+	// by Classify() to map files to KindAudio; used by the
+	// enrich pass to call readAudioMetaCached. The "video
+	// wins" rule means files whose extension is in BOTH
+	// AudioExts and VideoExts are classified by stream
+	// inspection at scan time (see scanAudioClassification).
+	AudioExts map[string]bool
 	// NoExif, when true, disables the readExif call for
 	// image files (no I/O, no parsing). Set by the
 	// Gallery's no_exif Caddyfile directive; passed
@@ -161,6 +191,19 @@ type Scanner struct {
 	// operator doesn't need the metadata enrichment.
 	// See gallery.go for the full rationale.
 	NoMeta bool
+	// NoAudioMeta is the audio-only equivalent of NoMeta.
+	// Per user request 2026-07-04 (Q4 on the audio-
+	// integration branch): when true, the enrich step skips
+	// readAudioMetaCached for KindAudio files (no ffprobe
+	// subprocess, no .ameta sidecar writes). The file is
+	// still recognised as KindAudio (the SVG placeholder
+	// tile + audio filter membership still work), but no
+	// stream-level metadata is extracted. Useful for
+	// galleries with many audio files where the operator
+	// doesn't need codec/sample-rate/bitrate enrichment.
+	// Defaults to false (enrichment on). Mirrors NoMeta's
+	// default for video metadata.
+	NoAudioMeta bool
 	// ThumbCacheDir is the on-disk thumb cache dir. When set
 	// (always set in production, via thumbCacheDir() in
 	// gallery.go), the scanner uses readDimensionsCached to
@@ -178,13 +221,15 @@ type Scanner struct {
 
 // NewScanner returns a Scanner for the given root directory with
 // default sort order (mtime desc — newest first) and the default
-// image / video extension sets.
+// image / video / audio extension sets (audio defaults to
+// empty, per the opt-in policy in 1.1.0).
 func NewScanner(root string) *Scanner {
 	return &Scanner{
 		Root:      root,
 		Sort:      "mtime",
 		ImageExts: defaultImageExts,
 		VideoExts: defaultVideoExts,
+		AudioExts: defaultAudioExts,
 	}
 }
 
@@ -192,17 +237,38 @@ func NewScanner(root string) *Scanner {
 // extension. Directories are not classified by name; the scanner
 // uses the entry's IsDir() to set KindDir directly.
 //
-// The image and video extension sets come from the Gallery
-// (operator-configurable via the Caddyfile). If neither set is
-// provided, the defaults are used (jpg/jpeg/png/gif/webp
-// for images; mp4/webm/m4v/mov/mkv/avi/ogv/ogg for videos).
-func Classify(name string, imageExts, videoExts map[string]bool) FileKind {
+// The image, video, and audio extension sets come from the Gallery
+// (operator-configurable via the Caddyfile). If a set is not
+// provided, the defaults are used (jpg/jpeg/png/gif/webp for
+// images; mp4/webm/m4v/mov/mkv/avi/ogv/ogg for videos;
+// EMPTY for audio — audio is opt-in since 1.1.0).
+//
+// Per user request 2026-07-04 (Q2 on the audio-integration
+// branch): files in BOTH video_types and audio_types
+// (e.g. ".ogg" or ".mp4") could be either video or audio.
+// This function does a fast PURE-EXTENSION classification
+// only — it doesn't ffprobe anything. The call site
+// (Scanner.scan()) is responsible for doing the deeper
+// stream-inspection classification when both video_types
+// and audio_types are configured and a file's extension
+// is in both sets. For files whose extension is in ONLY
+// one of the two sets (the common case), this extension-
+// based check is final.
+//
+// Classification order (first match wins):
+//   1. extension is in imageExts → KindImage
+//   2. extension is in videoExts → KindVideo (video wins over audio)
+//   3. extension is in audioExts → KindAudio
+//   4. otherwise → KindOther
+func Classify(name string, imageExts, videoExts, audioExts map[string]bool) FileKind {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch {
 	case imageExts[ext]:
 		return KindImage
 	case videoExts[ext]:
 		return KindVideo
+	case audioExts[ext]:
+		return KindAudio
 	default:
 		return KindOther
 	}
@@ -334,7 +400,7 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 		if info.IsDir() {
 			kind = KindDir
 		} else {
-			kind = Classify(e.Name(), s.ImageExts, s.VideoExts)
+			kind = Classify(e.Name(), s.ImageExts, s.VideoExts, s.AudioExts)
 		}
 		fi := FileInfo{
 			Name:    e.Name(),
