@@ -1,6 +1,6 @@
 # caddy_media_gallery
 
-> **Release 1.1.0 — 2026-07-04.** Minor release on the 1.x line. API + Caddyfile directive surface stays stable; new directives + lang files are added for audio support. Future versions will be additive. Operators can pin to `1.1.0` (or any later version) in their build pipeline.
+> **Release 1.1.1 — 2026-07-04.** Patch release on the 1.1.x line. Stable; fixes two cosmetic bugs in the cache-status footer: (1) the XX hex value was scaled to 0-100 instead of 0-255, so 100% showed as 0x64 instead of 0xFF; (2) the footer rendered in the proportional body font because `--font-mono` was referenced but never defined, so the digit pairs were slightly misaligned. Both fixed: the function is now `CacheUsageFractionHex255` (returning 0-255) and the CSS variable is now defined. Operators can pin to `1.1.1` (or any later version) in their build pipeline.
 > Internationalisation landed in 1.0.0 — 8 locales bundled (en/de/es/fr/ja/ko/zh/pt), header language picker, locale persists in localStorage + cookie. See [docs/03h-feature-i18n.md](docs/03h-feature-i18n.md) for the full architecture.
 
 *The delightful way to serve a directory.*

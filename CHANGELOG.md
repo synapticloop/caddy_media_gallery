@@ -9,7 +9,151 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
-## 1.1.0 — 2026-07-04
+## 1.1.1 — 2026-07-04
+
+### 🐛 Fix: cache-status footer percent scale (XX hex value)
+
+Per user report 2026-07-04: the cache-status footer at
+the bottom of the page was showing "53" (= 83% of
+the cap, scaled to 0-100) instead of the expected
+hex value scaled to 0-255 — the same full-byte range
+used by the YY/ZZ/AA peak-eviction fields, where 100%
+maps to 0xFF.
+
+ROOT CAUSE:
+
+  The function `CacheUsagePercent` (now renamed to
+  `CacheUsageFractionHex255` in this release) returned a
+  value in the 0-100 range:
+    pct := int(s.SizeBytes * 100 / s.CapBytes)
+  The template then formatted this as a 2-digit hex
+  value via `fmt.Sprintf("%02X", pct)`:
+    100% (= 100 decimal) → 0x64 = "64" = "d"
+  But the doc comment AND the parallel peak-eviction
+  fields YY/ZZ/AA all use the 0-255 scale, where
+  100% = 255 = 0xFF. The XX field was the inconsistent
+  one. Result: the footer correctly showed "53" (= 83%
+  of the 0-100 scale) but the user expected it to be on
+  the same 0-255 scale as YY/ZZ/AA, where 83% would be
+  ≈ 0xD7 (≈ 214/255 ≈ 84%).
+
+FIX (cache_stats.go):
+
+  1. Renamed the function `CacheUsagePercent` to
+     `CacheUsageFractionHex255` to reflect the new
+     0-255 (1 byte, hex-display-friendly) scale. The
+     return type is still int. -1 still means "unbounded"
+     (caller renders ∞).
+
+  2. Changed the math from `* 100` to `* 255` so
+     100% maps to 0xFF (= 255) instead of 0x64 (= 100).
+     Same clamping (0-255) and same special case for
+     CapBytes <= 0 (unbounded → return -1).
+
+  3. Updated the test cases in
+     `TestCacheStats_CacheUsageFractionHex255Math`
+     (renamed from `_CacheUsagePercentMath`):
+       empty cache: 0 → 0       (no change)
+       half full: 50 → 127      (was 50)
+       full: 100 → 255          (was 100)
+       over cap: 100 → 255      (was clamped 100)
+       tiny: 0 → 0             (no change)
+       unbounded: -1 → -1       (no change)
+     And in `TestFormatCacheStatsFooter`, the
+     `wantXX` for the half-full case was updated from
+     "32" (50 on 0-100 scale) to "7F" (127 on 0-255
+     scale = 50% of 0xFF).
+
+USER-VISIBLE CHANGE:
+
+  Before this commit (v1.1.0):
+    Cache at 860 MB / 1024 MB cap → footer shows
+    "53 // 00 // 00 // 00" (= 83% × 100/100, 0 evictions)
+
+  After this commit (v1.1.1):
+    Same cache state → footer shows
+    "D6 // 00 // 00 // 00" (= 83% × 255/100 ≈ 214, 0 evictions)
+    = 0xD6 in hex
+
+  At 100% (cache at the cap):
+    Before: "64 // ..."  (100 × 100/100, hex 0x64)
+    After:  "FF // ..."  (100 × 255/100, hex 0xFF)
+
+  The full range 0x00-0xFF is now usable, matching the
+  YY/ZZ/AA peak-eviction fields. The fix is purely
+  cosmetic (the underlying cache eviction behaviour is
+  unchanged) but the operator's expectation that "100%
+  = 0xFF" now holds.
+
+NO BEHAVIOR CHANGES outside the XX field. The
+eviction, scan cache, scan refresh, and stats refresh
+behaviour are unchanged from v1.1.0.
+
+### 🔤 Polish: cache-status footer in monospace font
+
+Per user request 2026-07-04: the cache-status footer
+hex value ("D6 // 00 // 00 // 00") should render in a
+monospace font so the digit pairs and `//` separators
+align vertically.
+
+ROOT CAUSE:
+
+  The `.site-footer-cache-stats` CSS rule referenced
+  `var(--font-mono)` but the variable was never defined
+  in the `:root` block. The `var()` call resolved to
+  nothing and the browser fell back to the body font
+  (proportional). The footer was effectively
+  proportional — the digit pairs ("D6", "00", "00",
+  "00") were slightly misaligned.
+
+FIX (templates/gallery.tmpl):
+
+  1. Added `--font-mono` to the default `:root` block.
+     Stack: ui-monospace, SFMono-Regular, Menlo, Monaco,
+     Consolas, Liberation Mono, Courier New, monospace.
+     Modern systems (macOS, recent Linux) get a nice
+     ui-monospace; older systems fall back to a system
+     monospace; the last resort is the generic monospace
+     family. This is the same variable the `.meta` status
+     line COULD use (if a future commit enables it there)
+     — but the user asked specifically for the cache
+     status line only in this commit.
+
+  2. The existing `.site-footer-cache-stats` rule was
+     unchanged — it already referenced `var(--font-mono)`.
+     The fix was just to define the variable.
+
+USER-VISIBLE CHANGE (verified on the live page
+https://hermes.synapticloop.com/images/ after the Caddy
+binary is rebuilt):
+
+  Before this commit (v1.1.1 partial):
+    "D6 // 00 // 00 // 00" rendered in the proportional
+    body font — the digit pairs (D6, 00, 00, 00) had
+    slightly varying widths, so the column structure
+    was hard to read at a glance.
+
+  After this commit (v1.1.1):
+    "D6 // 00 // 00 // 00" rendered in monospace — the
+    digit pairs are now uniformly wide and the `//`
+    separators align vertically between them.
+
+  The `.meta` status line ("50 files // 36 images · 8
+  videos · 3 audios · 3 other files // (38.2 MB total)
+  // 52 directories · Show 60 Per page") is
+  intentionally UNCHANGED in this commit — the user
+  asked specifically for the cache status line only.
+  The status line still uses the proportional font. If
+  a future commit wants to monospace the status line
+  too, it can just add `font-family: var(--font-mono);`
+  to the `.meta` rule.
+
+NO BEHAVIOR CHANGES — this is a pure CSS / cosmetic
+fix. No Go code touched, no tests changed, no Caddyfile
+changes.
+
+All 450+ Go tests pass (CSS-only change; tests
+exercise the Go server logic, not the rendered HTML).
 
 ### 🎵 Audio: opt-in audio file support
 

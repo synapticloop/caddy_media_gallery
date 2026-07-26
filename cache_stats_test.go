@@ -27,8 +27,8 @@ func TestCacheStats_InitialState(t *testing.T) {
 	if stats.CapBytes != 1024*1024*1024 {
 		t.Errorf("expected CapBytes=1GB, got %d", stats.CapBytes)
 	}
-	if stats.CacheUsagePercent() != 0 {
-		t.Errorf("expected CacheUsagePercent=0, got %d", stats.CacheUsagePercent())
+	if stats.CacheUsageFractionHex255() != 0 {
+		t.Errorf("expected CacheUsageFractionHex255=0, got %d", stats.CacheUsageFractionHex255())
 	}
 	if stats.PeakEvictions24h != 0 || stats.PeakEvictions7d != 0 || stats.PeakEvictions28d != 0 {
 		t.Errorf("expected all peaks=0, got 24h=%d 7d=%d 28d=%d",
@@ -37,15 +37,15 @@ func TestCacheStats_InitialState(t *testing.T) {
 }
 
 // TestCacheStats_UnboundedCap verifies that with CapBytes=0
-// (unbounded), CacheUsagePercent returns -1.
+// (unbounded), CacheUsageFractionHex255 returns -1.
 func TestCacheStats_UnboundedCap(t *testing.T) {
 	tracker := newCacheStatsTracker(0)
 	stats := tracker.load()
 	if stats.CapBytes != 0 {
 		t.Errorf("expected CapBytes=0, got %d", stats.CapBytes)
 	}
-	if stats.CacheUsagePercent() != -1 {
-		t.Errorf("expected CacheUsagePercent=-1 for unbounded, got %d", stats.CacheUsagePercent())
+	if stats.CacheUsageFractionHex255() != -1 {
+		t.Errorf("expected CacheUsageFractionHex255=-1 for unbounded, got %d", stats.CacheUsageFractionHex255())
 	}
 }
 
@@ -224,33 +224,38 @@ func TestCacheStats_GatherSizeAndCount(t *testing.T) {
 	if snap.SizeBytes != 300 {
 		t.Errorf("expected SizeBytes=300, got %d", snap.SizeBytes)
 	}
-	// CacheUsagePercent = 300 / (1024*1024*1024) * 100 ≈ 0
-	if pct := snap.CacheUsagePercent(); pct != 0 {
-		t.Errorf("expected CacheUsagePercent=0 (300 bytes < 1 GB), got %d", pct)
+	// CacheUsageFractionHex255 = 300 / (1024*1024*1024) * 255 ≈ 0
+	if pct := snap.CacheUsageFractionHex255(); pct != 0 {
+		t.Errorf("expected CacheUsageFractionHex255=0 (300 bytes < 1 GB), got %d", pct)
 	}
 }
 
-// TestCacheStats_CacheUsagePercentMath verifies the percent
-// calculation with various inputs.
-func TestCacheStats_CacheUsagePercentMath(t *testing.T) {
+// TestCacheStats_CacheUsageFractionHex255Math verifies the
+// percent calculation with various inputs.
+func TestCacheStats_CacheUsageFractionHex255Math(t *testing.T) {
 	tests := []struct {
-		name        string
-		sizeBytes   int64
-		capBytes    int64
-		wantPercent int
+		name         string
+		sizeBytes    int64
+		capBytes     int64
+		wantHex255   int
 	}{
 		{"empty cache", 0, 1024 * 1024 * 1024, 0},
-		{"half full", 512 * 1024 * 1024, 1024 * 1024 * 1024, 50},
-		{"full", 1024 * 1024 * 1024, 1024 * 1024 * 1024, 100},
-		{"over cap", 2 * 1024 * 1024 * 1024, 1024 * 1024 * 1024, 100}, // clamped
-		{"tiny", 1024, 1024 * 1024 * 1024, 0},                         // rounds to 0
-		{"unbounded", 9999, 0, -1},                                    // unbounded
+		// half full: int(0.5 * 255) = 127 (integer division
+		// truncates 127.5 to 127)
+		{"half full", 512 * 1024 * 1024, 1024 * 1024 * 1024, 127},
+		// full: int(1.0 * 255) = 255 (== 0xFF, "100%" maps
+		// to the full byte range, matching YY/ZZ/AA)
+		{"full", 1024 * 1024 * 1024, 1024 * 1024 * 1024, 255},
+		// over cap: int(2.0 * 255) = 510, clamped to 255
+		{"over cap", 2 * 1024 * 1024 * 1024, 1024 * 1024 * 1024, 255},
+		{"tiny", 1024, 1024 * 1024 * 1024, 0}, // rounds to 0
+		{"unbounded", 9999, 0, -1},              // unbounded
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &cacheStats{SizeBytes: tc.sizeBytes, CapBytes: tc.capBytes}
-			if got := s.CacheUsagePercent(); got != tc.wantPercent {
-				t.Errorf("CacheUsagePercent() = %d, want %d", got, tc.wantPercent)
+			if got := s.CacheUsageFractionHex255(); got != tc.wantHex255 {
+				t.Errorf("CacheUsageFractionHex255() = %d, want %d (size=%d, cap=%d)", got, tc.wantHex255, tc.sizeBytes, tc.capBytes)
 			}
 		})
 	}
@@ -278,9 +283,14 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00",
 		},
 		{
+			// half full: int(0.5 * 255) = 127 = 0x7F
+			// (was "32" under the old 0-100 scale; renamed
+			// the function and switched to the 0-255
+			// scale so 100% maps to 0xFF like the
+			// peak-eviction fields)
 			name:   "bounded, half full, peaks",
 			stats:  &cacheStats{SizeBytes: 512 * 1024 * 1024, CapBytes: 1024 * 1024 * 1024, PeakEvictions24h: 12, PeakEvictions7d: 30, PeakEvictions28d: 100},
-			wantXX: "32", wantYY: "0C", wantZZ: "1E", wantAA: "64",
+			wantXX: "7F", wantYY: "0C", wantZZ: "1E", wantAA: "64",
 		},
 		{
 			name:   "unbounded",
