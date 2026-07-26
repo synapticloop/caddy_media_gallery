@@ -825,10 +825,19 @@ func buildCardHTML(v FileView) template.HTML {
 		_, _ = b.WriteString(html.EscapeString(v.VideoMeta.Duration))
 		_, _ = b.WriteString(`</span>`)
 	}
-	// Open-in-new-tab button
+	// Open-in-new-tab button. The title + aria-label are translated
+	// via the package-level tr() helper so non-English locales see
+	// the localized text (e.g. "In neuem Tab öffnen" for German).
+	// Both attributes are HTML-escaped because they contain user-
+	// facing text that the browser renders.
+	openInNewTab := html.EscapeString(tr("open_in_new_tab"))
 	_, _ = b.WriteString(`<span class="open-btn" data-open-url="`)
 	_, _ = b.WriteString(html.EscapeString(v.Href))
-	_, _ = b.WriteString(`" role="button" tabindex="0" title="Open in new tab" aria-label="Open in new tab">↗</span>`)
+	_, _ = b.WriteString(`" role="button" tabindex="0" title="`)
+	_, _ = b.WriteString(openInNewTab)
+	_, _ = b.WriteString(`" aria-label="`)
+	_, _ = b.WriteString(openInNewTab)
+	_, _ = b.WriteString(`">↗</span>`)
 	_, _ = b.WriteString(`</div>`)
 	// <div class="tile-name">...</div>
 	_, _ = b.WriteString(`<div class="tile-name">`)

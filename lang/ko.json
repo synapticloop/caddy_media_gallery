@@ -47,6 +47,7 @@
   "filter_video": "동영상",
   "filter_other": "기타",
   "filter_none": "(없음)",
+  "open_in_new_tab": "새 탭에서 열기",
   "_meta": {
     "locale": "ko",
     "language": "한국어",
