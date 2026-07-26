@@ -4142,6 +4142,69 @@ dirs and others tables have
         // horizontal). center = horizontally centered.
         amp.style.alignSelf = 'center';
       }
+    } else {
+      // Per user report 2026-07-04 (audio-integration
+      // branch): for non-audio cards (images, videos,
+      // or files that have no card class), the audio
+      // meta panel must NOT be visible. If a previous
+      // card click moved the audio meta INTO the media
+      // div (the audio branch above), it stays there as
+      // a sibling of the <img>/<video> element. The
+      // `hidden` attribute alone isn't enough because
+      // the audio branch above sets `display: block`
+      // inline, which overrides the browser's default
+      // `[hidden] { display: none }` style.
+      //
+      // Two things to fix:
+      //   1. Move the audio meta BACK to the overlay
+      //      (its original location from the innerHTML)
+      //      so it doesn't sit next to the image/video
+      //      in document flow.
+      //   2. CLEAR the inline display: block style
+      //      (set to empty string) so the browser's
+      //      default `[hidden] { display: none }` works
+      //      again. Setting `display = ''` removes the
+      //      inline style entirely; the browser's CSS
+      //      default for `[hidden]` then takes over.
+      var amp2 = media.querySelector('.lb-audio-meta');
+      if (!amp2) {
+        amp2 = overlay.querySelector('.lb-audio-meta');
+      }
+      if (amp2) {
+        // Move back to overlay (its original position).
+        // The audio meta was a direct child of overlay
+        // (after the lb-video-meta div, before the media
+        // div) per the innerHTML template. We just append
+        // it back to overlay; the exact DOM position
+        // doesn't matter because it's hidden when
+        // !isAudio.
+        if (amp2.parentElement !== overlay) {
+          overlay.appendChild(amp2);
+        }
+        // Clear the inline display style so the
+        // [hidden] attribute works as expected.
+        amp2.style.display = '';
+        // Reset the position overrides (the audio branch
+        // sets position: static etc.; for non-audio we
+        // want the panel to revert to its inherited CSS
+        // — .lb-video-meta { position: absolute; ... }
+        // — so it sits at the bottom of the viewport.
+        amp2.style.position = '';
+        amp2.style.left = '';
+        amp2.style.right = '';
+        amp2.style.bottom = '';
+        amp2.style.transform = '';
+        amp2.style.margin = '';
+        amp2.style.alignSelf = '';
+        // Reset the media div's flex-direction back to
+        // row (the default) — the audio branch sets it
+        // to column for audio cards. Non-audio cards
+        // need the default layout (which is fine
+        // because the media div has only one child
+        // — <img> or <video> — for non-audio cards).
+        media.style.flexDirection = '';
+        media.style.gap = '';
+      }
     }
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
