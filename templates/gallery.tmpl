@@ -2571,7 +2571,18 @@ updated twice.
   vertical-align: top;
 }
 #gallery-lightbox .lb-exif-label {
-  color: rgba(255, 255, 255, 0.55);
+  /* Per user report 2026-07-04 (audio-integration
+     branch): the previous color (rgba(255, 255, 255,
+     0.55)) was too dim — the labels (CODEC, SAMPLE RATE,
+     CHANNELS, etc.) were hard to read against the dark
+     panel background. The user asked: "they should be
+     the same colour as the other values in the image
+     and video meta" — i.e. the value color, which is
+     rgba(255, 255, 255, 0.9) (inherited from the panel
+     color). We now set the label color explicitly to
+     match so the user can read both the label and the
+     value at the same brightness. */
+  color: rgba(255, 255, 255, 0.9);
   padding-right: 0.6rem !important;
   text-transform: uppercase;
   font-size: 0.65rem;
@@ -4152,6 +4163,30 @@ dirs and others tables have
         amp.style.transform = 'none';
         amp.style.margin = '0';
         amp.style.display = 'block';
+        // Per user report 2026-07-04 (audio-integration
+        // branch): when the audio meta is moved INTO the
+        // media div, it loses the .lb-exif / .lb-video-meta
+        // CSS rules (which only target direct children of
+        // the overlay). The values rendered with the
+        // body's default color (rgb(17, 17, 17) — almost
+        // black) and a transparent background. To match
+        // the visual treatment of the other panels we
+        // set the color, background, padding, and other
+        // properties inline — duplicating the .lb-exif CSS
+        // values here. (The video-meta and exif panels
+        // use the same colors via the .lb-exif /
+        // .lb-video-meta CSS rules; for the audio panel
+        // we're outside that ruleset because we moved it
+        // out of the overlay.)
+        amp.style.color = 'rgba(255, 255, 255, 0.9)';
+        amp.style.background = 'rgba(0, 0, 0, 0.55)';
+        amp.style.padding = '0.6rem 0.9rem';
+        amp.style.borderRadius = '6px';
+        amp.style.fontSize = '0.8rem';
+        amp.style.lineHeight = '1.5';
+        amp.style.whiteSpace = 'nowrap';
+        amp.style.backdropFilter = 'blur(4px)';
+        amp.style.minWidth = '340px';
         // align-self: center centers the panel horizontally
         // (main axis is vertical because flex-direction is
         // column, so align-self affects the cross axis =
