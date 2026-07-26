@@ -9,6 +9,59 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.1 — 2026-07-04
+
+### ✨ UI: highlight filter pills that have an active selection
+
+Per user request 2026-07-04: the type filter row in the
+file filter section now visually distinguishes filter
+dropdowns that have at least one option currently
+checked. The Images / Videos / Other pill summaries use
+the same colour scheme as the "Filter" apply button
+(light-on-dark in light mode, dark-on-light in dark
+mode) when any checkbox inside them is selected — so
+visitors can see at a glance which filters are active
+without having to open the dropdown.
+
+Behaviour:
+
+  - No filter, dropdown closed   → normal pill colour
+  - Has selection, dropdown closed → Filter-button colour
+  - Has selection, dropdown open  → normal pill colour
+    (the visitor already sees the dropdown's contents;
+    the pill colour only signals "is something filtered?")
+  - Dropdown open, no selection → normal pill colour
+
+The two states ("has selection" and "is open") are
+deliberately decoupled — the pill colour signals whether
+the filter is active, the dropdown itself signals whether
+it's open.
+
+Implementation:
+
+  - New `.filter-pill-has-selection` CSS class uses the
+    `--active-bg` / `--active-fg` / `--active-border`
+    variables (same as `.filter-apply`), with a matching
+    `:hover` rule using `filter: brightness(1.2)`.
+  - New `.filter-dropdown[open] > .filter-pill.filter-pill-has-selection`
+    selector added to the existing open-state rule, with
+    higher CSS specificity (4 vs 1) so opening a selected
+    dropdown reverts the pill to normal colour.
+  - Template: each filter pill's `<summary>` class list
+    appends `filter-pill-has-selection` when the
+    corresponding `FilterXxxOptions.Selected` count is > 0.
+
+Behaviour change summary:
+
+  - **Before 1.0.1**: selected filter pills looked identical
+    to unselected ones. Visitors had to open each dropdown
+    to verify whether it was filtering anything.
+  - **After 1.0.1**: selected filter pills match the "Filter"
+    button visually. Open-vs-closed state is still signalled
+    by the dropdown body appearing, not by the pill colour.
+
+---
+
 ## 1.0.0 — 2026-07-04
 
 ### 🎉 First stable release
