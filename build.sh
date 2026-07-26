@@ -133,12 +133,19 @@ LDFLAGS="${LDFLAGS} -X github.com/synapticloop/caddy_media_gallery.Commit=${GIT_
 echo "==> Building Caddy with media_gallery module (this can take 30-90s on a cold cache)..."
 echo "    Version: ${GIT_VERSION}"
 echo "    Commit:  ${GIT_COMMIT}"
+# Per xcaddy's documented mechanism for injecting extra go build
+# flags: XCADDY_GO_BUILD_FLAGS is a shell-quoted string passed through
+# to the underlying `go build` invocation. xcaddy doesn't accept
+# --ldflags directly on its CLI; it uses the env var instead.
+# The double-quoted form preserves the inner single quotes around
+# the -ldflags value so the shell parser sees "-ldflags -X ..." as
+# separate args rather than one quoted blob.
+XCADDY_GO_BUILD_FLAGS="-ldflags '${LDFLAGS}'" \
 xcaddy build \
     --output "$OUTPUT_BIN" \
     --with github.com/caddyserver/caddy@v2.11.4 \
     --with github.com/mholt/caddy-ratelimit \
     --with github.com/synapticloop/caddy_media_gallery=. \
-    --ldflags "${LDFLAGS}" \
 
 chmod +x "$OUTPUT_BIN"
 
