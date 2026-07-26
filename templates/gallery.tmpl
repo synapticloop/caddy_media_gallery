@@ -4080,6 +4080,57 @@ dirs and others tables have
       currentEl = img;
     }
     media.appendChild(currentEl);
+    // Per user request 2026-07-04 (audio-integration
+    // branch): re-parent the audio meta panel to be
+    // inside the media div (as a sibling of the <audio>
+    // element) so it appears BELOW the audio controls in
+    // document flow. We do this AFTER media.appendChild
+    // so the audio is already a child of media (the
+    // insertBefore below needs a valid reference node).
+    //
+    // Without this, the audio meta panel inherits the
+    // .lb-video-meta CSS (`position: absolute; bottom:
+    // 6rem; left: 50%`) and ends up at the same Y
+    // position as the audio controls (also at the bottom
+    // of the overlay) — visually OVERLAPPING them in a
+    // side-by-side layout. The user reported this on
+    // 2026-07-04: "in the lightbox for audio files, put
+    // the meta information below the audio controls".
+    if (isAudio) {
+      // Find the audio meta panel. It was originally a
+      // child of overlay (placed there by the innerHTML
+      // at lightbox creation time). On subsequent card
+      // clicks, the panel may have been re-parented into
+      // a previous media div (from an earlier audio card
+      // click) — check both locations.
+      var amp = media.querySelector('.lb-audio-meta');
+      if (!amp) {
+        amp = overlay.querySelector('.lb-audio-meta');
+      }
+      if (amp) {
+        // Make the audio meta a sibling of the <audio>
+        // element inside the media div. Use
+        // insertBefore(currentEl) so the audio is FIRST
+        // and the meta is SECOND. With flex-direction:
+        // column, that renders as audio on top, meta on
+        // bottom (the order the user asked for).
+        media.insertBefore(amp, null);
+        media.style.flexDirection = 'column';
+        media.style.gap = '1.5rem';
+        amp.style.position = 'static';
+        amp.style.left = 'auto';
+        amp.style.right = 'auto';
+        amp.style.bottom = 'auto';
+        amp.style.transform = 'none';
+        amp.style.margin = '0';
+        amp.style.display = 'block';
+        // align-self: center centers the panel horizontally
+        // (main axis is vertical because flex-direction is
+        // column, so align-self affects the cross axis =
+        // horizontal). center = horizontally centered.
+        amp.style.alignSelf = 'center';
+      }
+    }
     counter.textContent = (idx + 1) + ' / ' + cards.length;
     caption.textContent = name;
     // EXIF is read EAGERLY at
