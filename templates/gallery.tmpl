@@ -3788,6 +3788,22 @@ dirs and others tables have
     meta_audio: '{{t "meta_audio"}}',
     meta_bitrate: '{{t "meta_bitrate"}}',
     meta_framerate: '{{t "meta_framerate"}}',
+    // Per user report 2026-07-04 (audio-integration branch):
+    // the audio-meta panel in the lightbox uses four extra
+    // translation keys for codec / sample rate / channels /
+    // channel layout. The first commit that added them
+    // (9b8557a "audio: add audio count to the status line")
+    // also added the keys to all 8 lang files but FORGOT to
+    // add them to this inline TRANSLATIONS map. Result: the
+    // raw key was rendered in the lightbox instead of the
+    // translation (e.g. "meta_codec" instead of "Codec" /
+    // "Codec" / "Códec" / "コーデック" / etc.). This commit
+    // wires them up so the audio meta panel labels are
+    // localised for every supported language.
+    meta_codec: '{{t "meta_codec"}}',
+    meta_sample_rate: '{{t "meta_sample_rate"}}',
+    meta_channels: '{{t "meta_channels"}}',
+    meta_channel_layout: '{{t "meta_channel_layout"}}',
     media_label: '{{t "media_label"}}',
     search_label: '{{t "search_label"}}',
     search_showing: '{{t "search_showing"}}',
