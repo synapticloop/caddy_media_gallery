@@ -1068,7 +1068,7 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// operator's default_language > "en". This is computed
 	// on every request (cheap — no I/O).
 	locale := DetectLocale(r, g.translator.Locales(), g.DefaultLanguage)
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.NoAudioMeta, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.audioExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil

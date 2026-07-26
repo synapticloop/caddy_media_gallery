@@ -148,6 +148,16 @@ type FileInfo struct {
 	// that handles EXIF (when the scanner runs, it
 	// can also queue a video metadata extraction).
 	VideoMeta *VideoMeta `json:"video_meta,omitempty"`
+	// Per user request 2026-07-04 (Q4 on the audio-
+	// integration branch): AudioMeta holds the stream-level
+	// audio metadata for KindAudio files (codec, sample rate,
+	// channels, channel layout, duration, bitrate). Populated
+	// at scan time via the same fast-scan + slow-enrich
+	// pipeline that handles EXIF + dimensions + video meta.
+	// Nil if the file isn't KindAudio, or if no_audio_meta
+	// is set, or if ffmpeg/ffprobe isn't available (Q3
+	// fallback: audio still works without metadata).
+	AudioMeta *AudioMeta `json:"audio_meta,omitempty"`
 	CountItems int       `json:"count_items"`
 	// CountDirs is the number of directories inside this
 	// subdirectory. Includes real directories AND symlinks
@@ -630,6 +640,27 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 				vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
 				if err == nil && vmeta != nil && vmeta.HasAny() {
 					fi.VideoMeta = vmeta
+				}
+			}
+			// Per user request 2026-07-04 (Q4 on the
+			// audio-integration branch): audio metadata
+			// (codec, sample rate, channels, channel
+			// layout, duration, bitrate) for KindAudio
+			// files. Same ffprobe subprocess pattern as
+			// the video path above. The result is
+			// cached in a .ameta sidecar next to the
+			// audio file's thumb. Skipped entirely if
+			// NoAudioMeta is set (operator opt-out via
+			// the no_audio_meta Caddyfile directive).
+			// Skipped silently if ffmpeg/ffprobe isn't
+			// available (the g.ffmpegPath check in
+			// gallery.go's Provision logs a warning at
+			// startup; no AudioMeta populated, audio
+			// file still works for the user).
+			if fi.Kind == KindAudio && !s.NoAudioMeta {
+				ameta, err := readAudioMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
+				if err == nil && ameta != nil && ameta.HasAny() {
+					fi.AudioMeta = ameta
 				}
 			}
 		}(i)
