@@ -176,6 +176,24 @@
   --active-border: #1a1a1a;  /* active button border in light mode = matches --active-bg */
   --shadow: rgba(0, 0, 0, 0.05);  /* standard shadow */
   --shadow-strong: rgba(0, 0, 0, 0.15); /* strong shadow (lightbox) */
+  /* Per user request 2026-07-04 (1.1.1 release, minor-cache-fix
+     branch): the status line at the top of the page
+     (50 files // 39 images · 8 videos · 3 audios · 3
+     other files // (38.2 MB total) // 52 directories)
+     and the cache-stats footer
+     (D6 // 00 // 00 // 00) both show numeric values
+     separated by // and · delimiters. A proportional
+     font makes the column widths inconsistent — "1 image"
+     and "10 images" take different widths because the
+     digit widths vary. A monospace font makes every
+     digit the same width so the columns align cleanly
+     regardless of the count. We use ui-monospace where
+     available (modern, font-feature-rich) with system
+     monospace as a fallback, then the generic monospace
+     family as a last resort. The same variable is used
+     by the .meta status line and the .site-footer-cache-stats
+     footer. */
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace;
 }
 /* Auto dark mode: applies when the visitor's OS is in dark mode,
    UNLESS they have explicitly chosen "light" (overrides the media
