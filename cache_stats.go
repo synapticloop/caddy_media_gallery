@@ -66,16 +66,24 @@ type cacheStats struct {
 	PeakEvictions28d int
 }
 
-// CacheUsagePercent returns the cache usage as an integer
-// 0-100 (or -1 if the cap is disabled). Used by the footer
-// template to compute XX.
-func (s *cacheStats) CacheUsagePercent() int {
+// CacheUsageFractionHex255 returns the cache usage as an integer
+// 0-255, where 255 means "100% full" and 0 means "empty".
+// This is the XX hex value displayed in the gallery footer
+// (rendered via fmt.Sprintf("%02X", pct) by the template's
+// formatCacheStatsFooter helper). The 0-255 scale matches
+// the YY/ZZ/AA peak-eviction fields — all four footer
+// fields use the same 1-byte hex range so 100% always
+// renders as 0xFF rather than 0x64.
+//
+// Returns -1 if the cap is disabled (CapBytes <= 0); the
+// caller renders the infinity symbol ∞ in that case.
+func (s *cacheStats) CacheUsageFractionHex255() int {
 	if s == nil || s.CapBytes <= 0 {
 		return -1 // unbounded — caller renders ∞
 	}
-	pct := int(s.SizeBytes * 100 / s.CapBytes)
-	if pct > 100 {
-		pct = 100
+	pct := int(s.SizeBytes * 255 / s.CapBytes)
+	if pct > 255 {
+		pct = 255
 	}
 	if pct < 0 {
 		pct = 0
@@ -311,7 +319,7 @@ func formatCacheStatsFooter(stats *cacheStats) (xx, yy, zz, aa string) {
 	if stats == nil {
 		return "00", "00", "00", "00"
 	}
-	pct := stats.CacheUsagePercent()
+	pct := stats.CacheUsageFractionHex255()
 	if pct < 0 {
 		// Unbounded — XX is the infinity symbol
 		xx = "∞"

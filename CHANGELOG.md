@@ -11,25 +11,85 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ## 1.1.1 — 2026-07-04
 
-### 🐛 Fix: TBD (placeholder)
+### 🐛 Fix: cache-status footer percent scale (XX hex value)
 
-Per user request 2026-07-04: this is a patch release
-on the `minor-cache-fix` branch (1.1.x line). Cuts the
-1.1.0 release line so any work on this branch ships
-against 1.1.1 instead of touching 1.1.0.
+Per user report 2026-07-04: the cache-status footer at
+the bottom of the page was showing "53" (= 83% of
+the cap, scaled to 0-100) instead of the expected
+hex value scaled to 0-255 — the same full-byte range
+used by the YY/ZZ/AA peak-eviction fields, where 100%
+maps to 0xFF.
 
-No code changes in this commit — this is just the
-version bump to mark the branch's starting point. The
-actual 1.1.1 work (a single fix to the cache-status
-footer's percent scale in `cache_stats.go`) will land
-in subsequent commits on this branch, and 1.1.1's
-release notes will be filled in then.
+ROOT CAUSE:
 
-The running binary today is still 1.1.0 (the v1.1.0
-build at `44f4266` was a stable release that did not
-have any cache-fix work in it); a new tagged release
-of 1.1.1 will be cut when the cache fix is merged
-into main and reviewed.
+  The function `CacheUsagePercent` (now renamed to
+  `CacheUsageFractionHex255` in this release) returned a
+  value in the 0-100 range:
+    pct := int(s.SizeBytes * 100 / s.CapBytes)
+  The template then formatted this as a 2-digit hex
+  value via `fmt.Sprintf("%02X", pct)`:
+    100% (= 100 decimal) → 0x64 = "64" = "d"
+  But the doc comment AND the parallel peak-eviction
+  fields YY/ZZ/AA all use the 0-255 scale, where
+  100% = 255 = 0xFF. The XX field was the inconsistent
+  one. Result: the footer correctly showed "53" (= 83%
+  of the 0-100 scale) but the user expected it to be on
+  the same 0-255 scale as YY/ZZ/AA, where 83% would be
+  ≈ 0xD7 (≈ 214/255 ≈ 84%).
+
+FIX (cache_stats.go):
+
+  1. Renamed the function `CacheUsagePercent` to
+     `CacheUsageFractionHex255` to reflect the new
+     0-255 (1 byte, hex-display-friendly) scale. The
+     return type is still int. -1 still means "unbounded"
+     (caller renders ∞).
+
+  2. Changed the math from `* 100` to `* 255` so
+     100% maps to 0xFF (= 255) instead of 0x64 (= 100).
+     Same clamping (0-255) and same special case for
+     CapBytes <= 0 (unbounded → return -1).
+
+  3. Updated the test cases in
+     `TestCacheStats_CacheUsageFractionHex255Math`
+     (renamed from `_CacheUsagePercentMath`):
+       empty cache: 0 → 0       (no change)
+       half full: 50 → 127      (was 50)
+       full: 100 → 255          (was 100)
+       over cap: 100 → 255      (was clamped 100)
+       tiny: 0 → 0             (no change)
+       unbounded: -1 → -1       (no change)
+     And in `TestFormatCacheStatsFooter`, the
+     `wantXX` for the half-full case was updated from
+     "32" (50 on 0-100 scale) to "7F" (127 on 0-255
+     scale = 50% of 0xFF).
+
+USER-VISIBLE CHANGE:
+
+  Before this commit (v1.1.0):
+    Cache at 860 MB / 1024 MB cap → footer shows
+    "53 // 00 // 00 // 00" (= 83% × 100/100, 0 evictions)
+
+  After this commit (v1.1.1):
+    Same cache state → footer shows
+    "D6 // 00 // 00 // 00" (= 83% × 255/100 ≈ 214, 0 evictions)
+    = 0xD6 in hex
+
+  At 100% (cache at the cap):
+    Before: "64 // ..."  (100 × 100/100, hex 0x64)
+    After:  "FF // ..."  (100 × 255/100, hex 0xFF)
+
+  The full range 0x00-0xFF is now usable, matching the
+  YY/ZZ/AA peak-eviction fields. The fix is purely
+  cosmetic (the underlying cache eviction behaviour is
+  unchanged) but the operator's expectation that "100%
+  = 0xFF" now holds.
+
+NO BEHAVIOR CHANGES outside the XX field. The
+eviction, scan cache, scan refresh, and stats refresh
+behaviour are unchanged from v1.1.0.
+
+All 450+ Go tests pass.
 
 ### 🎵 Audio: opt-in audio file support
 
