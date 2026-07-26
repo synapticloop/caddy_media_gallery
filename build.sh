@@ -91,13 +91,54 @@ if [ "$CHECK_ONLY" -eq 0 ] && [ "$USER_MODE" -eq 0 ] && [ ! -f /usr/local/bin/ca
     sudo cp /usr/local/bin/caddy /usr/local/bin/caddy.bak-vanilla-2.11.4
 fi
 
-# Build the custom Caddy
+# Per user request 2026-07-04 (build/version-details branch, 1.0.2):
+# populate the package-level Version / Commit vars via Go's
+# `-ldflags "-X <pkg>.<var>=<value>"` mechanism. Caddy's footer
+# displays "caddy_media_gallery <version> // <commit>" using
+# those vars; without this they fall back to the safe defaults
+# "dev" / "unknown".
+#
+# If we're building from a git checkout we extract the values
+# from the local repo:
+#   - Version: `git describe --tags --always` (e.g. "v1.0.2",
+#     "v1.0.2-3-gabc1234-dirty" for non-tagged commits). Strips the
+#     leading "v" so the result is just the semver-looking string.
+#   - Commit:  `git rev-parse --short HEAD` (7-char short hash).
+# If we're NOT in a git checkout (e.g. building from a tarball)
+# we fall back to "dev" / "unknown" — same as the Go defaults —
+# so the build script still works.
+if git rev-parse --git-dir > /dev/null 2>&1; then
+    GIT_VERSION="$(git describe --tags --always 2>/dev/null | sed 's/^v//')"
+    GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null)"
+    # If `git describe` failed (e.g. shallow clone with no tags),
+    # fall back to just the commit.
+    if [ -z "$GIT_VERSION" ]; then
+        GIT_VERSION="$(git rev-parse --short HEAD 2>/dev/null)"
+    fi
+    # If still empty (git is broken somehow), use defaults
+    if [ -z "$GIT_VERSION" ]; then
+        GIT_VERSION="dev"
+    fi
+    if [ -z "$GIT_COMMIT" ]; then
+        GIT_COMMIT="unknown"
+    fi
+else
+    GIT_VERSION="dev"
+    GIT_COMMIT="unknown"
+fi
+
+LDFLAGS="-X github.com/synapticloop/caddy_media_gallery.Version=${GIT_VERSION}"
+LDFLAGS="${LDFLAGS} -X github.com/synapticloop/caddy_media_gallery.Commit=${GIT_COMMIT}"
+
 echo "==> Building Caddy with media_gallery module (this can take 30-90s on a cold cache)..."
+echo "    Version: ${GIT_VERSION}"
+echo "    Commit:  ${GIT_COMMIT}"
 xcaddy build \
     --output "$OUTPUT_BIN" \
     --with github.com/caddyserver/caddy@v2.11.4 \
     --with github.com/mholt/caddy-ratelimit \
     --with github.com/synapticloop/caddy_media_gallery=. \
+    --ldflags "${LDFLAGS}" \
 
 chmod +x "$OUTPUT_BIN"
 
