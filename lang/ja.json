@@ -47,6 +47,7 @@
   "filter_video": "動画",
   "filter_other": "その他",
   "filter_none": "(なし)",
+  "open_in_new_tab": "新しいタブで開く",
   "_meta": {
     "locale": "ja",
     "language": "日本語",

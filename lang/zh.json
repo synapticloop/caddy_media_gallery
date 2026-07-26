@@ -47,6 +47,7 @@
   "filter_video": "视频",
   "filter_other": "其他",
   "filter_none": "(无)",
+  "open_in_new_tab": "在新标签页中打开",
   "_meta": {
     "locale": "zh",
     "language": "中文",

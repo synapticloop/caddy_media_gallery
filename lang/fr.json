@@ -47,6 +47,7 @@
   "filter_video": "Vidéos",
   "filter_other": "Autres",
   "filter_none": "(aucun)",
+  "open_in_new_tab": "Ouvrir dans un nouvel onglet",
   "_meta": {
     "locale": "fr",
     "language": "Français",

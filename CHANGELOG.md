@@ -9,6 +9,58 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.0.3 — 2026-07-04
+
+### ✨ i18n: translate the "Open in new tab" thumbnail link
+
+Per user request 2026-07-04: when hovering the ↗ button
+on each media tile, the tooltip (browser-native `title`)
+and screen-reader label (`aria-label`) were hardcoded
+English ("Open in new tab") regardless of the visitor's
+active locale. Both attributes are now translated via
+the existing `tr()` package-level helper.
+
+Translations added to `lang/{en,de,es,fr,ja,ko,zh,pt}.json`:
+
+  en: Open in new tab
+  de: In neuem Tab öffnen
+  es: Abrir en nueva pestaña
+  fr: Ouvrir dans un nouvel onglet
+  ja: 新しいタブで開く
+  ko: 새 탭에서 열기
+  zh: 在新标签页中打开
+  pt: Abrir em nova guia
+
+Implementation:
+
+  - `render.go` — replaces the hardcoded literal in
+    `buildFileViews` with `tr("open_in_new_tab")`,
+    HTML-escaped before being interpolated into both
+    the `title` and `aria-label` attributes. Uses the
+    same package-level translation helper that
+    `computeFilterGroups` already uses for the filter-
+    pill labels, consistent with the existing server-
+    side-translated strings.
+
+Behaviour change:
+
+  - **Before 1.0.3**: hovering the ↗ button on any media
+    tile always showed "Open in new tab" in the browser
+    tooltip, regardless of the visitor's chosen locale.
+    Screen readers likewise always read "Open in new
+    tab" in English.
+  - **After 1.0.3**: both attributes are localized into
+    the visitor's chosen locale (8 bundled translations).
+    Missing-key fallback chain: requested locale →
+    English → literal key (safe fallback).
+
+No new Caddyfile directives, no new JSON fields, no new
+URL parameters. Pure data change in the lang files + a
+small inline change in the existing buildFileViews HTML
+writer. Stable per the 1.0 promise.
+
+---
+
 ## 1.0.2 — 2026-07-04
 
 ### ✨ UI: build / version metadata in the site footer
