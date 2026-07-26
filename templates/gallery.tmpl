@@ -1249,12 +1249,41 @@ padding-bottom: 0.25rem added
   border-color: var(--border-strong);
   color: var(--fg);
 }
+/* A filter dropdown pill that has options currently selected
+   (e.g. the Images dropdown has .jpg and .png checked) uses
+   the same colour scheme as the "Filter" apply button below
+   the row (.filter-apply): light-on-dark in light mode,
+   dark-on-light in dark mode. This signals to the visitor that
+   a filter is currently active without making them open the
+   dropdown to check. The hover mirrors the Filter button's
+   filter: brightness(1.2) hover so the two controls feel
+   related. */
+.filter-pill-has-selection {
+  background: var(--active-bg);
+  color: var(--active-fg);
+  border-color: var(--active-border);
+}
+.filter-pill-has-selection:hover {
+  filter: brightness(1.2);
+  color: var(--active-fg);
+  border-color: var(--active-border);
+  background: var(--active-bg);
+}
 /* "Reset" (formerly "All") and the dropdown triggers use a
    different visual treatment when active (currently selected
    or the dropdown is open). The summary of a <details> element
-   can be styled with [open] to indicate the dropdown is open. */
+   can be styled with [open] to indicate the dropdown is open.
+
+   The dropdown being OPEN is orthogonal to having options
+   selected. When the dropdown is open, the pill uses its
+   normal (unselected) colour regardless of whether the
+   dropdown has any checked options — so the visitor can
+   SEE THAT THE DROPDOWN IS OPEN while the pill colour
+   separately signals whether the dropdown's contents
+   are filtered. The two states are deliberately decoupled. */
 .filter-pill-active,
 .filter-dropdown[open] > .filter-pill,
+.filter-dropdown[open] > .filter-pill.filter-pill-has-selection,
 .filter-pill:active {
   /* changed from --bg-hover
      (light gray) to --bg-card (white) to match the Sort
@@ -2650,7 +2679,7 @@ updated twice.
 
         {{if gt .FilterImageOptions.Total 0}}
         <details class="filter-dropdown">
-          <summary class="filter-pill">
+          <summary class="filter-pill{{if gt .FilterImageOptions.Selected 0}} filter-pill-has-selection{{end}}">
             {{.FilterImageOptions.Label}}
             <span class="filter-count">({{.FilterImageOptions.Selected}}/{{.FilterImageOptions.Total}})</span>
             <span class="filter-caret" aria-hidden="true">▾</span>
@@ -2669,7 +2698,7 @@ updated twice.
 
         {{if gt .FilterVideoOptions.Total 0}}
         <details class="filter-dropdown">
-          <summary class="filter-pill">
+          <summary class="filter-pill{{if gt .FilterVideoOptions.Selected 0}} filter-pill-has-selection{{end}}">
             {{.FilterVideoOptions.Label}}
             <span class="filter-count">({{.FilterVideoOptions.Selected}}/{{.FilterVideoOptions.Total}})</span>
             <span class="filter-caret" aria-hidden="true">▾</span>
@@ -2688,7 +2717,7 @@ updated twice.
 
         {{if gt .FilterOtherOptions.Total 0}}
         <details class="filter-dropdown">
-          <summary class="filter-pill">
+          <summary class="filter-pill{{if gt .FilterOtherOptions.Selected 0}} filter-pill-has-selection{{end}}">
             {{.FilterOtherOptions.Label}}
             <span class="filter-count">({{.FilterOtherOptions.Selected}}/{{.FilterOtherOptions.Total}})</span>
             <span class="filter-caret" aria-hidden="true">▾</span>
