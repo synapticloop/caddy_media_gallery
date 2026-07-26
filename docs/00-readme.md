@@ -12,7 +12,8 @@ aware gallery - built for ease of visualisation:
  - List of other - non-media files
  - Individual tiles for media files
    - thumbnails for images,
-   - play button placeholders for videos
+   - play button placeholders for videos,
+ - speaker icon placeholders for audio (1.1.0+)
  - click-to-expand lightbox, or open the media in a new tab
  - 
  - and a separate "Other files" strip above,
@@ -29,6 +30,7 @@ aware gallery - built for ease of visualisation:
 | [Configuration](01-configuration.md) | The `media_gallery` Caddyfile directive, JSON config, env vars |
 | [Templates](03-templates.md) | Index page — links to the per-topic pages below: [03a-structure](03a-structure.md), [03b-customization](03b-customization.md), [03c-feature-dark-mode](03c-feature-dark-mode.md), [03d-feature-localstorage](03d-feature-localstorage.md), [03e-feature-lightbox](03e-feature-lightbox.md), [03f-feature-layout](03f-feature-layout.md), [03g-building-pdf](03g-building-pdf.md) | How the templates work, what variables you can use, how to customize |
 | [Feature: i18n](03h-feature-i18n.md) | Internationalisation — 8 bundled locales, language picker, locale resolution priority chain, adding new locales without rebuilding Caddy |
+| [Feature: audio (1.1.0+)](03i-feature-audio.md) | Audio-only files (mp3, flac, opus, m4a, aac, wav, ogg, oga) as a first-class media type. Operator opt-in via `audio_types <list>`. Stream-level metadata (codec, sample rate, channels, channel layout, duration, bitrate) extracted via ffprobe. SVG speaker-icon tile + native `<audio controls>` lightbox player. Tier-1 only (no ID3 tags in 1.1.0). |
 | [Sort & Pagination](04-sort-and-pagination.md) | The `?sort=`, `?order=`, `?page=` URL API |
 
 ## Quick start
