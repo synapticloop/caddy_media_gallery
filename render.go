@@ -145,11 +145,15 @@ type PageData struct {
 	// Configured via the `page_sizes` Caddyfile directive;
 	// defaults to [30, 60, 120, "all"].
 	PageSizes []string
-	// TotalImages is the total media count (images + videos)
-	// AFTER the search/type filters have been applied. Used
-	// for the pagination math and the visibility check on
-	// the images grid section. If the user has ?q=foo in
-	// the URL, this is the count of items matching "foo".
+	// TotalImages is the total media count (images + videos +
+	// audio) AFTER the search/type filters have been
+	// applied. Used for the pagination math and the
+	// visibility check on the images grid section. If the
+	// user has ?q=foo in the URL, this is the count of
+	// items matching "foo". Per user request 2026-07-04
+	// (audio-integration branch): audio files (KindAudio)
+	// are part of this count too — they share the same
+	// paginated media grid as images and videos.
 	TotalImages int
 	// DirectoryTotal is the total media count in the
 	// directory BEFORE any search/type filters are applied.
@@ -176,18 +180,28 @@ type PageData struct {
 	// the header meta line as "N videos" (after the images
 	// count, only if > 0).
 	TotalVideos int
+	// TotalAudio is the count of audio files only — shown
+	// in the header meta line as "N audio" / "N audios"
+	// (after videos, only if > 0). Per user request
+	// 2026-07-04 (audio-integration branch): the status
+	// line needed a separate audio count between the video
+	// and "other files" counts, so visitors can see at a
+	// glance how many audio files are in the directory
+	// without expanding the "Other files" table.
+	TotalAudio int
 	// TotalFiles is the sum of all files in the directory:
-	// ImageCount + TotalVideos + len(OtherFiles). Computed
-	// in RenderPage (not the template) and shown at the start
-	// of the header meta line as "N files" (per user request
-	// 2026-06-19: a quick "how many files are in this dir"
-	// answer at the top of the meta line).
+	// ImageCount + TotalVideos + TotalAudio + len(OtherFiles).
+	// Computed in RenderPage (not the template) and shown
+	// at the start of the header meta line as "N files"
+	// (per user request 2026-06-19: a quick "how many files
+	// are in this dir" answer at the top of the meta line).
 	TotalFiles int
 	// TotalAllFilesSize is the pre-formatted (via humanSize) total
-	// size of ALL files in the directory: images + videos + other
-	// files. Excludes subdirectories (which don't have a Size
-	// field). Shown in the header meta line as a separate segment
-	// wrapped in `//` separators, per user request 2026-06-18:
+	// size of ALL files in the directory: images + videos +
+	// audio + other files. Excludes subdirectories (which
+	// don't have a Size field). Shown in the header meta line
+	// as a separate segment wrapped in `//` separators, per
+	// user request 2026-06-18:
 	//   "the X.X KB is the total for all files in the directory"
 	// e.g. "34 images ·8 videos ·2 other files // (8.3 MB) //
 	//        ·26 directories ·50 per page"
@@ -2476,21 +2490,36 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// (video count) separately. Per user request 2026-06-17:
 	// videos were previously miscounted as images in the
 	// "X images" label.
+	//
+	// Per user request 2026-07-04 (audio-integration
+	// branch): audio files are counted as their own
+	// kind (KindAudio) and tracked separately as
+	// audioCount — they are NEITHER images nor videos in
+	// the header meta line. The image-count includes only
+	// KindImage; the video-count includes only KindVideo;
+	// the audio-count (new field TotalAudio) includes
+	// only KindAudio. The TotalFiles sum below
+	// accounts for all four: images + videos + audio +
+	// other files.
 	imageCount := 0
 	videoCount := 0
+	audioCount := 0
 	var totalAllBytes int64
 	for _, f := range allImages {
-		if f.Kind == KindVideo {
+		switch f.Kind {
+		case KindVideo:
 			videoCount++
-		} else {
+		case KindAudio:
+			audioCount++
+		default:
 			imageCount++
 		}
 		totalAllBytes += f.Size
 	}
 	// Per user request 2026-06-18 (Phase 44): the size shown in
 	// the header is the TOTAL of ALL files (images + videos +
-	// other files), not just images or just other files. Excludes
-	// subdirectories.
+	// audio + other files), not just images or just other
+	// files. Excludes subdirectories.
 	for _, f := range others {
 		totalAllBytes += f.Size
 	}
@@ -2651,12 +2680,13 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		ImageStart:       imageStart,
 		ImageEnd:         imageEnd,
 		TotalVideos:      videoCount,
+		TotalAudio:       audioCount,
 		// Per user request 2026-06-19: pre-compute the total
-		// number of files (images + videos + other files) for
-		// the "N files" label at the start of the meta line.
-		// Doing this in Go (vs in the template) avoids needing
-		// an `add` template function.
-		TotalFiles:         imageCount + videoCount + len(others),
+		// number of files (images + videos + audio + other
+		// files) for the "N files" label at the start of the
+		// meta line. Doing this in Go (vs in the template)
+		// avoids needing an `add` template function.
+		TotalFiles:         imageCount + videoCount + audioCount + len(others),
 		TotalAllFilesSize:  humanSize(totalAllBytes),
 		TotalPages:         totalPages,
 		HasPrev:            page > 1,

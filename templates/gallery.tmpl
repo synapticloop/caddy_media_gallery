@@ -2638,6 +2638,18 @@ updated twice.
       <span>//</span>
       <span>{{.ImageCount}} {{if eq .ImageCount 1}}{{t "image_count"}}{{else}}{{t "images_count"}}{{end}}</span>
       {{if gt .TotalVideos 0}}<span>·</span><span>{{.TotalVideos}} {{if eq .TotalVideos 1}}{{t "video_count"}}{{else}}{{t "videos_count"}}{{end}}</span>{{end}}
+      {{- /* Per user request 2026-07-04 (audio-integration
+           branch): the audio count goes BETWEEN the
+           video count and the "other files" count, so
+           visitors can see at a glance how many audio
+           files are in the directory. Same show-if-N>0
+           pattern as the video count above — only shown
+           when there are actually audio files
+           (operator-set via audio_types). The
+           "audios_count" / "audio_count" lang keys
+           mirror the image/video pair (singular vs plural
+           — e.g. "1 audio" vs "3 audios"). */}}
+      {{if gt .TotalAudio 0}}<span>·</span><span>{{.TotalAudio}} {{if eq .TotalAudio 1}}{{t "audio_count"}}{{else}}{{t "audios_count"}}{{end}}</span>{{end}}
       {{if gt (len .OtherFiles) 0}}<span>·</span><span>{{len .OtherFiles}} {{if eq (len .OtherFiles) 1}}{{t "other_file"}}{{else}}{{t "other_files"}}{{end}}</span>{{end}}
       <span>//</span>
       <span>({{.TotalAllFilesSize}} {{t "total_size_label"}})</span>
