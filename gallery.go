@@ -735,7 +735,29 @@ func (g *Gallery) Provision(caddy.Context) error {
 		}()
 		g.cacheSweepStop = make(chan struct{})
 		go g.cacheSweepLoop(cacheDir, g.MaxCacheSizeMB, g.cacheSweepStop)
+	} else {
+		// Per user request 2026-07-04 (minor-fixes branch,
+		// fix #1): when the cap is 0 (unbounded), there's
+		// no eviction sweep, but we still want the orphan
+		// sweep to run at startup and on a 30-min cadence.
+		// Otherwise unbounded caches accumulate orphans
+		// indefinitely. The cacheSweepLoop code already
+		// handles this: when maxMB == 0, it skips
+		// evictIfOver but still calls sweepOrphans.
+		cacheDir := g.thumbCacheDir()
+		g.cacheSweepStop = make(chan struct{})
+		go g.cacheSweepLoop(cacheDir, 0, g.cacheSweepStop)
 	}
+	// Per user request 2026-07-04 (minor-fixes branch, fix
+	// #1): also run the orphan sweep at startup. The
+	// 30-min ticker takes up to 30 min to fire, so without
+	// this startup call the existing orphans in the cache
+	// would sit there until the first ticker fires. Best-
+	// effort, in a goroutine (same as the evictIfOver
+	// startup call above).
+	go func() {
+		sweepOrphans(g.thumbCacheDir())
+	}()
 	// Stats-refresh goroutine: refreshes the snapshot every
 	// 30 sec (one os.ReadDir walk + compute the three peaks
 	// from the in-memory events list). Always running —
@@ -796,6 +818,13 @@ func galleryTemplatesDir() string {
 
 // cacheSweepLoop runs evictIfOver on a 30-minute ticker.
 // Stopped by closing cacheSweepStop (called from Cleanup).
+// Per user request 2026-07-04 (minor-fixes branch, fix #1):
+// also runs sweepOrphans to clean up any sidecar files
+// (.meta, .exif, .vmeta, .ameta) that have no matching
+// thumb. This handles the orphan sidecar accumulation
+// that the existing per-write eviction doesn't cover
+// (e.g. sidecars from a prior Caddy version or a
+// crashed write).
 func (g *Gallery) cacheSweepLoop(cacheDir string, maxMB int, stop chan struct{}) {
 	// Run the first sweep after 30 min, not immediately —
 	// the initial sweep at startup already covered the
@@ -807,7 +836,14 @@ func (g *Gallery) cacheSweepLoop(cacheDir string, maxMB int, stop chan struct{})
 		case <-stop:
 			return
 		case <-ticker.C:
-			evictIfOver(cacheDir, maxMB, g.CacheStatsTracker)
+			if maxMB > 0 {
+				evictIfOver(cacheDir, maxMB, g.CacheStatsTracker)
+			}
+			// Orphan sweep runs regardless of cap (unbounded
+			// caches still accumulate orphans from crashes
+			// and version upgrades). The cost is ~20ms on
+			// an SSD for a 1 GB cache; trivial.
+			sweepOrphans(cacheDir)
 		}
 	}
 }

@@ -779,6 +779,102 @@ func evictIfOver(cacheDir string, maxMB int, tracker *cacheStatsTracker) {
 // fail the entire eviction sweep). Only an error on the
 // top-level subdir is reported (and we return whatever
 // we managed to scan so far).
+// sweepOrphans walks the cache and deletes any sidecar file
+// (.meta, .exif, .vmeta, .ameta) that has no matching thumb
+// file. Per user request 2026-07-04 (minor-fixes branch, fix
+// #1): the cache accumulates orphan sidecars from prior
+// Caddy versions, crashed writes, and prior bugs where a
+// sidecar was written without a matching thumb. The orphan
+// sidecars waste disk and confuse the cache-stats reporting.
+//
+// Called from cacheSweepLoop alongside evictIfOver (every
+// 30 min, same cadence). Runs even when the eviction cap is
+// 0 (unbounded) because orphans aren't a size issue — they're
+// a hygiene issue. Worst case (a sidecar is about to be
+// matched by a thumb currently being written): the thumb
+// regenerates its sidecar on the next serve, so we lose
+// nothing of value.
+//
+// Cost: one extra os.ReadDir + os.Stat per sidecar file.
+// For a 1 GB cache with ~5,000 thumbs and ~10,000 sidecars
+// (some orphaned), this is ~20 ms on an SSD. Negligible.
+func sweepOrphans(cacheDir string) (deleted int, err error) {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		// Cache dir doesn't exist yet (no thumbs cached).
+		// Nothing to sweep. Not an error — mirrors the
+		// "not an error" comment in evictIfOver above.
+		return 0, nil
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		// Walk into the nested subdir (e.g. "ff" for the
+		// first byte of the hash). Read the leaf files.
+		inner, err := os.ReadDir(filepath.Join(cacheDir, entry.Name()))
+		if err != nil {
+			continue // skip subdirs we can't read
+		}
+		for _, e := range inner {
+			innerPath := filepath.Join(cacheDir, entry.Name(), e.Name())
+			if e.IsDir() {
+				// One more level: <aa>/<bb>/<thumb>.webp
+				innermost, err := os.ReadDir(innerPath)
+				if err != nil {
+					continue
+				}
+				for _, ee := range innermost {
+					leafPath := filepath.Join(innerPath, ee.Name())
+					if isSidecarFile(ee.Name()) && !thumbExistsFor(leafPath) {
+						_ = os.Remove(leafPath)
+						deleted++
+					}
+				}
+				continue
+			}
+			// File directly in <aa> (not the nested layout,
+			// but handle it).
+			if isSidecarFile(e.Name()) && !thumbExistsFor(innerPath) {
+				_ = os.Remove(innerPath)
+				deleted++
+			}
+		}
+	}
+	return deleted, nil
+}
+
+// isSidecarFile reports whether the given file name is a
+// sidecar (matches a thumb file with the same base name).
+// Sidecar extensions: .meta, .exif, .vmeta, .ameta. The
+// 4 extensions cover the current schema (image, video, audio
+// metadata).
+func isSidecarFile(name string) bool {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".meta", ".exif", ".vmeta", ".ameta":
+		return true
+	}
+	return false
+}
+
+// thumbExistsFor reports whether a thumb file exists for
+// the given sidecar path. A sidecar is named e.g.
+// "abcd1234.webp.meta" (matching thumb: "abcd1234.webp").
+// It strips one sidecar extension and checks for the
+// underlying thumb.
+func thumbExistsFor(sidecarPath string) bool {
+	for _, ext := range []string{".meta", ".exif", ".vmeta", ".ameta"} {
+		// Try stripping each known sidecar extension.
+		if strings.HasSuffix(strings.ToLower(sidecarPath), ext) {
+			thumbPath := sidecarPath[:len(sidecarPath)-len(ext)]
+			_, err := os.Stat(thumbPath)
+			return err == nil
+		}
+	}
+	return false
+}
+
 func walkNestedCacheDir(subdir string) ([]cacheFile, int64, error) {
 	var out []cacheFile
 	var total int64
