@@ -18,15 +18,33 @@ import (
 // on disk). For 100+ image directories like /images/generated, this
 // drops per-request work from milliseconds to microseconds.
 //
-// This is intentionally simple: no eviction policy beyond TTL — old
-// entries are dropped when re-accessed after the TTL. For a server
-// with <1000 galleries in active rotation, memory is bounded by
-// (number of dirs) * (average file count) * (size of FileInfo).
+// Per user request 2026-07-04 (minor-fixes branch, fix #2): the
+// cache is bounded by a maxEntries cap (default 1024). When a Set
+// or slow-path Get would push the cache over the cap, the
+// least-recently-accessed entry is evicted first. This protects
+// against unbounded memory growth on long-running Caddy processes
+// serving many directories. The cap is configurable via
+// NewScanCacheWithCap for tests.
 type ScanCache struct {
-	mu    sync.RWMutex
-	ttl   time.Duration
-	items map[string]scanCacheEntry
+	mu         sync.RWMutex
+	ttl        time.Duration
+	items      map[string]scanCacheEntry
+	// recency is a doubly-linked list tracking access order.
+	// The most-recently-accessed key is at the front, the
+	// least-recently-accessed at the back. Eviction removes
+	// from the back. Using a list + map (rather than a heap)
+	// gives O(1) access, O(1) recency update, and O(1)
+	// eviction. The map keys point to list elements.
+	recency    *lruList
+	maxEntries int
 }
+
+// maxScanCacheEntries is the default LRU cap for the scan cache.
+// 1024 entries × ~50 files per dir × ~200 bytes per FileInfo
+// ≈ 10 MB worst case. Plenty for any reasonable server; the
+// cap exists to bound memory in the long-tail case of
+// long-running processes serving millions of directories.
+const defaultScanCacheMaxEntries = 1024
 
 type scanCacheEntry struct {
 	files      []FileInfo
@@ -39,14 +57,162 @@ type scanCacheEntry struct {
 	//               FileInfo would still have the OLD Kind).
 }
 
-// NewScanCache returns a cache with the given TTL. A TTL of 1 minute
-// is a good default; it limits staleness if files are added/removed
+// NewScanCache returns a cache with the given TTL and the
+// default maxEntries cap. A TTL of 1 minute is a good
+// default; it limits staleness if files are added/removed
 // while also avoiding constant rescans for active directories.
 func NewScanCache(ttl time.Duration) *ScanCache {
 	if ttl <= 0 {
 		ttl = time.Minute
 	}
-	return &ScanCache{ttl: ttl, items: make(map[string]scanCacheEntry)}
+	return &ScanCache{
+		ttl:        ttl,
+		items:      make(map[string]scanCacheEntry),
+		recency:    newLRUList(),
+		maxEntries: defaultScanCacheMaxEntries,
+	}
+}
+
+// NewScanCacheWithCap is like NewScanCache but allows the caller
+// to override the LRU cap. Used by tests; production code should
+// stick with NewScanCache.
+func NewScanCacheWithCap(ttl time.Duration, maxEntries int) *ScanCache {
+	c := NewScanCache(ttl)
+	if maxEntries > 0 {
+		c.maxEntries = maxEntries
+	}
+	return c
+}
+
+// touch moves dir to the front of the recency list (most
+// recently accessed). Caller must hold c.mu for writing.
+func (c *ScanCache) touch(dir string) {
+	if el, ok := c.recency.lookup[dir]; ok {
+		c.recency.moveToFront(el)
+	}
+}
+
+// evictLRU removes the least-recently-accessed entry from
+// items and the recency list. Caller must hold c.mu for
+// writing. No-op if the cache is empty.
+func (c *ScanCache) evictLRU() {
+	dir := c.recency.backKey()
+	if dir == "" {
+		return
+	}
+	c.recency.remove(dir)
+	delete(c.items, dir)
+}
+
+// enforceCap evicts LRU entries until len(c.items) <= c.maxEntries.
+// Caller must hold c.mu for writing. Used after Set / SetFiles
+// to keep the cache bounded.
+func (c *ScanCache) enforceCap() {
+	for len(c.items) > c.maxEntries {
+		c.evictLRU()
+	}
+}
+
+// lruNode is a single node in the lruList. Holds the key
+// (a directory path) and the prev/next pointers.
+type lruNode struct {
+	key  string
+	prev *lruNode
+	next *lruNode
+}
+
+// lruList is a doubly-linked list of lruNode entries with
+// front and back sentinels. O(1) moveToFront, remove, back.
+// A map (lookup) gives O(1) key → node lookup.
+type lruList struct {
+	front  *lruNode
+	back   *lruNode
+	lookup map[string]*lruNode
+}
+
+func newLRUList() *lruList {
+	return &lruList{lookup: make(map[string]*lruNode)}
+}
+
+// pushFront adds key to the front of the list. If key is
+// already present, it's moved to the front (no duplicate
+// entries).
+func (l *lruList) pushFront(key string) {
+	if el, ok := l.lookup[key]; ok {
+		l.moveToFront(el)
+		return
+	}
+	el := &lruNode{key: key}
+	l.lookup[key] = el
+	if l.front == nil {
+		// Empty list — this is the only node.
+		l.front = el
+		l.back = el
+		return
+	}
+	el.next = l.front
+	l.front.prev = el
+	l.front = el
+}
+
+// moveToFront moves the given node to the front of the list.
+// Caller must ensure the node is still in the list.
+func (l *lruList) moveToFront(el *lruNode) {
+	if l.front == el {
+		return // already at front
+	}
+	// Detach from current position
+	if el.prev != nil {
+		el.prev.next = el.next
+	}
+	if el.next != nil {
+		el.next.prev = el.prev
+	}
+	if el == l.back {
+		l.back = el.prev
+	}
+	// Insert at front
+	el.prev = nil
+	el.next = l.front
+	if l.front != nil {
+		l.front.prev = el
+	}
+	l.front = el
+}
+
+// remove removes key from the list. No-op if not present.
+func (l *lruList) remove(key string) {
+	el, ok := l.lookup[key]
+	if !ok {
+		return
+	}
+	if el.prev != nil {
+		el.prev.next = el.next
+	}
+	if el.next != nil {
+		el.next.prev = el.prev
+	}
+	if el == l.front {
+		l.front = el.next
+	}
+	if el == l.back {
+		l.back = el.prev
+	}
+	delete(l.lookup, key)
+}
+
+// backKey returns the key at the back of the list (the LRU
+// candidate for eviction). Returns "" if the list is empty.
+func (l *lruList) backKey() string {
+	if l.back == nil {
+		return ""
+	}
+	return l.back.key
+}
+
+// len returns the number of entries in the list.
+func (l *lruList) len() int {
+	return len(l.lookup)
 }
 
 // SetFiles atomically replaces the files slice for a cached entry.
@@ -79,6 +245,14 @@ func (c *ScanCache) SetFiles(dir string, files []FileInfo) {
 	}
 	entry.files = files
 	c.items[dir] = entry
+	// Per user request 2026-07-04 (minor-fixes branch, fix
+	// #2): refresh the LRU recency. SetFiles is called by
+	// the background enrichment goroutine which is a
+	// "touch" of the cached entry. Then enforce the cap
+	// in case a long-running process has accumulated
+	// more entries than the LRU allows.
+	c.touch(dir)
+	c.enforceCap()
 }
 
 // Get returns the cached []FileInfo for dir, or runs a fresh scan if
@@ -97,24 +271,23 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts, audioExts ma
 	dirMtime := info.ModTime()
 	now := time.Now()
 
-	// Fast path: read lock for cache hit.
-	c.mu.RLock()
-	entry, ok := c.items[dir]
-	c.mu.RUnlock()
 	extKey := extSetsKey(imageExts, videoExts, audioExts, noExif, noMeta, noAudioMeta)
-	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
-		// Return a copy so callers can't mutate the cached slice.
-		out := make([]FileInfo, len(entry.files))
-		copy(out, entry.files)
-		return out, nil
-	}
-
-	// Slow path: take the write lock, re-check (double-checked locking),
-	// then scan and store.
+	// Per user request 2026-07-04 (minor-fixes branch, fix
+	// #2): we now always take the write lock (not RLock)
+	// because we need to update the LRU recency on every
+	// cache hit. Previously we used RLock for the fast
+	// path to allow concurrent readers. The new design
+	// trades a tiny bit of concurrency for correct LRU
+	// semantics. For the typical workload (a few
+	// visitors browsing the same dir), contention is
+	// minimal.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	entry, ok = c.items[dir]
+	entry, ok := c.items[dir]
 	if ok && entry.sort == sortMode && entry.extSetsKey == extKey && entry.dirMtime.Equal(dirMtime) && now.Before(entry.expires) {
+		// Cache hit — refresh the LRU recency and
+		// return a copy of the files slice.
+		c.touch(dir)
 		out := make([]FileInfo, len(entry.files))
 		copy(out, entry.files)
 		return out, nil
@@ -132,6 +305,13 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts, audioExts ma
 		sort:       sortMode,
 		extSetsKey: extKey,
 	}
+	// Per user request 2026-07-04 (minor-fixes branch, fix
+	// #2): record the new entry in the LRU list and evict
+	// LRU entries if the cache is over the cap. The slow
+	// path already holds c.mu for writing, so this is
+	// safe.
+	c.recency.pushFront(dir)
+	c.enforceCap()
 	// Per user report 2026-07-01: kick off the EXIF/dimensions
 	// enrichment in the BACKGROUND so the visitor doesn't
 	// wait for it. The first page render shows cards without
