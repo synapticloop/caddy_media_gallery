@@ -51,20 +51,32 @@ type PageData struct {
 	PageSize int
 	// Query is the current URL query (sort, filter, page, breadcrumb, etc.) — passed to the template so the page-size form can include hidden inputs to preserve other params on submit.
 	Query url.Values
-	// CacheStatsXX, CacheStatsYY, CacheStatsZZ, CacheStatsAA
-	// are the four hex values displayed in the footer:
+	// CacheStatsXX, CacheStatsYY, CacheStatsZZ, CacheStatsAA,
+	// CacheStatsBB are the five hex values displayed in the
+	// footer:
 	//
 	//   XX  = cache usage percent, 00-FF (or "∞" if
 	//         MaxCacheSizeMB is 0 / unbounded)
-	//   YY  = peak evictions in any 1-hour bucket in the
-	//         last 24 hours, 00-FF
-	//   ZZ  = peak evictions in any 1-hour bucket in the
-	//         last 7 days, 00-FF
-	//   AA  = peak evictions in any 1-hour bucket in the
-	//         last 28 days (4 weeks), 00-FF
+	//   YY  = peak eviction runs in any 1-hour bucket in
+	//         the last 24 hours, 00-FF. Per user request
+	//         2026-07-04: counts runs, not files evicted.
+	//         A single run that evicts 50 files counts
+	//         as 1, not 50.
+	//   ZZ  = peak eviction runs in any 1-hour bucket in
+	//         the last 7 days, 00-FF
+	//   AA  = peak eviction runs in any 1-hour bucket in
+	//         the last 28 days (4 weeks), 00-FF
+	//   BB  = max cache size, 00-FF. Per user request
+	//         2026-07-04 (cache-status-line-updates branch):
+	//         shown as `cap_in_MB / 64` so the value fits
+	//         in 2 hex digits for the 0-16 GB range.
+	//         2 GB cap = 2048/64 = 32 = 0x20;
+	//         1 GB cap = 0x10; 16 GB cap = 0xFF. When
+	//         MaxCacheSizeMB is 0 (unbounded), BB is "00"
+	//         (matches the YY/ZZ/AA fallback).
 	//
 	// When MaxCacheSizeMB is 0, XX is rendered as the
-	// infinity symbol (∞) and YY/ZZ/AA are always "00".
+	// infinity symbol (∞) and YY/ZZ/AA/BB are always "00".
 	//
 	// Per user request 2026-06-27. Refreshed every 30 sec
 	// by the stats-refresh goroutine in Provision (atomic
@@ -73,6 +85,7 @@ type PageData struct {
 	CacheStatsYY string
 	CacheStatsZZ string
 	CacheStatsAA string
+	CacheStatsBB string
 	// Locale is the visitor's resolved locale (e.g. "en",
 	// "de", "ja"). Detected by DetectLocale using URL param
 	// > cookie > Accept-Language > operator default.
@@ -2328,7 +2341,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs, noAudioMeta bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts, audioExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs, noAudioMeta bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts, audioExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA, cacheStatsBB string) (string, error) {
 	// Per user request 2026-07-04: set the package-level
 	// translator + locale at the TOP of RenderPage so the
 	// filter labels (computed by computeFilterGroups, which
@@ -2716,6 +2729,7 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 		CacheStatsYY: cacheStatsYY,
 		CacheStatsZZ: cacheStatsZZ,
 		CacheStatsAA: cacheStatsAA,
+		CacheStatsBB: cacheStatsBB,
 	}
 
 	tmpl, err := loadTemplate(tmplName)

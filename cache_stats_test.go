@@ -276,25 +276,31 @@ func TestCacheStats_CacheUsageFractionHex255Math(t *testing.T) {
 }
 
 // TestFormatCacheStatsFooter verifies the four hex strings
-// produced for the footer.
+// produced for the footer. Per user request 2026-07-04
+// (cache-status-line-updates branch): the BB (max cache
+// size in hex) was added in 1.1.x.
 func TestFormatCacheStatsFooter(t *testing.T) {
 	tests := []struct {
 		name   string
 		stats  *cacheStats
+		capMB  int
 		wantXX string
 		wantYY string
 		wantZZ string
 		wantAA string
+		wantBB string
 	}{
 		{
 			name:   "nil stats",
 			stats:  nil,
-			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  1024,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "00",
 		},
 		{
 			name:   "bounded, empty",
 			stats:  &cacheStats{CapBytes: 1024 * 1024 * 1024},
-			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  1024,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "10",
 		},
 		{
 			// half full: int(0.5 * 255) = 127 = 0x7F
@@ -304,22 +310,48 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 			// peak-eviction fields)
 			name:   "bounded, half full, peaks",
 			stats:  &cacheStats{SizeBytes: 512 * 1024 * 1024, CapBytes: 1024 * 1024 * 1024, PeakEvictions24h: 12, PeakEvictions7d: 30, PeakEvictions28d: 100},
-			wantXX: "7F", wantYY: "0C", wantZZ: "1E", wantAA: "64",
+			capMB:  1024,
+			wantXX: "7F", wantYY: "0C", wantZZ: "1E", wantAA: "64", wantBB: "10",
 		},
 		{
 			name:   "unbounded",
 			stats:  &cacheStats{SizeBytes: 999, CapBytes: 0},
-			wantXX: "\u221e", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  0,
+			wantXX: "∞", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "00",
 		},
 		{
 			name:   "peaks clamped to 255",
 			stats:  &cacheStats{CapBytes: 1024 * 1024 * 1024, PeakEvictions24h: 1000, PeakEvictions7d: 256, PeakEvictions28d: 99999},
-			wantXX: "00", wantYY: "FF", wantZZ: "FF", wantAA: "FF",
+			capMB:  1024,
+			wantXX: "00", wantYY: "FF", wantZZ: "FF", wantAA: "FF", wantBB: "10",
+		},
+		{
+			// Per user request 2026-07-04: BB shows the
+			// max cache size in hex, scaled as
+			// cap_in_MB / 64 so the 0-16 GB range fits
+			// in 2 hex digits. 2 GB cap = 2048/64 = 32
+			// = 0x20. 4 GB = 4096/64 = 64 = 0x40.
+			// Need to set both SizeBytes (so XX is 0% = 00)
+			// and CapBytes (to match the capMB so XX's
+			// CacheUsageFractionHex255 returns 0% instead
+			// of "unbounded").
+			name:   "2 GB cap",
+			stats:  &cacheStats{CapBytes: 2 * 1024 * 1024 * 1024},
+			capMB:  2048,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "20",
+		},
+		{
+			// 16384 / 64 = 256, clamped to 255 = 0xFF.
+			// CapBytes set to 16 GB so XX is 00 not ∞.
+			name:   "16 GB cap (clamped to FF)",
+			stats:  &cacheStats{CapBytes: 16 * 1024 * 1024 * 1024},
+			capMB:  16384,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "FF",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			xx, yy, zz, aa := formatCacheStatsFooter(tc.stats)
+			xx, yy, zz, aa, bb := formatCacheStatsFooter(tc.stats, tc.capMB)
 			if xx != tc.wantXX {
 				t.Errorf("XX = %q, want %q", xx, tc.wantXX)
 			}
@@ -332,6 +364,9 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 			if aa != tc.wantAA {
 				t.Errorf("AA = %q, want %q", aa, tc.wantAA)
 			}
+			if bb != tc.wantBB {
+				t.Errorf("BB = %q, want %q", bb, tc.wantBB)
+			}
 		})
 	}
 }
@@ -340,13 +375,13 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 // HTML includes the cache stats footer.
 func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64", "10")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Verify the footer div is present with the right values
-	if !strings.Contains(html, "32 // 0C // 1E // 64") {
-		t.Error("expected cache stats line '32 // 0C // 1E // 64' in footer")
+	if !strings.Contains(html, "32 // 0C // 1E // 64 // 10") {
+		t.Error("expected cache stats line '32 // 0C // 1E // 64 // 10' in footer")
 	}
 	if !strings.Contains(html, "site-footer-cache-stats") {
 		t.Error("expected site-footer-cache-stats class")
@@ -361,11 +396,11 @@ func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 func TestRenderPage_FooterShowsInfinityWhenUnbounded(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
 	// Pass the pre-formatted strings — XX is ∞, others are 00
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "\u221e", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "∞", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, "\u221e // 00 // 00 // 00") {
+	if !strings.Contains(html, "∞ // 00 // 00 // 00 // 00") {
 		t.Error("expected infinity symbol in footer for unbounded cache")
 	}
 }

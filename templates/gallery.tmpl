@@ -3176,7 +3176,7 @@ subdirs table has its own
        (00-FF, or "∞" if unbounded), YY/ZZ/AA are peak
        evictions per 1-hour bucket in last 24h / 7d / 28d.
        Refreshed every 30 sec by the stats-refresh goroutine. */}}
-  <div class="site-footer-cache-stats" title="cache usage % // peak eviction RUNS in any 1h bucket in last 24h // 7d // 28d">{{.CacheStatsXX}} // {{.CacheStatsYY}} // {{.CacheStatsZZ}} // {{.CacheStatsAA}}</div>
+  <div class="site-footer-cache-stats" title="cache usage % // peak eviction RUNS in any 1h bucket in last 24h // 7d // 28d // max cache MB in hex (cap/64)">{{.CacheStatsXX}} // {{.CacheStatsYY}} // {{.CacheStatsZZ}} // {{.CacheStatsAA}} // {{.CacheStatsBB}}</div>
 </footer>
 <!-- "Back To Top" button.
      - Position: bottom-center, 1.5rem from the viewport

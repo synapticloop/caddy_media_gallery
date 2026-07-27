@@ -23,7 +23,7 @@ func TestRenderPage_LocaleHTMLAttribute(t *testing.T) {
 	} {
 		t.Run(tc.locale, func(t *testing.T) {
 			tr, _ := NewTranslator("")
-			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", tc.locale, tr, "00", "00", "00", "00")
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", tc.locale, tr, "00", "00", "00", "00", "00")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,7 +61,7 @@ func TestRenderPage_LocaleTranslation(t *testing.T) {
 	} {
 		t.Run(tc.locale, func(t *testing.T) {
 			tr, _ := NewTranslator("")
-			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", tc.locale, tr, "00", "00", "00", "00")
+			html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", tc.locale, tr, "00", "00", "00", "00", "00")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +96,7 @@ func TestRenderPage_TranslationMissingFallback(t *testing.T) {
 		},
 		locales: []string{"de", "en"},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "de", tr, "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "de", tr, "00", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
