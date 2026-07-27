@@ -50,46 +50,50 @@ func TestCacheStats_UnboundedCap(t *testing.T) {
 }
 
 // TestCacheStats_RecordEvictions verifies that recordEvictions
-// accumulates and the peaks reflect the recorded counts.
+// increments the run count by 1 per call (regardless of the
+// value passed in). Per user request 2026-07-04: the YY/ZZ/AA
+// hex values in the cache-status footer represent the number
+// of eviction RUNS, not the number of files evicted. A single
+// run that evicts 50 files counts as 1.
 func TestCacheStats_RecordEvictions(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 
-	// Record 5 evictions in the current hour
-	tracker.recordEvictions(5, time.Now())
+	// One call to recordEvictions (regardless of the
+	// count parameter) = 1 run in the current hour.
+	tracker.recordEvictions(50, time.Now())
 
-	// Snapshot — size + count are still 0 (no files), but
-	// the peak should be 5.
+	// Snapshot — the peak should be 1.
 	snap := tracker.snapshot(tmp, 1024)
 	if snap == nil {
 		t.Fatal("snapshot returned nil")
 	}
-	if snap.PeakEvictions24h != 5 {
-		t.Errorf("expected PeakEvictions24h=5, got %d", snap.PeakEvictions24h)
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1 (one run regardless of count), got %d", snap.PeakEvictions24h)
 	}
-	if snap.PeakEvictions7d != 5 {
-		t.Errorf("expected PeakEvictions7d=5, got %d", snap.PeakEvictions7d)
+	if snap.PeakEvictions7d != 1 {
+		t.Errorf("expected PeakEvictions7d=1 (one run regardless of count), got %d", snap.PeakEvictions7d)
 	}
-	if snap.PeakEvictions28d != 5 {
-		t.Errorf("expected PeakEvictions28d=5, got %d", snap.PeakEvictions28d)
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1 (one run regardless of count), got %d", snap.PeakEvictions28d)
 	}
 }
 
 // TestCacheStats_MultipleEvictionsSameHour verifies that
 // multiple recordEvictions calls in the same hour merge
-// into one bucket.
+// into one bucket (run counts summed).
 func TestCacheStats_MultipleEvictionsSameHour(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// Three calls in the same hour
-	tracker.recordEvictions(3, now)
-	tracker.recordEvictions(2, now)
-	tracker.recordEvictions(4, now)
+	// Three calls in the same hour = 3 runs total.
+	tracker.recordEvictions(10, now)
+	tracker.recordEvictions(20, now)
+	tracker.recordEvictions(30, now)
 	snap := tracker.snapshot(tmp, 1024)
-	// 3+2+4 = 9 evictions in one hour
-	if snap.PeakEvictions24h != 9 {
-		t.Errorf("expected PeakEvictions24h=9 (merged same-hour), got %d", snap.PeakEvictions24h)
+	// 1 + 1 + 1 = 3 runs merged into one hour bucket
+	if snap.PeakEvictions24h != 3 {
+		t.Errorf("expected PeakEvictions24h=3 (one run per call, merged same-hour), got %d", snap.PeakEvictions24h)
 	}
 	// events slice should have exactly 1 entry
 	tracker.mu.Lock()
@@ -106,13 +110,13 @@ func TestCacheStats_DifferentHours(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 5 evictions an hour ago, 3 evictions now
+	// One run an hour ago, one run now. Each = 1 run.
 	tracker.recordEvictions(5, now.Add(-time.Hour))
 	tracker.recordEvictions(3, now)
 	snap := tracker.snapshot(tmp, 1024)
-	// The peak in any 1-hour bucket is 5 (not 3+5=8)
-	if snap.PeakEvictions24h != 5 {
-		t.Errorf("expected PeakEvictions24h=5 (max of buckets), got %d", snap.PeakEvictions24h)
+	// The peak in any 1-hour bucket is 1 (not 1+1=2).
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1 (one run per hour, max of buckets), got %d", snap.PeakEvictions24h)
 	}
 	// events slice should have exactly 2 entries
 	tracker.mu.Lock()
@@ -129,15 +133,15 @@ func TestCacheStats_PruningOlderThan28Days(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 100 evictions 29 days ago — should be pruned
+	// One run 29 days ago — should be pruned
 	tracker.recordEvictions(100, now.Add(-29*24*time.Hour))
-	// 3 evictions now
+	// One run now
 	tracker.recordEvictions(3, now)
 	snap := tracker.snapshot(tmp, 1024)
 	// After pruning, the 29-day-old events should be gone,
-	// so the peak should be 3 (from the current hour).
-	if snap.PeakEvictions28d != 3 {
-		t.Errorf("expected PeakEvictions28d=3 (after pruning), got %d", snap.PeakEvictions28d)
+	// so the peak should be 1 (from the current hour).
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1 (one run after pruning), got %d", snap.PeakEvictions28d)
 	}
 	// Events slice should have just 1 entry (the 3 from now)
 	tracker.mu.Lock()
@@ -154,36 +158,46 @@ func TestCacheStats_WindowsCutoffs(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 12 evictions 2 hours ago (within 24h, within 7d, within 28d)
+	// One run 2 hours ago (within 24h, within 7d, within 28d)
 	tracker.recordEvictions(12, now.Add(-2*time.Hour))
-	// 7 evictions 5 days ago (NOT in 24h, within 7d, within 28d)
+	// One run 5 days ago (NOT in 24h, within 7d, within 28d)
 	tracker.recordEvictions(7, now.Add(-5*24*time.Hour))
-	// 2 evictions 20 days ago (NOT in 24h, NOT in 7d, within 28d)
+	// One run 20 days ago (NOT in 24h, NOT in 7d, within 28d)
 	tracker.recordEvictions(2, now.Add(-20*24*time.Hour))
-	// 50 evictions 29 days ago (NOT in any window — pruned)
+	// One run 29 days ago (NOT in any window — pruned)
 	tracker.recordEvictions(50, now.Add(-29*24*time.Hour))
 	snap := tracker.snapshot(tmp, 1024)
-	// Peak 24h: max in any 1h bucket within last 24h = 12
-	if snap.PeakEvictions24h != 12 {
-		t.Errorf("expected PeakEvictions24h=12, got %d", snap.PeakEvictions24h)
+	// All four windows should report peak = 1 (each
+	// bucket has exactly one run; the run from 2h ago is
+	// the only one in 24h and the largest in all windows).
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1, got %d", snap.PeakEvictions24h)
 	}
-	// Peak 7d: max within last 7d = 12 (still 12, since 7 is less)
-	if snap.PeakEvictions7d != 12 {
-		t.Errorf("expected PeakEvictions7d=12, got %d", snap.PeakEvictions7d)
+	if snap.PeakEvictions7d != 1 {
+		t.Errorf("expected PeakEvictions7d=1, got %d", snap.PeakEvictions7d)
 	}
-	// Peak 28d: max within last 28d = 12 (the 50 was pruned)
-	if snap.PeakEvictions28d != 12 {
-		t.Errorf("expected PeakEvictions28d=12, got %d", snap.PeakEvictions28d)
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1, got %d", snap.PeakEvictions28d)
 	}
 }
 
 // TestCacheStats_ClampAt255 verifies that eviction counts
 // above 255 are clamped to 255 in the peak calculation.
+// Per user request 2026-07-04: recordEvictions increments
+// by 1 per call regardless of the count parameter, so the
+// only way to reach the 255 cap is to call recordEvictions
+// 255+ times in the same hour bucket. The test below
+// simulates that by calling the function 300 times in the
+// current hour.
 func TestCacheStats_ClampAt255(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	tracker.recordEvictions(1000, now) // clamped to 255
+	// 300 calls in the current hour = 300 runs in one
+	// hour bucket = clamped to 255.
+	for i := 0; i < 300; i++ {
+		tracker.recordEvictions(100, now)
+	}
 	snap := tracker.snapshot(tmp, 1024)
 	if snap.PeakEvictions24h != 255 {
 		t.Errorf("expected PeakEvictions24h=255 (clamped), got %d", snap.PeakEvictions24h)
