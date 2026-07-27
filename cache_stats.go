@@ -29,12 +29,14 @@ import (
 //
 //	XX  = cache usage percent, 00-FF
 //	      (or a special marker for unbounded — see below)
-//	YY  = peak evictions in any 1-hour bucket in the last
-//	      24 hours, 00-FF (clamped to 255)
-//	ZZ  = peak evictions in any 1-hour bucket in the last
-//	      7 days, 00-FF
-//	AA  = peak evictions in any 1-hour bucket in the last
-//	      4 weeks (28 days), 00-FF
+//	YY  = peak eviction RUNS in any 1-hour bucket in the
+//	      last 24 hours, 00-FF (clamped to 255). Per user
+//	      request 2026-07-04: counts RUNS not files. A
+//	      single run that evicts 50 files counts as 1.
+//	ZZ  = peak eviction RUNS in any 1-hour bucket in the
+//	      last 7 days, 00-FF
+//	AA  = peak eviction RUNS in any 1-hour bucket in the
+//	      last 4 weeks (28 days), 00-FF
 //
 // When MaxCacheSizeMB is 0 (no cap), XX is rendered as the
 // infinity symbol (∞) and YY/ZZ/AA are always 00 (no
@@ -101,12 +103,18 @@ type evictionEvent struct {
 	// merge together.
 	HourStart int64
 
-	// Count is the number of evictions in this hour. Multiple
-	// eviction runs in the same hour accumulate to this
-	// number.
-	Count int
+	// Runs is the number of eviction RUNS in this hour,
+	// not the number of files evicted. Per user request
+	// 2026-07-04 (1.1.1 release, minor-cache-fix branch):
+	// the YY/ZZ/AA hex values displayed in the cache-status
+	// footer represent the number of eviction runs, not the
+	// number of files evicted. A run that evicts 50 files
+	// counts as 1, not 50. Multiple runs in the same hour
+	// bucket still merge together (so 3 runs in one hour
+	// bucket show as 03, not 01+01+01). Clamped to 255
+	// (0xFF) on the way out by clampInt255.
+	Runs int
 }
-
 // cacheStatsTracker holds the eviction history for one
 // Gallery instance. Two goroutines touch it:
 //
@@ -148,12 +156,25 @@ func newCacheStatsTracker(capMB int) *cacheStatsTracker {
 	return t
 }
 
-// recordEvictions appends (or merges into) an eviction
-// event for the current hour. Called from evictIfOver after
-// a successful eviction run. Safe to call concurrently with
-// snapshot — mu serialises both.
-func (t *cacheStatsTracker) recordEvictions(count int, at time.Time) {
-	if t == nil || count <= 0 {
+// recordEvictions increments the number of eviction RUNS
+// (not the number of files evicted) in the current hour
+// bucket. Per user request 2026-07-04: the parameter is
+// named `runs` (default 1) for clarity, but the function
+// always increments by 1 per call regardless of the value
+// passed — because the function is called once per eviction
+// run (from evictIfOver's single `tracker.recordEvictions
+// (evictedCount, time.Now())` call site). The `runs`
+// parameter is kept in the signature for testability (tests
+// can pass explicit counts) but in production usage it's
+// always 1.
+//
+// Multiple recordEvictions calls in the same hour bucket
+// merge into a single bucket with the run counts summed.
+//
+// Safe to call concurrently with snapshot — mu serialises
+// both.
+func (t *cacheStatsTracker) recordEvictions(runs int, at time.Time) {
+	if t == nil || runs <= 0 {
 		return
 	}
 	hourStart := at.Truncate(time.Hour).Unix()
@@ -162,13 +183,13 @@ func (t *cacheStatsTracker) recordEvictions(count int, at time.Time) {
 	// Merge into the last event if it's the same hour (the
 	// typical case — most hours have 0 or 1 eviction runs).
 	if n := len(t.events); n > 0 && t.events[n-1].HourStart == hourStart {
-		t.events[n-1].Count += count
+		t.events[n-1].Runs++
 		return
 	}
 	// Otherwise append a new event.
 	t.events = append(t.events, evictionEvent{
 		HourStart: hourStart,
-		Count:     count,
+		Runs:      1,
 	})
 }
 
@@ -233,7 +254,7 @@ func (t *cacheStatsTracker) snapshot(cacheDir string, capMB int) *cacheStats {
 		if ev.HourStart > hourNow {
 			continue
 		}
-		c := ev.Count
+		c := ev.Runs
 		if c > 255 {
 			c = 255 // clamp for hex display
 		}
@@ -304,20 +325,35 @@ func (t *cacheStatsTracker) load() *cacheStats {
 }
 
 // formatCacheStatsFooter formats a cacheStats snapshot into
-// the four hex strings displayed in the footer:
+// the FIVE hex strings displayed in the footer:
 //   - XX: cache usage percent (00-FF) or "∞" if unbounded
-//   - YY: peak evictions in any 1-hour bucket in last 24h
-//   - ZZ: peak evictions in any 1-hour bucket in last 7d
-//   - AA: peak evictions in any 1-hour bucket in last 28d
+//   - YY: peak eviction RUNS in any 1-hour bucket in last
+//     24h (00-FF, clamped). Per user request 2026-07-04:
+//     counts runs not files. A single run that evicts 50
+//     files counts as 1, not 50.
+//   - ZZ: peak eviction RUNS in any 1-hour bucket in last
+//     7d (00-FF)
+//   - AA: peak eviction RUNS in any 1-hour bucket in last
+//     28d (00-FF)
+//   - BB: max cache size in hex, 00-FF. Per user request
+//     2026-07-04 (cache-status-line-updates branch):
+//     `cap_in_MB / 64` so the value fits in 2 hex digits
+//     for the 0-16 GB range. 2 GB cap = 2048/64 = 32
+//     = 0x20, 1 GB = 0x10, 16 GB = 0xFF. When the
+//     cap is 0 (unbounded) the BB is "00" matching
+//     the YY/ZZ/AA fallback.
 //
 // Per user request 2026-06-27. Clamped to 0xFF so the hex
 // is always two digits. Nil stats (e.g. before the first
-// refresh tick) renders as "00 // 00 // 00 // ∞" (or "00
-// // 00 // 00 // 00" if there's no cap — wait, the XX
-// case is independent of stats being nil).
-func formatCacheStatsFooter(stats *cacheStats) (xx, yy, zz, aa string) {
+// refresh tick) renders as "00 // 00 // 00 // ∞ // 00"
+// (or "00 // 00 // 00 // 00 // 00" if there's no cap —
+// wait, the XX case is independent of stats being nil).
+//
+// capMB is the configured cap (0 = unbounded). 0
+// renders as "00".
+func formatCacheStatsFooter(stats *cacheStats, capMB int) (xx, yy, zz, aa, bb string) {
 	if stats == nil {
-		return "00", "00", "00", "00"
+		return "00", "00", "00", "00", "00"
 	}
 	pct := stats.CacheUsageFractionHex255()
 	if pct < 0 {
@@ -329,7 +365,19 @@ func formatCacheStatsFooter(stats *cacheStats) (xx, yy, zz, aa string) {
 	yy = fmt.Sprintf("%02X", clampInt255(stats.PeakEvictions24h))
 	zz = fmt.Sprintf("%02X", clampInt255(stats.PeakEvictions7d))
 	aa = fmt.Sprintf("%02X", clampInt255(stats.PeakEvictions28d))
-	return xx, yy, zz, aa
+	// BB: cap in MB / 64. Unbounded (capMB == 0) renders
+	// as "00" (the "no cap" value). Otherwise clamp to 0-255
+	// so a 16+ GB cap (capMB > 16320) doesn't overflow
+	// the 2-hex display.
+	bbHex := capMB / 64
+	if capMB == 0 || bbHex == 0 {
+		bb = "00"
+	} else if bbHex > 255 {
+		bb = "FF"
+	} else {
+		bb = fmt.Sprintf("%02X", bbHex)
+	}
+	return xx, yy, zz, aa, bb
 }
 
 // clampInt255 clamps an int to [0, 255] for the hex display.

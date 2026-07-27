@@ -9,6 +9,89 @@ on 2026-06-19 to better reflect that it serves images, videos, and other files
 
 ---
 
+## 1.1.2 — 2026-07-04
+
+### 🔧 Polish: YY/ZZ/AA = eviction RUNS (not files) + new BB field
+
+Per user request 2026-07-04 (cache-status-line-updates
+branch): two updates to the cache-status footer at the
+bottom of the page (the line `XX // YY // ZZ // AA`
+that's now `XX // YY // ZZ // AA // BB`).
+
+#### 1. YY/ZZ/AA now represent eviction RUNS, not files
+
+ROOT CAUSE:
+
+  The footer fields YY/ZZ/AA were documented as "peak
+  evictions in any 1-hour bucket" but the implementation
+  summed the file counts (e.g. a 50-file run showed 0x32
+  for that hour). The implementation didn't match the
+  docstring.
+
+FIX (commit dd23b2e):
+
+  Renamed `evictionEvent.Count` → `evictionEvent.Runs`.
+  `recordEvictions(runs int, ...)` now increments by 1
+  per call regardless of the value passed (each call is
+  one run). All 3 doc comments on the cache footer
+  updated to say "RUNS" instead of "evictions".
+
+  6 test functions updated to match the new semantics
+  (each `recordEvictions(N, ...)` call = 1 run, not N
+  runs).
+
+USER-VISIBLE CHANGE:
+
+  Before this commit (v1.1.1):
+    A 50-file eviction in a single run would show YY
+    = 0x32 (50) for that hour's bucket.
+
+  After this commit (v1.1.2):
+    The same 50-file eviction shows YY = 0x01 (1 run).
+    A 50-file and a 200-file eviction both show 0x01;
+    only a separate second run in the same hour would
+    bump it to 0x02.
+
+#### 2. New BB field: max cache size in hex
+
+FIX (commit 0946ce5):
+
+  Added a 5th hex value `BB` to the cache footer that
+  shows the configured max cache size, scaled as
+  `cap_in_MB / 64` so the 0-16 GB range fits in 2 hex
+  digits. 1 GB = 0x10, 2 GB = 0x20, 4 GB = 0x40,
+  16 GB = 0xFF (clamped). Unbounded (cap = 0) = 0x00.
+
+  The footer tooltip was updated to mention the new
+  5th value. The PageData struct was extended with
+  `CacheStatsBB`. The `formatCacheStatsFooter` function
+  signature was extended to take `capMB int` and return
+  5 values. The `RenderPage` signature was extended to
+  accept the 5th `cacheStatsBB` arg.
+
+USER-VISIBLE CHANGE:
+
+  Before this commit (v1.1.1 without the BB change):
+    The cache status line shows 4 hex values:
+      72 // 00 // 00 // 00
+    The cap isn't shown in the footer at all.
+
+  After this commit (v1.1.2):
+    The cache status line shows 5 hex values:
+      72 // 00 // 00 // 00 // 20
+    The cap (2048 MB / 64 = 32 = 0x20) is now visible
+    in the footer. The operator can see at a glance
+    what the cache cap is, in hex.
+
+NO BEHAVIOR CHANGES outside the cache footer display.
+The eviction code, the LRU ordering, the scan refresh
+goroutine, the Caddyfile directives — all unchanged
+from v1.1.1.
+
+All 450+ Go tests pass.
+
+---
+
 ## 1.1.1 — 2026-07-04
 
 ### 🐛 Fix: cache-status footer percent scale (XX hex value)

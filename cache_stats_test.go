@@ -50,46 +50,50 @@ func TestCacheStats_UnboundedCap(t *testing.T) {
 }
 
 // TestCacheStats_RecordEvictions verifies that recordEvictions
-// accumulates and the peaks reflect the recorded counts.
+// increments the run count by 1 per call (regardless of the
+// value passed in). Per user request 2026-07-04: the YY/ZZ/AA
+// hex values in the cache-status footer represent the number
+// of eviction RUNS, not the number of files evicted. A single
+// run that evicts 50 files counts as 1.
 func TestCacheStats_RecordEvictions(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 
-	// Record 5 evictions in the current hour
-	tracker.recordEvictions(5, time.Now())
+	// One call to recordEvictions (regardless of the
+	// count parameter) = 1 run in the current hour.
+	tracker.recordEvictions(50, time.Now())
 
-	// Snapshot — size + count are still 0 (no files), but
-	// the peak should be 5.
+	// Snapshot — the peak should be 1.
 	snap := tracker.snapshot(tmp, 1024)
 	if snap == nil {
 		t.Fatal("snapshot returned nil")
 	}
-	if snap.PeakEvictions24h != 5 {
-		t.Errorf("expected PeakEvictions24h=5, got %d", snap.PeakEvictions24h)
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1 (one run regardless of count), got %d", snap.PeakEvictions24h)
 	}
-	if snap.PeakEvictions7d != 5 {
-		t.Errorf("expected PeakEvictions7d=5, got %d", snap.PeakEvictions7d)
+	if snap.PeakEvictions7d != 1 {
+		t.Errorf("expected PeakEvictions7d=1 (one run regardless of count), got %d", snap.PeakEvictions7d)
 	}
-	if snap.PeakEvictions28d != 5 {
-		t.Errorf("expected PeakEvictions28d=5, got %d", snap.PeakEvictions28d)
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1 (one run regardless of count), got %d", snap.PeakEvictions28d)
 	}
 }
 
 // TestCacheStats_MultipleEvictionsSameHour verifies that
 // multiple recordEvictions calls in the same hour merge
-// into one bucket.
+// into one bucket (run counts summed).
 func TestCacheStats_MultipleEvictionsSameHour(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// Three calls in the same hour
-	tracker.recordEvictions(3, now)
-	tracker.recordEvictions(2, now)
-	tracker.recordEvictions(4, now)
+	// Three calls in the same hour = 3 runs total.
+	tracker.recordEvictions(10, now)
+	tracker.recordEvictions(20, now)
+	tracker.recordEvictions(30, now)
 	snap := tracker.snapshot(tmp, 1024)
-	// 3+2+4 = 9 evictions in one hour
-	if snap.PeakEvictions24h != 9 {
-		t.Errorf("expected PeakEvictions24h=9 (merged same-hour), got %d", snap.PeakEvictions24h)
+	// 1 + 1 + 1 = 3 runs merged into one hour bucket
+	if snap.PeakEvictions24h != 3 {
+		t.Errorf("expected PeakEvictions24h=3 (one run per call, merged same-hour), got %d", snap.PeakEvictions24h)
 	}
 	// events slice should have exactly 1 entry
 	tracker.mu.Lock()
@@ -106,13 +110,13 @@ func TestCacheStats_DifferentHours(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 5 evictions an hour ago, 3 evictions now
+	// One run an hour ago, one run now. Each = 1 run.
 	tracker.recordEvictions(5, now.Add(-time.Hour))
 	tracker.recordEvictions(3, now)
 	snap := tracker.snapshot(tmp, 1024)
-	// The peak in any 1-hour bucket is 5 (not 3+5=8)
-	if snap.PeakEvictions24h != 5 {
-		t.Errorf("expected PeakEvictions24h=5 (max of buckets), got %d", snap.PeakEvictions24h)
+	// The peak in any 1-hour bucket is 1 (not 1+1=2).
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1 (one run per hour, max of buckets), got %d", snap.PeakEvictions24h)
 	}
 	// events slice should have exactly 2 entries
 	tracker.mu.Lock()
@@ -129,15 +133,15 @@ func TestCacheStats_PruningOlderThan28Days(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 100 evictions 29 days ago — should be pruned
+	// One run 29 days ago — should be pruned
 	tracker.recordEvictions(100, now.Add(-29*24*time.Hour))
-	// 3 evictions now
+	// One run now
 	tracker.recordEvictions(3, now)
 	snap := tracker.snapshot(tmp, 1024)
 	// After pruning, the 29-day-old events should be gone,
-	// so the peak should be 3 (from the current hour).
-	if snap.PeakEvictions28d != 3 {
-		t.Errorf("expected PeakEvictions28d=3 (after pruning), got %d", snap.PeakEvictions28d)
+	// so the peak should be 1 (from the current hour).
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1 (one run after pruning), got %d", snap.PeakEvictions28d)
 	}
 	// Events slice should have just 1 entry (the 3 from now)
 	tracker.mu.Lock()
@@ -154,36 +158,46 @@ func TestCacheStats_WindowsCutoffs(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	// 12 evictions 2 hours ago (within 24h, within 7d, within 28d)
+	// One run 2 hours ago (within 24h, within 7d, within 28d)
 	tracker.recordEvictions(12, now.Add(-2*time.Hour))
-	// 7 evictions 5 days ago (NOT in 24h, within 7d, within 28d)
+	// One run 5 days ago (NOT in 24h, within 7d, within 28d)
 	tracker.recordEvictions(7, now.Add(-5*24*time.Hour))
-	// 2 evictions 20 days ago (NOT in 24h, NOT in 7d, within 28d)
+	// One run 20 days ago (NOT in 24h, NOT in 7d, within 28d)
 	tracker.recordEvictions(2, now.Add(-20*24*time.Hour))
-	// 50 evictions 29 days ago (NOT in any window — pruned)
+	// One run 29 days ago (NOT in any window — pruned)
 	tracker.recordEvictions(50, now.Add(-29*24*time.Hour))
 	snap := tracker.snapshot(tmp, 1024)
-	// Peak 24h: max in any 1h bucket within last 24h = 12
-	if snap.PeakEvictions24h != 12 {
-		t.Errorf("expected PeakEvictions24h=12, got %d", snap.PeakEvictions24h)
+	// All four windows should report peak = 1 (each
+	// bucket has exactly one run; the run from 2h ago is
+	// the only one in 24h and the largest in all windows).
+	if snap.PeakEvictions24h != 1 {
+		t.Errorf("expected PeakEvictions24h=1, got %d", snap.PeakEvictions24h)
 	}
-	// Peak 7d: max within last 7d = 12 (still 12, since 7 is less)
-	if snap.PeakEvictions7d != 12 {
-		t.Errorf("expected PeakEvictions7d=12, got %d", snap.PeakEvictions7d)
+	if snap.PeakEvictions7d != 1 {
+		t.Errorf("expected PeakEvictions7d=1, got %d", snap.PeakEvictions7d)
 	}
-	// Peak 28d: max within last 28d = 12 (the 50 was pruned)
-	if snap.PeakEvictions28d != 12 {
-		t.Errorf("expected PeakEvictions28d=12, got %d", snap.PeakEvictions28d)
+	if snap.PeakEvictions28d != 1 {
+		t.Errorf("expected PeakEvictions28d=1, got %d", snap.PeakEvictions28d)
 	}
 }
 
 // TestCacheStats_ClampAt255 verifies that eviction counts
 // above 255 are clamped to 255 in the peak calculation.
+// Per user request 2026-07-04: recordEvictions increments
+// by 1 per call regardless of the count parameter, so the
+// only way to reach the 255 cap is to call recordEvictions
+// 255+ times in the same hour bucket. The test below
+// simulates that by calling the function 300 times in the
+// current hour.
 func TestCacheStats_ClampAt255(t *testing.T) {
 	tmp := t.TempDir()
 	tracker := newCacheStatsTracker(1024)
 	now := time.Now()
-	tracker.recordEvictions(1000, now) // clamped to 255
+	// 300 calls in the current hour = 300 runs in one
+	// hour bucket = clamped to 255.
+	for i := 0; i < 300; i++ {
+		tracker.recordEvictions(100, now)
+	}
 	snap := tracker.snapshot(tmp, 1024)
 	if snap.PeakEvictions24h != 255 {
 		t.Errorf("expected PeakEvictions24h=255 (clamped), got %d", snap.PeakEvictions24h)
@@ -262,25 +276,31 @@ func TestCacheStats_CacheUsageFractionHex255Math(t *testing.T) {
 }
 
 // TestFormatCacheStatsFooter verifies the four hex strings
-// produced for the footer.
+// produced for the footer. Per user request 2026-07-04
+// (cache-status-line-updates branch): the BB (max cache
+// size in hex) was added in 1.1.x.
 func TestFormatCacheStatsFooter(t *testing.T) {
 	tests := []struct {
 		name   string
 		stats  *cacheStats
+		capMB  int
 		wantXX string
 		wantYY string
 		wantZZ string
 		wantAA string
+		wantBB string
 	}{
 		{
 			name:   "nil stats",
 			stats:  nil,
-			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  1024,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "00",
 		},
 		{
 			name:   "bounded, empty",
 			stats:  &cacheStats{CapBytes: 1024 * 1024 * 1024},
-			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  1024,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "10",
 		},
 		{
 			// half full: int(0.5 * 255) = 127 = 0x7F
@@ -290,22 +310,48 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 			// peak-eviction fields)
 			name:   "bounded, half full, peaks",
 			stats:  &cacheStats{SizeBytes: 512 * 1024 * 1024, CapBytes: 1024 * 1024 * 1024, PeakEvictions24h: 12, PeakEvictions7d: 30, PeakEvictions28d: 100},
-			wantXX: "7F", wantYY: "0C", wantZZ: "1E", wantAA: "64",
+			capMB:  1024,
+			wantXX: "7F", wantYY: "0C", wantZZ: "1E", wantAA: "64", wantBB: "10",
 		},
 		{
 			name:   "unbounded",
 			stats:  &cacheStats{SizeBytes: 999, CapBytes: 0},
-			wantXX: "\u221e", wantYY: "00", wantZZ: "00", wantAA: "00",
+			capMB:  0,
+			wantXX: "∞", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "00",
 		},
 		{
 			name:   "peaks clamped to 255",
 			stats:  &cacheStats{CapBytes: 1024 * 1024 * 1024, PeakEvictions24h: 1000, PeakEvictions7d: 256, PeakEvictions28d: 99999},
-			wantXX: "00", wantYY: "FF", wantZZ: "FF", wantAA: "FF",
+			capMB:  1024,
+			wantXX: "00", wantYY: "FF", wantZZ: "FF", wantAA: "FF", wantBB: "10",
+		},
+		{
+			// Per user request 2026-07-04: BB shows the
+			// max cache size in hex, scaled as
+			// cap_in_MB / 64 so the 0-16 GB range fits
+			// in 2 hex digits. 2 GB cap = 2048/64 = 32
+			// = 0x20. 4 GB = 4096/64 = 64 = 0x40.
+			// Need to set both SizeBytes (so XX is 0% = 00)
+			// and CapBytes (to match the capMB so XX's
+			// CacheUsageFractionHex255 returns 0% instead
+			// of "unbounded").
+			name:   "2 GB cap",
+			stats:  &cacheStats{CapBytes: 2 * 1024 * 1024 * 1024},
+			capMB:  2048,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "20",
+		},
+		{
+			// 16384 / 64 = 256, clamped to 255 = 0xFF.
+			// CapBytes set to 16 GB so XX is 00 not ∞.
+			name:   "16 GB cap (clamped to FF)",
+			stats:  &cacheStats{CapBytes: 16 * 1024 * 1024 * 1024},
+			capMB:  16384,
+			wantXX: "00", wantYY: "00", wantZZ: "00", wantAA: "00", wantBB: "FF",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			xx, yy, zz, aa := formatCacheStatsFooter(tc.stats)
+			xx, yy, zz, aa, bb := formatCacheStatsFooter(tc.stats, tc.capMB)
 			if xx != tc.wantXX {
 				t.Errorf("XX = %q, want %q", xx, tc.wantXX)
 			}
@@ -318,6 +364,9 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 			if aa != tc.wantAA {
 				t.Errorf("AA = %q, want %q", aa, tc.wantAA)
 			}
+			if bb != tc.wantBB {
+				t.Errorf("BB = %q, want %q", bb, tc.wantBB)
+			}
 		})
 	}
 }
@@ -326,13 +375,13 @@ func TestFormatCacheStatsFooter(t *testing.T) {
 // HTML includes the cache stats footer.
 func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "32", "0C", "1E", "64", "10")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Verify the footer div is present with the right values
-	if !strings.Contains(html, "32 // 0C // 1E // 64") {
-		t.Error("expected cache stats line '32 // 0C // 1E // 64' in footer")
+	if !strings.Contains(html, "32 // 0C // 1E // 64 // 10") {
+		t.Error("expected cache stats line '32 // 0C // 1E // 64 // 10' in footer")
 	}
 	if !strings.Contains(html, "site-footer-cache-stats") {
 		t.Error("expected site-footer-cache-stats class")
@@ -347,11 +396,11 @@ func TestRenderPage_FooterShowsCacheStats(t *testing.T) {
 func TestRenderPage_FooterShowsInfinityWhenUnbounded(t *testing.T) {
 	files := []FileInfo{{Name: "a.jpg", ModTime: 1, Size: 100, Kind: KindImage}}
 	// Pass the pre-formatted strings — XX is ∞, others are 00
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "\u221e", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, []string{"30", "60", "120", "all"}, files, nil, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "∞", "00", "00", "00", "00")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(html, "\u221e // 00 // 00 // 00") {
+	if !strings.Contains(html, "∞ // 00 // 00 // 00 // 00") {
 		t.Error("expected infinity symbol in footer for unbounded cache")
 	}
 }

@@ -1056,19 +1056,24 @@ func (g *Gallery) ServeHTTP(w http.ResponseWriter, r *http.Request, next caddyht
 	// Per user request 2026-06-27: format the cache stats
 	// snapshot into the four hex strings for the footer.
 	// XX is the cache usage percent (00-FF) or "∞" if
-	// unbounded. YY/ZZ/AA are peak eviction counts per
-	// hour bucket, clamped to 0xFF so the hex is always
-	// two digits. Read the snapshot via atomic load (no
-	// lock contention with the eviction goroutine).
-	stats := g.CacheStatsTracker.load()
-	cacheXX, cacheYY, cacheZZ, cacheAA := formatCacheStatsFooter(stats)
+	// unbounded. YY/ZZ/AA are peak eviction runs per hour
+	// bucket, clamped to 0xFF so the hex is always two digits.
+	// Read the snapshot via atomic load (no lock contention
+	// with the eviction goroutine).
+	//
+	// BB (per user request 2026-07-04, cache-status-line-updates
+	// branch): max cache size in hex (cap_in_MB / 64, 2-digit
+	// 0x00-0xFF for the 0-16 GB range). 2 GB = 0x20, 1 GB = 0x10,
+	// unbounded (MaxCacheSizeMB == 0) = 0x00.
+		stats := g.CacheStatsTracker.load()
+		cacheXX, cacheYY, cacheZZ, cacheAA, cacheBB := formatCacheStatsFooter(stats, g.MaxCacheSizeMB)
 	// Per user request 2026-07-04: detect the visitor's
 	// locale using the priority chain documented in i18n.go.
 	// URL ?lang= > cookie > Accept-Language header >
 	// operator's default_language > "en". This is computed
 	// on every request (cheap — no I/O).
 	locale := DetectLocale(r, g.translator.Locales(), g.DefaultLanguage)
-	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.NoAudioMeta, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.audioExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA)
+	body, err := RenderPage(title, "./", "./_thumbs/", relPath, g.Template, g.NoThumbs, g.NoVideoThumbs, g.NoAudioMeta, g.PageSize, g.PageSizes, files, r.URL.Query(), g.imageExtsMap, g.videoExtsMap, g.audioExtsMap, g.rootName, g.PathPrefix, g.SearchMatch, locale, g.translator, cacheXX, cacheYY, cacheZZ, cacheAA, cacheBB)
 	if err != nil {
 		http.Error(w, "media_gallery: render failed: "+err.Error(), http.StatusInternalServerError)
 		return nil
