@@ -1,6 +1,6 @@
 # caddy_media_gallery
 
-> **Release 1.1.3 — 2026-07-04.** Patch release on the 1.1.x line. Stable; adds cache hygiene: (1) an orphan-sidecar sweep that runs at startup and every 30 min, cleaning up `.meta`/`.exif`/`.vmeta`/`.ameta` files that have no matching thumb (typically ~30k orphans from prior Caddy versions and crashed writes on a 1 GB cache); (2) an LRU eviction cap on the in-memory scan cache (default 1024 entries) so long-running Caddy processes don't grow unbounded. Both are silent failures the previous code didn't surface. Operators can pin to `1.1.3` (or any later version) in their build pipeline.
+> **Release 1.1.4 — 2026-07-04.** Patch release on the 1.1.x line. Stable; makes per-file metadata enrichment lazy. Previously, every cache miss spawned 8 parallel ffprobe subprocesses to enrich the ENTIRE directory's files in the background (5+ seconds of CPU for a 4500-file directory). Now only the visible page (pageSize files, default 60) is enriched, with 4 workers in parallel (~150ms of background work per page view). The off-page files are NOT enriched; they get enriched only when the visitor navigates to them. Same visitor-visible behaviour, ~75× less ffprobe work on a fresh cache. Operators can pin to `1.1.4` (or any later version) in their build pipeline.
 > Internationalisation landed in 1.0.0 — 8 locales bundled (en/de/es/fr/ja/ko/zh/pt), header language picker, locale persists in localStorage + cookie. See [docs/03h-feature-i18n.md](docs/03h-feature-i18n.md) for the full architecture.
 
 *The delightful way to serve a directory.*
