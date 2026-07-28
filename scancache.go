@@ -321,7 +321,26 @@ func (c *ScanCache) Get(dir, sortMode string, imageExts, videoExts, audioExts ma
 	// mutates its own copy and calls cache.SetFiles when done
 	// to atomically replace the cache entry — no data race
 	// for concurrent cache readers.
-	scanner.EnrichInBackground(files, c, dir)
+	// Per user request 2026-07-04 (lazy-enrichment branch,
+	// Option C): enrichment is LAZY. Only the files
+	// visible to the visitor are enriched. The cache
+	// stores the un-enriched scan result; the caller
+	// (RenderPage) enriches its visible subset after
+	// pagination, in a background goroutine. Off-page
+	// files stay un-enriched in the cache until a future
+	// request navigates to them.
+	//
+	// For a 4500-file directory at ~10ms/file with a 60-
+	// file page: lazy enrichment processes 60 files per
+	// request instead of 4500. That's 75× less ffprobe
+	// work. The background cost fits comfortably within
+	// the page-render budget instead of consuming 5+
+	// seconds of CPU on a fresh scan.
+	//
+	// No background enrichment here in Cache.Get — the
+	// caller (RenderPage) will enrich its visible subset
+	// after pagination.
+
 	// Return a copy of the slice we just stored (so callers can't mutate cache).
 	out := make([]FileInfo, len(files))
 	copy(out, files)

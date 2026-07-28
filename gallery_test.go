@@ -394,7 +394,7 @@ func TestRenderPage_NoThumbs_OriginalImageAsThumb(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", true, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", true, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +414,7 @@ func TestRenderPage_WithThumbs_ThumbURLUsed(t *testing.T) {
 	files := []FileInfo{
 		{Name: "photo.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -703,7 +703,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 		{Name: "g.jpg", ModTime: 1, Size: 100, Kind: KindImage},
 	}
 	// pageSize=3 → 7 images / 3 per page = 3 pages, "Page 1 of 3"
-	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 3, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+	html, err := RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 3, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -715,7 +715,7 @@ func TestRenderPage_PageSizePagination(t *testing.T) {
 	// Per user request 2026-07-01: the pagination nav IS shown
 	// even when all items fit on one page — with the prev/next
 	// buttons greyed out and the single page number visible.
-	html, err = RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+	html, err = RenderPage("test", "./", "./_thumbs/", "", "", false, false, false, 0, nil, files, nil, nil, nil, nil, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	if err != nil {
 		t.Fatal(err)
 	}

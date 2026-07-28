@@ -595,10 +595,27 @@ func (s *Scanner) EnrichInBackground(files []FileInfo, cache *ScanCache, dir str
 // worker pool of `workers` goroutines. Each worker pulls
 // indices off a channel until exhausted. Errors are ignored.
 func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
+	enrichParallelFiles(files, workers, s.Root, s.NoExif, s.NoMeta, s.NoAudioMeta, s.ThumbCacheDir, s.ThumbFormat)
+}
+
+// enrichParallelFiles is the free-function version of
+// enrichParallel. Per user request 2026-07-04 (lazy-
+// enrichment branch, Option C): the caller (RenderPage)
+// computes the visible subset of files after pagination
+// and passes it here. Off-page files are NOT enriched;
+// they get enriched on their next visit. The CPU cost
+// is bounded by pageSize (e.g., 60) instead of the full
+// directory size (e.g., 4500). That's 75× less ffprobe
+// work on a fresh scan.
+//
+// All parameters are the same as Scanner fields — the
+// free function takes them as args so it can be called
+// from RenderPage (which has no Scanner in scope).
+func enrichParallelFiles(files []FileInfo, workers int, root string, noExif, noMeta, noAudioMeta bool, thumbCacheDir, thumbFormat string) {
 	if workers < 1 {
 		workers = 1
 	}
-	thumbExt := s.ThumbFormat
+	thumbExt := thumbFormat
 	if thumbExt == "" {
 		thumbExt = "webp"
 	}
@@ -614,15 +631,15 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 			if fi.Kind == KindDir {
 				return
 			}
-			fullPath := filepath.Join(s.Root, fi.Name)
-			if fi.Kind == KindImage && !s.NoExif {
-				exif, err := readExifCached(fullPath, s.ThumbCacheDir, s.ThumbFormat)
+			fullPath := filepath.Join(root, fi.Name)
+			if fi.Kind == KindImage && !noExif {
+				exif, err := readExifCached(fullPath, thumbCacheDir, thumbFormat)
 				if err == nil {
 					fi.Exif = exif
 				}
 			}
 			if fi.Kind == KindImage || fi.Kind == KindVideo {
-				w, h, err := readDimensionsCached(fullPath, s.ThumbCacheDir, thumbExt)
+				w, h, err := readDimensionsCached(fullPath, thumbCacheDir, thumbExt)
 				if err == nil && w > 0 && h > 0 {
 					fi.Width = w
 					fi.Height = h
@@ -636,8 +653,8 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 			// is cached in a .vmeta sidecar next to the
 			// video's thumb, so the next enrichment is
 			// a ~50µs file read.
-			if fi.Kind == KindVideo && !s.NoMeta {
-				vmeta, err := readVideoMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
+			if fi.Kind == KindVideo && !noMeta {
+				vmeta, err := readVideoMetaCached(fullPath, thumbCacheDir, thumbExt)
 				if err == nil && vmeta != nil && vmeta.HasAny() {
 					fi.VideoMeta = vmeta
 				}
@@ -650,15 +667,15 @@ func (s *Scanner) enrichParallel(files []FileInfo, workers int) {
 			// the video path above. The result is
 			// cached in a .ameta sidecar next to the
 			// audio file's thumb. Skipped entirely if
-			// NoAudioMeta is set (operator opt-out via
+			// noAudioMeta is set (operator opt-out via
 			// the no_audio_meta Caddyfile directive).
 			// Skipped silently if ffmpeg/ffprobe isn't
 			// available (the g.ffmpegPath check in
 			// gallery.go's Provision logs a warning at
 			// startup; no AudioMeta populated, audio
 			// file still works for the user).
-			if fi.Kind == KindAudio && !s.NoAudioMeta {
-				ameta, err := readAudioMetaCached(fullPath, s.ThumbCacheDir, thumbExt)
+			if fi.Kind == KindAudio && !noAudioMeta {
+				ameta, err := readAudioMetaCached(fullPath, thumbCacheDir, thumbExt)
 				if err == nil && ameta != nil && ameta.HasAny() {
 					fi.AudioMeta = ameta
 				}

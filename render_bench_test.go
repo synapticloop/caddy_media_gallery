@@ -24,7 +24,7 @@ func BenchmarkRenderPage_60Files(b *testing.B) {
 	q := url.Values{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = RenderPage("Test", "./", "./_thumbs/", "", "", false, false, false, 60, []string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+		_, _ = RenderPage("Test", "./", "./_thumbs/", "", "", false, false, false, 60, []string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	}
 }
 
@@ -55,6 +55,6 @@ func BenchmarkRenderPage_60Files_WithExif(b *testing.B) {
 	q := url.Values{}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = RenderPage("Test", "./", "./_thumbs/", "", "", false, false, false, 60, []string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "00", "00", "00", "00", "00")
+		_, _ = RenderPage("Test", "./", "./_thumbs/", "", "", false, false, false, 60, []string{"30", "60", "120", "all"}, files, q, defaultImageExts, defaultVideoExts, defaultVideoExts, "", "", "substring", "en", nil, "00", "00", "00", "00", "00", false, false, "/tmp/dir", "/tmp/cache", "webp")
 	}
 }
