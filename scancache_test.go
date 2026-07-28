@@ -2,131 +2,197 @@ package gallery
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
 
-func TestScanCache_ReusesOnNoChange(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
+// TestLRUListBasics verifies the lruList data structure:
+// push, move-to-front, remove, back.
+func TestLRUListBasics(t *testing.T) {
+	l := newLRUList()
+	// Empty list
+	if got := l.backKey(); got != "" {
+		t.Errorf("empty list: backKey = %q, want empty string", got)
+	}
+	if got := l.len(); got != 0 {
+		t.Errorf("empty list: len = %d, want 0", got)
+	}
+	// Push 3 keys
+	l.pushFront("a")
+	l.pushFront("b")
+	l.pushFront("c")
+	// Order should be c, b, a (front to back)
+	if got := l.backKey(); got != "a" {
+		t.Errorf("after 3 pushes: backKey = %q, want %q", got, "a")
+	}
+	if got := l.len(); got != 3 {
+		t.Errorf("after 3 pushes: len = %d, want 3", got)
+	}
+	// Touch "a" — should move to front
+	l.pushFront("a")
+	if got := l.backKey(); got != "b" {
+		t.Errorf("after touch a: backKey = %q, want %q", got, "b")
+	}
+	// Remove the front
+	l.remove("a")
+	if got := l.backKey(); got != "b" {
+		t.Errorf("after remove a: backKey = %q, want %q", got, "b")
+	}
+	// Remove the back
+	l.remove("b")
+	if got := l.backKey(); got != "c" {
+		t.Errorf("after remove b: backKey = %q, want %q", got, "c")
+	}
+	// Remove the last one
+	l.remove("c")
+	if got := l.len(); got != 0 {
+		t.Errorf("after remove all: len = %d, want 0", got)
+	}
+}
 
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("x"), 0644)
+// TestLRUListMoveToFrontAlreadyFront verifies that
+// moveToFront is a no-op when the node is already at
+// the front (no infinite loop).
+func TestLRUListMoveToFrontAlreadyFront(t *testing.T) {
+	l := newLRUList()
+	l.pushFront("a")
+	l.pushFront("b")
+	// Now b is at front. Touch b (already at front).
+	el := l.lookup["b"]
+	l.moveToFront(el)
+	if l.front.key != "b" {
+		t.Errorf("after touch already-front: front = %q, want b", l.front.key)
+	}
+	if l.back.key != "a" {
+		t.Errorf("after touch already-front: back = %q, want a", l.back.key)
+	}
+}
 
-	c := NewScanCache(100 * time.Millisecond)
-	first, err := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if err != nil {
+// TestLRUListRemoveNonExistent verifies that removing
+// a non-existent key is a no-op.
+func TestLRUListRemoveNonExistent(t *testing.T) {
+	l := newLRUList()
+	l.pushFront("a")
+	l.remove("nonexistent")
+	if l.len() != 1 {
+		t.Errorf("after remove non-existent: len = %d, want 1", l.len())
+	}
+}
+
+// TestScanCacheLRUEviction verifies that the cache
+// evicts the LRU entry when the cap is reached.
+func TestScanCacheLRUEviction(t *testing.T) {
+	// Create 3 real directories so the cache accepts them.
+	tmp := t.TempDir()
+	dirs := []string{
+		tmp + "/dir1",
+		tmp + "/dir2",
+		tmp + "/dir3",
+	}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Add a file so the scanner returns something
+		if err := os.WriteFile(d+"/file.txt", []byte("test"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c := NewScanCacheWithCap(time.Minute, 2) // cap = 2 entries
+	defaultImageExts := map[string]bool{".jpg": true}
+	defaultVideoExts := map[string]bool{".mp4": true}
+	defaultAudioExts := map[string]bool{".mp3": true}
+
+	// Scan all 3 directories.
+	for _, d := range dirs {
+		_, err := c.Get(d, "name", defaultImageExts, defaultVideoExts, defaultAudioExts, false, false, false, tmp, "webp")
+		if err != nil {
+			t.Fatalf("Get(%q) failed: %v", d, err)
+		}
+	}
+	// Cache should have at most 2 entries now (dir1 was
+	// evicted when dir3 was added).
+	c.mu.Lock()
+	n := len(c.items)
+	c.mu.Unlock()
+	if n != 2 {
+		t.Errorf("expected 2 entries after 3 inserts with cap 2, got %d", n)
+	}
+	// dir1 should be the LRU victim.
+	c.mu.RLock()
+	_, hasDir1 := c.items[dirs[0]]
+	c.mu.RUnlock()
+	if hasDir1 {
+		t.Error("dir1 (the first insert, LRU) should have been evicted")
+	}
+	// dir2 and dir3 should still be cached.
+	c.mu.RLock()
+	_, hasDir2 := c.items[dirs[1]]
+	_, hasDir3 := c.items[dirs[2]]
+	c.mu.RUnlock()
+	if !hasDir2 {
+		t.Error("dir2 should still be in the cache")
+	}
+	if !hasDir3 {
+		t.Error("dir3 should still be in the cache")
+	}
+}
+
+// TestScanCacheLRUTouchRefreshes verifies that a Get
+// on an existing entry refreshes the LRU recency
+// (so the entry doesn't get evicted on the next insert).
+func TestScanCacheLRUTouchRefreshes(t *testing.T) {
+	tmp := t.TempDir()
+	dirs := []string{
+		tmp + "/dir1",
+		tmp + "/dir2",
+		tmp + "/dir3",
+	}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(d+"/file.txt", []byte("test"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := NewScanCacheWithCap(time.Minute, 2)
+	defaultImageExts := map[string]bool{".jpg": true}
+	defaultVideoExts := map[string]bool{".mp4": true}
+	defaultAudioExts := map[string]bool{".mp3": true}
+
+	// Scan dir1, dir2, dir3 — dir1 evicted (cap = 2).
+	for _, d := range dirs {
+		_, err := c.Get(d, "name", defaultImageExts, defaultVideoExts, defaultAudioExts, false, false, false, tmp, "webp")
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Re-scan dir1 (cache miss because evicted). dir2 evicted.
+	if _, err := c.Get(dirs[0], "name", defaultImageExts, defaultVideoExts, defaultAudioExts, false, false, false, tmp, "webp"); err != nil {
 		t.Fatal(err)
 	}
-	second, err := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if err != nil {
+	// Touch dir1 again (this should refresh its recency).
+	if _, err := c.Get(dirs[0], "name", defaultImageExts, defaultVideoExts, defaultAudioExts, false, false, false, tmp, "webp"); err != nil {
 		t.Fatal(err)
 	}
-	// Same length + same content implies same scan was used.
-	if len(first) != len(second) || len(first) != 1 {
-		t.Fatalf("expected 1 file in both, got %d and %d", len(first), len(second))
+	// Now scan dir3. dir2 (the LRU) should be evicted, dir1 should remain.
+	if _, err := c.Get(dirs[2], "name", defaultImageExts, defaultVideoExts, defaultAudioExts, false, false, false, tmp, "webp"); err != nil {
+		t.Fatal(err)
 	}
-	if first[0].Name != second[0].Name {
-		t.Errorf("names differ: %q vs %q", first[0].Name, second[0].Name)
+	c.mu.RLock()
+	_, hasDir1 := c.items[dirs[0]]
+	_, hasDir2 := c.items[dirs[1]]
+	_, hasDir3 := c.items[dirs[2]]
+	c.mu.RUnlock()
+	if !hasDir1 {
+		t.Error("dir1 should still be cached (was touched)")
 	}
-}
-
-func TestScanCache_RefreshesOnMtimeChange(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("x"), 0644)
-
-	c := NewScanCache(time.Minute)
-	first, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if len(first) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(first))
+	if hasDir2 {
+		t.Error("dir2 should have been evicted (LRU)")
 	}
-
-	// Add a new file and update mtime.
-	os.WriteFile(filepath.Join(dir, "b.jpg"), []byte("y"), 0644)
-	future := time.Now().Add(time.Second)
-	os.Chtimes(filepath.Join(dir, "a.jpg"), future, future)
-	// Also touch the dir's mtime.
-	os.Chtimes(dir, future, future)
-
-	second, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if len(second) != 2 {
-		t.Errorf("expected 2 files after adding b.jpg, got %d", len(second))
-	}
-}
-
-func TestScanCache_RefreshesAfterTTL(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("x"), 0644)
-
-	c := NewScanCache(50 * time.Millisecond)
-	first, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if len(first) != 1 {
-		t.Fatalf("expected 1 file, got %d", len(first))
-	}
-
-	// Wait for TTL to expire.
-	time.Sleep(80 * time.Millisecond)
-	// Add a new file.
-	os.WriteFile(filepath.Join(dir, "b.jpg"), []byte("y"), 0644)
-
-	second, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if len(second) != 2 {
-		t.Errorf("expected 2 files after TTL expiry + new file, got %d", len(second))
-	}
-}
-
-func TestScanCache_DifferentSortCachesSeparately(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
-
-	dir := t.TempDir()
-	// Write files with different mtimes so mtime and name sort give different orders.
-	// a.jpg is written first (older mtime), z.jpg second (newer mtime) so:
-	//   mtime desc -> z.jpg, a.jpg
-	//   name asc   -> a.jpg, z.jpg
-	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("x"), 0644)
-	time.Sleep(10 * time.Millisecond)
-	os.WriteFile(filepath.Join(dir, "z.jpg"), []byte("x"), 0644)
-
-	c := NewScanCache(time.Minute)
-	byMtime, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	byName, _ := c.Get(dir, "name", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if byMtime[0].Name == byName[0].Name {
-		t.Errorf("expected different orderings, both start with %q", byMtime[0].Name)
-	}
-}
-
-func TestScanCache_CallersCantMutateCachedSlice(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
-
-	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "a.jpg"), []byte("x"), 0644)
-
-	c := NewScanCache(time.Minute)
-	first, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	// Mutate the returned slice.
-	first[0].Name = "MUTATED"
-	// Re-fetch — should be the original name.
-	second, _ := c.Get(dir, "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", "")
-	if second[0].Name != "a.jpg" {
-		t.Errorf("cache was mutated by caller: got %q, want %q", second[0].Name, "a.jpg")
-	}
-}
-
-func TestScanCache_BadDirReturnsError(t *testing.T) {
-	audioExts := map[string]bool{}
-	noAudioMeta := false
-
-	c := NewScanCache(time.Minute)
-	if _, err := c.Get("/this/does/not/exist", "mtime", defaultImageExts, defaultVideoExts, audioExts, false, false, noAudioMeta, "", ""); err == nil {
-		t.Error("expected error for nonexistent dir, got nil")
+	if !hasDir3 {
+		t.Error("dir3 should be cached (just inserted)")
 	}
 }

@@ -1,6 +1,6 @@
 # caddy_media_gallery
 
-> **Release 1.1.2 — 2026-07-04.** Patch release on the 1.1.x line. Stable; updates the cache-status footer to show (a) eviction **runs** instead of files-evicted in YY/ZZ/AA so a 50-file eviction shows as `01` (not `32`), and (b) the max cache size in hex as a 5th value (`BB`, `cap/64`) so the operator can see the cap at a glance. Operators can pin to `1.1.2` (or any later version) in their build pipeline.
+> **Release 1.1.3 — 2026-07-04.** Patch release on the 1.1.x line. Stable; adds cache hygiene: (1) an orphan-sidecar sweep that runs at startup and every 30 min, cleaning up `.meta`/`.exif`/`.vmeta`/`.ameta` files that have no matching thumb (typically ~30k orphans from prior Caddy versions and crashed writes on a 1 GB cache); (2) an LRU eviction cap on the in-memory scan cache (default 1024 entries) so long-running Caddy processes don't grow unbounded. Both are silent failures the previous code didn't surface. Operators can pin to `1.1.3` (or any later version) in their build pipeline.
 > Internationalisation landed in 1.0.0 — 8 locales bundled (en/de/es/fr/ja/ko/zh/pt), header language picker, locale persists in localStorage + cookie. See [docs/03h-feature-i18n.md](docs/03h-feature-i18n.md) for the full architecture.
 
 *The delightful way to serve a directory.*
