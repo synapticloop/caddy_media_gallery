@@ -2341,7 +2341,7 @@ func filterGroupFromMap(label string, counts map[string]struct {
 // breadcrumb. `absolutePrefix` is the absolute URL path (e.g.
 // "/images/") - used as the prefix for absolute breadcrumb
 // links.
-func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs, noAudioMeta bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts, audioExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA, cacheStatsBB string) (string, error) {
+func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThumbs, noVideoThumbs, noAudioMeta bool, pageSize int, pageSizes []string, files []FileInfo, query url.Values, imageExts, videoExts, audioExts map[string]bool, breadcrumbRoot, absolutePrefix, searchMatch, locale string, translator *Translator, cacheStatsXX, cacheStatsYY, cacheStatsZZ, cacheStatsAA, cacheStatsBB string, noExif, noMeta bool, resolvedPath, thumbCacheDir, thumbFormat string) (string, error) {
 	// Per user request 2026-07-04: set the package-level
 	// translator + locale at the TOP of RenderPage so the
 	// filter labels (computed by computeFilterGroups, which
@@ -2452,6 +2452,34 @@ func RenderPage(title, pathPrefix, thumbPrefix, relPath, tmplName string, noThum
 	// is configured).
 	pageSize = validatePageSize(pageSize, pageSizes)
 	paged := paginate(allImages, page, pageSize)
+	// Per user request 2026-07-04 (lazy-enrichment branch,
+	// Option C): enrich ONLY the visible files (paged) in
+	// a background goroutine. Off-page files stay
+	// un-enriched until a future request navigates to
+	// them. The CPU cost per request is bounded by
+	// pageSize (e.g. 60) instead of the full directory
+	// size (e.g. 4500). For a 4500-file directory at
+	// ~10ms/file, that's 75× less ffprobe work.
+	//
+	// The goroutine is fire-and-forget — the response is
+	// sent immediately with the (un-enriched) paged
+	// slice. On the next refresh, the same files get
+	// re-enriched, but the per-file caching of ffprobe
+	// results on disk (the .vmeta/.ameta sidecars) means
+	// the second enrichment is ~50µs per file.
+	//
+	// We copy paged because enrichParallel mutates the
+	// FileInfo values in place. The copy isolates the
+	// mutation from the caller's slice and the cache.
+	if len(paged) > 0 {
+		enrichedCopy := make([]FileInfo, len(paged))
+		copy(enrichedCopy, paged)
+		go enrichParallelFiles(
+			enrichedCopy, 4,
+			resolvedPath, noExif, noMeta, noAudioMeta,
+			thumbCacheDir, thumbFormat,
+		)
+	}
 	totalImages := len(allImages)
 	// Per user request 2026-06-28: compute the on-page TOTAL
 	// (the "N" in the search header) by paginating the
