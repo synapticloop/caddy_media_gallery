@@ -1146,24 +1146,31 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// defaults to true (gallery behaves like
 			// caddy's stock file_server browse by default
 			// — no thumb generation, no thumb cache, no
-			// CPU overhead). Operators who want the rich
-			// thumbnail UX opt in via `no_thumbs false`.
-			g.NoThumbs = true
-			if d.NextArg() {
-					if d.Val() != "false" {
-					return d.ArgErr()
-				}
-					g.NoThumbs = false
-			}
-			g.NoThumbsSet = true
-			case "no_video_thumbs":
-				g.NoVideoThumbs = true
-				if d.NextArg() {
-					if d.Val() != "false" {
-						return d.ArgErr()
+					// CPU overhead). Operators who want the rich
+					// thumbnail UX opt in via `no_thumbs false`.
+					// Per user request 2026-07-04: also accept the
+					// explicit `true` value (the original parser
+					// rejected anything other than `false`, which
+					// made `no_thumbs true` cause a parse error and
+					// refuse to start Caddy).
+					g.NoThumbs = true
+					if d.NextArg() {
+						v := d.Val()
+						if v != "true" && v != "false" {
+							return d.ArgErr()
+						}
+						g.NoThumbs = (v == "true")
 					}
-					g.NoVideoThumbs = false
-				}
+					g.NoThumbsSet = true
+					case "no_video_thumbs":
+						g.NoVideoThumbs = true
+						if d.NextArg() {
+							v := d.Val()
+							if v != "true" && v != "false" {
+								return d.ArgErr()
+							}
+							g.NoVideoThumbs = (v == "true")
+						}
 
 		case "no_exif":
 			// Per user request 2026-06-29: operator can
@@ -1180,14 +1187,22 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// — no metadata reads, no extra dependencies).
 			// Operators who want the rich EXIF UX opt in
 			// via `no_exif false`. Usage:
-			//   no_exif           # disable (default)
-			//   no_exif false     # re-enable EXIF reading
+			//   no_exif            # disable (default)
+			//   no_exif true       # disable (explicit)
+			//   no_exif false      # re-enable EXIF reading
+			// Per user request 2026-07-04: also accept
+			// the explicit `true` value (the original
+			// implementation rejected anything other than
+			// `false`, which made `no_exif true` (and the
+			// other `no_*` directives) cause a parse error
+			// and refuse to start Caddy).
 			g.NoExif = true
 			if d.NextArg() {
-				if d.Val() != "false" {
+				v := d.Val()
+				if v != "true" && v != "false" {
 					return d.ArgErr()
 				}
-				g.NoExif = false
+				g.NoExif = (v == "true")
 			}
 			// Mark that the operator explicitly set this
 			// directive — used by Provision to distinguish
@@ -1216,14 +1231,21 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// — no extra ffprobe dependency required).
 			// Operators who want the rich video metadata
 			// UX opt in via `no_meta false`. Usage:
-			//   no_meta           # disable (default)
-			//   no_meta false     # re-enable video metadata
+			//   no_meta            # disable (default)
+			//   no_meta true       # disable (explicit)
+			//   no_meta false      # re-enable video metadata
+			// Per user request 2026-07-04: also accept
+			// the explicit `true` value (the original
+			// implementation rejected anything other than
+			// `false`, which made `no_meta true` cause a
+			// parse error and refuse to start Caddy).
 			g.NoMeta = true
 			if d.NextArg() {
-				if d.Val() != "false" {
+				v := d.Val()
+				if v != "true" && v != "false" {
 					return d.ArgErr()
 				}
-				g.NoMeta = false
+				g.NoMeta = (v == "true")
 			}
 			// Mark that the operator explicitly set this
 			// directive — used by Provision to distinguish
@@ -1251,23 +1273,30 @@ func (g *Gallery) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 			// Unlike no_meta (which defaults to true to
 			// preserve backward compat with the post-2026-
 			// 07-02 default flip), no_audio_meta defaults
-			// to false because audio support is itself
-			// opt-in (set via audio_types). When audio_types
-			// is configured but the operator wants no
-			// metadata enrichment, they set no_audio_meta
-			// with no arg.
-			// Usage:
-			//   no_audio_meta     # disable extraction
-			//   no_audio_meta false  # (re-)enable extraction
-			// Default (no directive): false, extraction on
-			// when audio_types is set.
-			g.NoAudioMeta = true
-			if d.NextArg() {
-				if d.Val() != "false" {
-					return d.ArgErr()
-				}
-				g.NoAudioMeta = false
-			}
+					// to false because audio support is itself
+					// opt-in (set via audio_types). When audio_types
+					// is configured but the operator wants no
+					// metadata enrichment, they set no_audio_meta
+					// with no arg.
+					// Usage:
+					//   no_audio_meta     # disable extraction
+					//   no_audio_meta true    # disable (explicit)
+					//   no_audio_meta false   # (re-)enable extraction
+					// Default (no directive): false, extraction on
+					// when audio_types is set.
+					// Per user request 2026-07-04: also accept the
+					// explicit `true` value (the original parser
+					// rejected anything other than `false`, which
+					// made `no_audio_meta true` cause a parse error
+					// and refuse to start Caddy).
+					g.NoAudioMeta = true
+					if d.NextArg() {
+						v := d.Val()
+						if v != "true" && v != "false" {
+							return d.ArgErr()
+						}
+						g.NoAudioMeta = (v == "true")
+					}
 			// Mark that the operator explicitly set this
 			// directive — used by Provision to distinguish
 			// "explicit false" from "no directive" (use
